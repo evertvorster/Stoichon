@@ -24,6 +24,11 @@ uniform mat3 u_galactic = mat3(1.0);
 
 // The band's own surface brightness, in lux per steradian.
 uniform float u_band_radiance = 2.9e-4;
+// **A display gain, and it is one.** The band's measured surface brightness is about 21.5 magnitudes per square
+// arcsecond — some fifteen times dimmer per pixel than a barely-visible magnitude-6.5 star — so at the exposure a
+// star field needs, the band is below the bottom of an eight-bit frame. This lifts it to where it can be seen;
+// at 1.0 the layer is the physical one.
+uniform float u_gain = 30.0;
 uniform vec3 u_tint = vec3(0.86, 0.88, 1.0);
 
 const float LUX_PER_ENGINE_UNIT = 100000.0 / 3.14159265358979;
@@ -78,5 +83,5 @@ void fragment() {
 	float dust = smoothstep(0.35, 0.75, noise_band(galactic + vec3(3.7, 1.1, 8.3)));
 
 	float radiance = band * (0.35 + 0.65 * structure) * (0.25 + 1.75 * centre) * (1.0 - 0.55 * dust);
-	ALBEDO = u_tint * radiance * (u_band_radiance * RADIANCE_GAIN / LUX_PER_ENGINE_UNIT);
+	ALBEDO = u_tint * radiance * (u_band_radiance * u_gain * RADIANCE_GAIN / LUX_PER_ENGINE_UNIT);
 }

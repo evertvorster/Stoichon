@@ -101,16 +101,22 @@ void vertex() {
 	vec2 ndc = vec2(dot(direction, right), dot(direction, up)) / max(depth * u_tan_half, vec2(1.0e-9));
 	vec2 pixel = vec2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5) * u_view_size;
 
-	// The star's own width, in pixels, from its flux: the reference star is `u_psf_px`, and a brighter one is
-	// drawn wider so a very bright star reads as more than a dot.
 	float lux = LUX_PER_MAG0 * pow(10.0, -0.4 * magnitude);
-	float diameter = u_psf_px * pow(max(lux / u_lux_reference, 1.0e-12), u_size_exponent);
 
-	// **The quantisation.** Below one pixel the centre snaps to a pixel centre and the footprint is exactly one
-	// pixel; the snap releases smoothly up to 1.5 px so the handover cannot pop.
-	float released = smoothstep(1.0, 1.5, diameter);
-	vec2 centre = mix(floor(pixel) + 0.5, pixel, released);
-	float half_px = 0.5 * max(diameter, 1.0);
+	// **Every star is one pixel, snapped — bright ones included, and that is the whole reason it is steady.**
+	//
+	// A star below a pixel is snapped and cannot blink. A *bright* star used to be grown past a pixel, on the
+	// theory that a bright star should look wider; and that is exactly the class that flickered. A 1.5-pixel disk
+	// has a radius of 0.75 px, so the pixel under its centre is only half covered and the one beside it half
+	// covered too; as the camera turns, that coverage slides between its neighbours — in quarter steps under MSAA
+	// — so each pixel's share swings by tens of percent frame to frame. Total light is conserved, but a picture
+	// is made of pixels, and no single pixel's share was.
+	//
+	// So the footprint is one pixel for everything, and brightness is **intensity alone**. At the fields of view
+	// this game uses a catalogue star is far under a pixel anyway (Sirius would be 0.002 of one), so the growth
+	// was never showing a real size — only an artefact of it.
+	vec2 centre = floor(pixel) + 0.5;
+	float half_px = 0.5;
 	v_half_px = half_px;
 
 	// Its light over the pixels it covers, in the frame's currency. The pixel's own solid angle is what turns an
@@ -129,8 +135,8 @@ void vertex() {
 }
 
 void fragment() {
-	// A flat disk with a one-pixel antialiased edge: the centre is at full brightness and the edge gives up one
-	// pixel at a time, so the release out of the snapped regime has nothing to jump.
+	// One pixel at full coverage: `half_px` is 0.5, so the fragment covers the pixel's centre and the edge falls
+	// outside it. Nothing here varies with the star's sub-pixel position, which is the point.
 	vec2 p = UV * 2.0 - 1.0;
 	float radius = length(p) * v_half_px;
 	float coverage = 1.0 - smoothstep(v_half_px - 0.5, v_half_px + 0.5, radius);

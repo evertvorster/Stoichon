@@ -1380,11 +1380,6 @@ func _light_at(body: SpacesimSceneBody) -> Vector2:
 func update_sky(camera: Camera3D) -> void:
 	if star_sky == null or camera == null:
 		return
-	star_sky.set_limit_magnitude(float(SpacesimSettings.get_value("sky.star_depth")))
-	# The manual brightness scaler, in DECADES. Read every frame so it is hot by construction and can
-	# be dragged while flying.
-	star_sky.set_gain(pow(10.0, float(SpacesimSettings.get_value("sky.star_gain"))))
-	star_sky.update(camera)
 	# **The sky is a star field again: the air is not its business any more.** Between 2026-11-01 and today the
 	# sky shader drew the FAR half of every column, on the argument that a sky is drawn behind all geometry and so
 	# a cloud on a mesh would composite over it correctly. It did that, and it also hid the air in front of every

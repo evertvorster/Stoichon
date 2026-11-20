@@ -54,6 +54,14 @@ const TEXELS_PER_ROW := 512
 const PSF_PX := 0.55
 const SIZE_EXPONENT := 0.18
 
+## The uncatalogued field: how many, and the magnitudes it spans. **It starts where `hyg_v44` ends** — that
+## catalogue is complete to 8.0 and holds stars to 10.5 — so this is light the catalogue does not already hold,
+## and every star in it is dimmer than anything the catalogue carries.
+const FAINT_COUNT := 400_000
+const FAINT_MAG_MIN := 10.5
+const FAINT_MAG_MAX := 12.0
+const FAINT_SEED := 20261120
+
 ## The display gain on the deep-sky objects. At 1.0 each object is its own integrated magnitude spread over its
 ## own angular area — physically right, and invisible, because M31 really is about 22 magnitudes per square
 ## arcsecond. Evert flies with these visible, so this is a chosen gain and is named as one.
@@ -67,6 +75,8 @@ var _star_material: ShaderMaterial
 var _deep_sky_material: ShaderMaterial
 var _band_material: ShaderMaterial
 var _sky_material: ShaderMaterial
+var _faint: MultiMeshInstance3D
+var _faint_material: ShaderMaterial
 ## The Sky this owns for the Environment's background — Layer 1.
 var sky: Sky
 var _reference_lux := 1.011e-8
@@ -80,6 +90,7 @@ func build(catalogue: SpacesimStarCatalogue) -> bool:
 	_catalogue = catalogue
 	_build_sky()
 	_build_stars()
+	_build_faint()
 	_build_deep_sky()
 	_build_band()
 	return true
@@ -100,16 +111,15 @@ func update(camera: Camera3D) -> void:
 		return
 	global_position = camera.global_position
 
-	# Typed explicitly: `get_global_transform_interpolated()` has no inferable return type.
-	var basis: Basis = camera.get_global_transform_interpolated().basis
+	# Typed explicitly: `get_global_transform_interpolated()` has no inferable return type. **The basis is not
+	# published**: the shaders take it from `INV_VIEW_MATRIX`, because a GDScript read here is the previous
+	# frame's camera and the sky would then lag the geometry it sits behind — which reads as a sky that follows
+	# the ship and blinks.
 	var tan_y := tan(deg_to_rad(camera.fov * 0.5))
 	var tan_half := Vector2(tan_y * size.x / size.y, tan_y)
-	for material in [_sky_material, _star_material, _deep_sky_material, _band_material]:
+	for material in [_star_material, _deep_sky_material, _band_material]:
 		if material == null:
 			continue
-		material.set_shader_parameter("u_right", basis.x)
-		material.set_shader_parameter("u_up", basis.y)
-		material.set_shader_parameter("u_fwd", -basis.z)
 		material.set_shader_parameter("u_tan_half", tan_half)
 		material.set_shader_parameter("u_view_size", size)
 
@@ -138,17 +148,54 @@ func _build_sky() -> void:
 	sky.sky_material = _sky_material
 
 
-## The depth of the uncatalogued field. It starts where the catalogue ends; see `celestial_sky.gdshader`.
-func set_faint_depth(magnitude: float) -> void:
-	if _sky_material != null:
-		_sky_material.set_shader_parameter("u_faint_depth", magnitude)
-
-
 ## Whether the uncatalogued field is drawn at all. It is light the catalogue does not hold, so a caller that
 ## wants only the measured sky can ask for that.
 func set_faint_on(on: bool) -> void:
-	if _sky_material != null:
-		_sky_material.set_shader_parameter("u_faint_on", 1.0 if on else 0.0)
+	if _faint != null:
+		_faint.visible = on
+
+
+## The uncatalogued field: sprites below the catalogue's own depth, drawn by the star shader itself.
+##
+## **A drawn star, not an evaluated one.** A per-pixel field would be finer than the pixel it lands on and would
+## therefore be sampled afresh every frame the camera moves — the flicker this whole module exists to remove. These
+## are the same quads as the catalogue's, snapped to a pixel and holding their light, just dimmer than anything the
+## catalogue holds: `FAINT_MAG_MIN` is `hyg_v44`'s own limit, so this is light the catalogue does not already
+## carry.
+func _build_faint() -> void:
+	var count := FAINT_COUNT
+	var data := PackedFloat32Array()
+	var colour := PackedFloat32Array()
+	data.resize(count * 4)
+	colour.resize(count * 4)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = FAINT_SEED
+	var lo := pow(10.0, 0.4 * FAINT_MAG_MIN)
+	var hi := pow(10.0, 0.4 * FAINT_MAG_MAX)
+	for i in count:
+		# A uniform direction: `z` uniform on [-1, 1] and the azimuth uniform, which is the only way to get one.
+		var z := rng.randf_range(-1.0, 1.0)
+		var phi := rng.randf_range(0.0, TAU)
+		var ring := sqrt(maxf(1.0 - z * z, 0.0))
+		data[i * 4 + 0] = ring * cos(phi)
+		data[i * 4 + 1] = ring * sin(phi)
+		data[i * 4 + 2] = z
+		data[i * 4 + 3] = 2.5 * log(lo + rng.randf() * (hi - lo)) / log(10.0)
+		colour[i * 4 + 0] = clampf(rng.randfn(1.2, 0.4), -0.3, 2.0)
+
+	_faint_material = ShaderMaterial.new()
+	_faint_material.shader = STAR_SHADER
+	_faint_material.set_shader_parameter("u_gain", 1.0)
+	_faint_material.set_shader_parameter("u_psf_px", PSF_PX)
+	_faint_material.set_shader_parameter("u_size_exponent", SIZE_EXPONENT)
+	_faint_material.set_shader_parameter("u_lux_reference", _reference_lux)
+	# The field is its own layer, so its depth is its own: it is drawn only when the sky's depth asks for it, and
+	# the layer above it never has to know.
+	_faint_material.set_shader_parameter("u_limit_mag", FAINT_MAG_MAX)
+	_faint = _multimesh_layer("FaintField", _faint_material, -1, count)
+	_faint_material.set_shader_parameter("u_stars", _float_texture(data))
+	_faint_material.set_shader_parameter("u_star_colour", _float_texture(colour))
+	_faint.visible = false
 
 
 ## The stars in the field — a test reads this rather than the buffer, which cannot be read back headless.

@@ -28,9 +28,10 @@ uniform sampler2D depth_texture : hint_depth_texture;
 // therefore invisible. This lifts the layer to where it can be looked at.
 uniform float u_gain = 30.0;
 
-uniform vec3 u_right = vec3(1.0, 0.0, 0.0);
-uniform vec3 u_up = vec3(0.0, 1.0, 0.0);
-uniform vec3 u_fwd = vec3(0.0, 0.0, -1.0);
+// **Only the pixel geometry comes from the host**, and it has no time in it: the render target's size and the
+// field of view's tangents change on a resize or a zoom, never per frame. The camera's *basis* would have time in
+// it — read from GDScript it is the transform of the frame before the one being drawn — so the basis comes from
+// `INV_VIEW_MATRIX` instead, which is the camera this frame is actually rendered with.
 uniform vec2 u_tan_half = vec2(0.5, 0.5);
 uniform vec2 u_view_size = vec2(1280.0, 720.0);
 
@@ -53,8 +54,15 @@ void vertex() {
 	// The major axis decides its angular size; the minor axis is the ratio of the two.
 	float diameter = 2.0 * placement.w / max(pixel_angle, 1.0e-12);
 
-	float depth = dot(placement.xyz, u_fwd);
-	vec2 ndc = vec2(dot(placement.xyz, u_right), dot(placement.xyz, u_up))
+	vec3 right = INV_VIEW_MATRIX[0].xyz;
+	vec3 up = INV_VIEW_MATRIX[1].xyz;
+	// **Column 2 is the camera's FORWARD axis, un-negated** — the engine says so itself:
+	// `CAMERA_DIRECTION_WORLD = inv_view_matrix[2].xyz` (`scene_shader_forward_clustered.cpp`). Negating it, as
+	// a `-Z is forward` habit suggests, mirrors the whole sky through the screen's centre: the field runs
+	// backwards and every star flips across the screen as the camera turns.
+	vec3 fwd = INV_VIEW_MATRIX[2].xyz;
+	float depth = dot(placement.xyz, fwd);
+	vec2 ndc = vec2(dot(placement.xyz, right), dot(placement.xyz, up))
 		/ max(depth * u_tan_half, vec2(1.0e-9));
 	vec2 pixel = vec2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5) * u_view_size;
 

@@ -50,9 +50,10 @@ uniform float u_size_exponent = 0.18;
 uniform float u_lux_reference = 1.011e-8;
 
 // ===== THIS FRAME ==================================================================================
-uniform vec3 u_right = vec3(1.0, 0.0, 0.0);
-uniform vec3 u_up = vec3(0.0, 1.0, 0.0);
-uniform vec3 u_fwd = vec3(0.0, 0.0, -1.0);
+// **Only the pixel geometry comes from the host**, and it has no time in it: the render target's size and the
+// field of view's tangents change on a resize or a zoom, never per frame. The camera's *basis* would have time in
+// it — read from GDScript it is the transform of the frame before the one being drawn — so the basis comes from
+// `INV_VIEW_MATRIX` instead, which is the camera this frame is actually rendered with.
 uniform vec2 u_tan_half = vec2(0.5, 0.5);
 uniform vec2 u_view_size = vec2(1280.0, 720.0);
 
@@ -84,9 +85,17 @@ void vertex() {
 	float magnitude = star.w;
 	vec3 direction = normalize(star.xyz);
 
-	// Where the star is on screen, in pixels. `fwd` describes the direction the camera looks along.
-	float depth = dot(direction, u_fwd);
-	vec2 ndc = vec2(dot(direction, u_right), dot(direction, u_up)) / max(depth * u_tan_half, vec2(1.0e-9));
+	// Where the star is on screen, in pixels. **The basis is the frame's own**: `INV_VIEW_MATRIX` takes camera
+	// space to world, so its columns are this frame's right, up and forward.
+	vec3 right = INV_VIEW_MATRIX[0].xyz;
+	vec3 up = INV_VIEW_MATRIX[1].xyz;
+	// **Column 2 is the camera's FORWARD axis, un-negated** — the engine says so itself:
+	// `CAMERA_DIRECTION_WORLD = inv_view_matrix[2].xyz` (`scene_shader_forward_clustered.cpp`). Negating it, as
+	// a `-Z is forward` habit suggests, mirrors the whole sky through the screen's centre: the field runs
+	// backwards and every star flips across the screen as the camera turns.
+	vec3 fwd = INV_VIEW_MATRIX[2].xyz;
+	float depth = dot(direction, fwd);
+	vec2 ndc = vec2(dot(direction, right), dot(direction, up)) / max(depth * u_tan_half, vec2(1.0e-9));
 	vec2 pixel = vec2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5) * u_view_size;
 
 	// The star's own width, in pixels, from its flux: the reference star is `u_psf_px`, and a brighter one is

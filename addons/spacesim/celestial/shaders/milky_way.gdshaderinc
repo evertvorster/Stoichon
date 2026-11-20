@@ -68,13 +68,18 @@ float fbm(vec3 p, int octaves, float lacunarity) {
 	return total / max(norm, 1.0e-6);
 }
 
-// **The band's shape, and nothing else**: a dimensionless intensity for a direction in the GALACTIC frame.
+// **The band's shape and colour, and nothing else**: a dimensionless linear RGB for a direction in the GALACTIC
+// frame.
 //
-// It is deliberately not a radiance. The two consumers differ only in what they do with the number — the sky
-// multiplies it by the band's surface brightness, the display gain and the frame's currency; a bake writes it into
-// a map — so keeping the currency out of here is what lets the same map serve a different gain without being
-// baked again, and lets the compute baker compile this file as plain GLSL with no uniforms of its own.
-float band_shape(vec3 galactic_direction) {
+// It is deliberately not a radiance. The two consumers differ only in what they do with it — the sky multiplies it
+// by the band's surface brightness, the display gain and the frame's currency; a bake writes it into a map — so
+// keeping the currency out of here is what lets the same map serve a different gain without being baked again, and
+// lets the compute baker compile this file as plain GLSL with no uniforms of its own.
+//
+// **RGB and not a luminance.** Collapsing this to one channel throws away the warm core, the cooler disk and the
+// H II regions in one line, and no tint applied afterwards can put them back — they are different colours in the
+// same frame.
+vec3 band_shape(vec3 galactic_direction) {
 	vec3 g = normalize(galactic_direction);
 	float latitude = g.z;
 	float longitude = atan(g.y, g.x);
@@ -132,5 +137,5 @@ float band_shape(vec3 galactic_direction) {
 		+ core_colour * core * through
 		+ hii_colour * hii * 0.35 * through;
 
-	return dot(radiance, vec3(0.2126, 0.7152, 0.0722)) + 0.0;
+	return radiance;
 }

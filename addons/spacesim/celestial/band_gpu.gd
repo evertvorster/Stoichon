@@ -13,9 +13,9 @@ extends RefCounted
 ##
 ## ## What it bakes, and what it does not
 ##
-## The **shape**, not the brightness: `band_shape()` is a dimensionless intensity, so the map survives a change to
-## the band's surface brightness or its display gain without being baked again. The currency is applied by whoever
-## samples it.
+## The **shape and colour**, not the brightness: `band_shape()` is a dimensionless linear RGB, so the map survives a
+## change to the band's surface brightness or its display gain without being baked again. The currency is applied by
+## whoever samples it.
 ##
 ## `uv` maps to a direction in the GALACTIC frame — longitude across, latitude up — so the map carries no rotation
 ## and the sampler applies `u_galactic` itself.
@@ -29,7 +29,7 @@ const BAND_PATH := "res://addons/spacesim/celestial/shaders/milky_way.gdshaderin
 
 const KERNEL := """
 layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
-layout(r16f, set = 0, binding = 0) uniform writeonly image2D band_image;
+layout(rgba16f, set = 0, binding = 0) uniform writeonly image2D band_image;
 layout(push_constant, std430) uniform Params {
 	vec2 size;
 	float pad0;
@@ -45,7 +45,7 @@ void main() {
 	float longitude = (uv.x - 0.5) * 2.0 * PI_F;
 	float latitude = (uv.y - 0.5) * PI_F;
 	vec3 galactic = vec3(cos(latitude) * cos(longitude), cos(latitude) * sin(longitude), sin(latitude));
-	imageStore(band_image, texel, vec4(band_shape(galactic), 0.0, 0.0, 0.0));
+	imageStore(band_image, texel, vec4(band_shape(galactic), 1.0));
 }
 """
 
@@ -79,7 +79,7 @@ func open() -> bool:
 	return _pipeline.is_valid()
 
 
-## Bake into an image, or null with [method error] set. `width`×`height` texels of the band's shape, single channel.
+## Bake into an image, or null with [method error] set. `width`×`height` texels of the band's shape and colour.
 func bake(width: int, height: int) -> Image:
 	if not open():
 		return null
@@ -87,7 +87,7 @@ func bake(width: int, height: int) -> Image:
 	var h := maxi(height, 1)
 
 	var format := RDTextureFormat.new()
-	format.format = RenderingDevice.DATA_FORMAT_R16_SFLOAT
+	format.format = RenderingDevice.DATA_FORMAT_R16G16B16A16_SFLOAT
 	format.width = w
 	format.height = h
 	format.depth = 1
@@ -129,10 +129,10 @@ func bake(width: int, height: int) -> Image:
 	_device.free_rid(uniform_set)
 	_device.free_rid(texture)
 
-	if data.size() != w * h * 2:
-		_error = "read back %d bytes for a %dx%d half-float map" % [data.size(), w, h]
+	if data.size() != w * h * 8:
+		_error = "read back %d bytes for a %dx%d RGBA half-float map" % [data.size(), w, h]
 		return null
-	return Image.create_from_data(w, h, false, Image.FORMAT_RH, data)
+	return Image.create_from_data(w, h, false, Image.FORMAT_RGBAH, data)
 
 
 func error() -> String:

@@ -35,9 +35,6 @@ uniform float u_band_radiance = 2.9e-4;
 // frame at the exposure a star field needs: a surface that dim, spread over the whole sky, is not the same thing
 // as a star.
 uniform float u_gain = 30.0;
-// The band's colour, linear: a slightly cool white, because the disk's integrated light is a mix of hot and
-// cool populations and the dust has already reddened what survives it.
-uniform vec3 u_tint = vec3(0.86, 0.88, 1.0);
 
 const float LUX_PER_ENGINE_UNIT = 100000.0 / 3.14159265358979;
 
@@ -45,5 +42,5 @@ void sky() {
 	// The band is defined in galactic coordinates, so the rotation happens here, once, and the shape function stays
 	// a function of the galactic direction alone.
 	vec3 galactic = normalize(u_galactic * normalize(EYEDIR));
-	COLOR = u_tint * band_shape(galactic) * (u_band_radiance * u_gain * RADIANCE_GAIN / LUX_PER_ENGINE_UNIT);
+	COLOR = band_shape(galactic) * (u_band_radiance * u_gain * RADIANCE_GAIN / LUX_PER_ENGINE_UNIT);
 }

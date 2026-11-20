@@ -57,13 +57,18 @@ static func lux_from_magnitude(magnitude: float) -> float:
 ## 10.75 degrees and 0.4 — so an object's light is its measured light and the layer decides only how it is drawn.
 static func objects() -> Array[SpacesimDeepSkyEntry]:
 	var list: Array[SpacesimDeepSkyEntry] = []
-	list.append(_entry(80.894, -69.756, 10.75, 9.17, 0.0, SpacesimDeepSkyEntry.PROFILE_GALAXY, 0.4, Color(0.88, 0.90, 1.0)))
-	list.append(_entry(13.187, -72.829, 5.33, 3.57, 15.0, SpacesimDeepSkyEntry.PROFILE_GALAXY, 2.7, Color(0.90, 0.90, 1.0)))
-	list.append(_entry(10.685, 41.269, 3.17, 1.00, 35.0, SpacesimDeepSkyEntry.PROFILE_GALAXY, 3.4, Color(0.95, 0.93, 0.88)))
-	list.append(_entry(23.462, 30.660, 1.17, 0.70, 51.5, SpacesimDeepSkyEntry.PROFILE_GALAXY, 5.7, Color(0.90, 0.92, 1.0)))
-	list.append(_entry(83.822, -5.391, 1.10, 0.90, 0.0, SpacesimDeepSkyEntry.PROFILE_NEBULA, 4.0, Color(0.95, 0.72, 0.72)))
-	list.append(_entry(56.750, 24.117, 1.80, 1.40, 17.0, SpacesimDeepSkyEntry.PROFILE_NEBULA, 1.6, Color(0.72, 0.82, 1.0)))
-	list.append(_entry(250.423, 36.460, 0.33, 0.33, 0.0, SpacesimDeepSkyEntry.PROFILE_GALAXY, 5.8, Color(0.95, 0.90, 0.80)))
+	# Large and Small Magellanic Clouds — irregular, dominated by young blue associations and pink H II regions.
+	list.append(_entry(80.894, -69.756, 10.75, 9.17, 0.0, SpacesimDeepSkyEntry.PROFILE_IRREGULAR, 0.4, Color(0.92, 0.94, 1.0)))
+	list.append(_entry(13.187, -72.829, 5.33, 3.57, 15.0, SpacesimDeepSkyEntry.PROFILE_IRREGULAR, 2.7, Color(0.94, 0.95, 1.0)))
+	# Andromeda, inclined; Triangulum, nearly face-on.
+	list.append(_entry(10.685, 41.269, 3.17, 1.00, 35.0, SpacesimDeepSkyEntry.PROFILE_SPIRAL, 3.4, Color(1.0, 1.0, 1.0)))
+	list.append(_entry(23.462, 30.660, 1.17, 0.70, 51.5, SpacesimDeepSkyEntry.PROFILE_SPIRAL, 5.7, Color(1.0, 1.0, 1.0)))
+	# The Orion Nebula: green core, red outskirts, a dust lane, and the Trapezium at its centre.
+	list.append(_entry(83.822, -5.391, 1.10, 0.90, 0.0, SpacesimDeepSkyEntry.PROFILE_EMISSION, 4.0, Color(1.0, 1.0, 1.0)))
+	# The Pleiades: an open cluster whose light is scattered, so blue.
+	list.append(_entry(56.750, 24.117, 1.80, 1.40, 17.0, SpacesimDeepSkyEntry.PROFILE_REFLECTION, 1.6, Color(0.80, 0.88, 1.0)))
+	# M13: an old globular, warm and dense.
+	list.append(_entry(250.423, 36.460, 0.33, 0.33, 0.0, SpacesimDeepSkyEntry.PROFILE_GLOBULAR, 5.8, Color(1.0, 0.94, 0.84)))
 	return list
 
 

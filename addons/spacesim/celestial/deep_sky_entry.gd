@@ -12,10 +12,20 @@ extends Resource
 ## with a ragged edge. They are the shader's vocabulary, and they live here because an object's kind is a fact
 ## about the object.
 
-## A smooth ellipse with a bright core.
-const PROFILE_GALAXY := 0.0
-## The same ellipse with a ragged edge.
-const PROFILE_NEBULA := 1.0
+## An inclined or face-on spiral: an old warm bulge, a disc, logarithmic arms with dust on their inner edges.
+const PROFILE_SPIRAL := 0.0
+## An irregular galaxy: a bar of old stars and the rest clumped into blue associations.
+const PROFILE_IRREGULAR := 1.0
+## An emission nebula: **green inside** (doubly ionised oxygen at 501 nm) and **red outside** (H-alpha, 656 nm).
+const PROFILE_EMISSION := 2.0
+## A reflection nebula: blue, because it scatters starlight rather than emitting, and scattering goes as 1/lambda^4.
+const PROFILE_REFLECTION := 3.0
+## A globular cluster: old, round, dense, warm.
+const PROFILE_GLOBULAR := 4.0
+## Kept for the older name: a galaxy is drawn as a spiral.
+const PROFILE_GALAXY := PROFILE_SPIRAL
+## Kept for the older name: a nebula is drawn as an emission region.
+const PROFILE_NEBULA := PROFILE_EMISSION
 
 ## Unit vector in the J2000 equatorial frame.
 @export var direction := Vector3(0.0, 0.0, 1.0)
@@ -25,7 +35,7 @@ const PROFILE_NEBULA := 1.0
 @export var minor_deg := 1.0
 ## Rotation of the object's own axes about its direction, in degrees.
 @export var roll_deg := 0.0
-## Which profile the shader draws: [constant PROFILE_GALAXY] or [constant PROFILE_NEBULA].
+## Which profile the shader draws — one of the five above.
 @export var profile := PROFILE_GALAXY
 ## Integrated visual magnitude — the object's whole light, not a surface brightness.
 @export var magnitude := 6.0

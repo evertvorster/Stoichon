@@ -28,15 +28,15 @@ render_mode unshaded, blend_add, depth_draw_never, depth_test_disabled, cull_dis
 // the right brightness and the wrong *shape*, and is hard to see. `SpacesimCelestialDome` reads the render
 // target's size and the camera's field of view every frame and hands them over, so there is nothing to guess.
 //
-// ------------------------------------------------------------------ OCCLUSION
+// ------------------------------------------------------------------ NO DEPTH, IN EITHER DIRECTION
 //
-// The quads sit at the far plane and never write depth. They ask the frame's depth buffer whether something is
-// already there — `0` is "nothing drawn here" in this engine's reversed projection — which is what puts a star
-// behind a planet without asking a float32 to tell the far plane's distance from a star's.
+// The quads sit at the far plane, never write depth and never test it. **Testing it was a mistake**: the sampled
+// depth is not a stable per-pixel answer under MSAA and multi-pass rendering, and a star whose pixel was
+// sometimes behind and sometimes not switched on and off — which is the flicker this whole layer exists to
+// remove. A background that occasionally draws in front of a planet is a far smaller lie than a sky that blinks.
 
 uniform sampler2D u_stars;        // RGBA32F: xyz unit direction, V magnitude
 uniform sampler2D u_star_colour;  // RGBA32F: B-V in R (the rest unused)
-uniform sampler2D depth_texture : hint_depth_texture;
 
 // The depth tunable: a star either is or is not above this line, so sweeping it costs a uniform write and cannot
 // reshuffle the field.
@@ -87,7 +87,10 @@ void vertex() {
 
 	// Where the star is on screen, in pixels. **The basis is the frame's own**: `INV_VIEW_MATRIX` takes camera
 	// space to world, so its columns are this frame's right, up and forward.
-	vec3 right = INV_VIEW_MATRIX[0].xyz;
+	// **`right` is negated**: the engine's first column runs the other way round in X from the screen, which is
+	// why the field travelled *with* the camera instead of against it. Evert, 2026-11-20: *"when I turn the camera
+	// in one direction, the stars go in the opposite direction."*
+	vec3 right = -INV_VIEW_MATRIX[0].xyz;
 	vec3 up = INV_VIEW_MATRIX[1].xyz;
 	// **Column 2 is the camera's FORWARD axis, un-negated** — the engine says so itself:
 	// `CAMERA_DIRECTION_WORLD = inv_view_matrix[2].xyz` (`scene_shader_forward_clustered.cpp`). Negating it, as
@@ -132,7 +135,5 @@ void fragment() {
 	float radius = length(p) * v_half_px;
 	float coverage = 1.0 - smoothstep(v_half_px - 0.5, v_half_px + 0.5, radius);
 	ALBEDO = v_radiance * coverage;
-	// Hidden by whatever is already in the buffer: a body writes depth, a star is behind every body.
-	float scene_depth = texture(depth_texture, SCREEN_UV).r;
-	ALPHA = scene_depth > 0.0 ? 0.0 : 1.0;
+	ALPHA = 1.0;
 }

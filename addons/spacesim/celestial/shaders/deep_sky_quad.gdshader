@@ -21,7 +21,6 @@ render_mode unshaded, blend_add, depth_draw_never, depth_test_disabled, cull_dis
 uniform sampler2D u_object;  // RGBA32F: xyz direction, major HALF-angle in radians
 uniform sampler2D u_shape;   // RGBA32F: minor/major ratio, roll, profile, illuminance
 uniform sampler2D u_tint;    // RGBA32F: linear tint
-uniform sampler2D depth_texture : hint_depth_texture;
 
 // **A display gain, not physics.** At 1.0 each object is its own integrated magnitude over its own area — M31
 // works out at about 22 magnitudes per square arcsecond, which is dimmer per pixel than a magnitude-6 star and
@@ -54,7 +53,10 @@ void vertex() {
 	// The major axis decides its angular size; the minor axis is the ratio of the two.
 	float diameter = 2.0 * placement.w / max(pixel_angle, 1.0e-12);
 
-	vec3 right = INV_VIEW_MATRIX[0].xyz;
+	// **`right` is negated**: the engine's first column runs the other way round in X from the screen, which is
+	// why the field travelled *with* the camera instead of against it. Evert, 2026-11-20: *"when I turn the camera
+	// in one direction, the stars go in the opposite direction."*
+	vec3 right = -INV_VIEW_MATRIX[0].xyz;
 	vec3 up = INV_VIEW_MATRIX[1].xyz;
 	// **Column 2 is the camera's FORWARD axis, un-negated** — the engine says so itself:
 	// `CAMERA_DIRECTION_WORLD = inv_view_matrix[2].xyz` (`scene_shader_forward_clustered.cpp`). Negating it, as
@@ -101,6 +103,5 @@ void fragment() {
 	}
 	float coverage = 1.0 - smoothstep(0.85, 1.0, radius);
 	ALBEDO = v_radiance * profile * coverage;
-	float scene_depth = texture(depth_texture, SCREEN_UV).r;
-	ALPHA = scene_depth > 0.0 ? 0.0 : 1.0;
+	ALPHA = 1.0;
 }

@@ -106,7 +106,11 @@ func update(camera: Camera3D) -> void:
 	var viewport := camera.get_viewport()
 	if viewport == null:
 		return
-	var size := Vector2(viewport.size)
+	# **The buffer the 3D is actually drawn into**, which is the viewport's size times the 3D scale. This project
+	# renders the 3D at `scaling_3d_scale` of the viewport and upscales it, so the viewport's size is NOT the pixel
+	# grid: a star snapped to a grid that is finer than the real pixels lands between them, and half of the field
+	# ends up dimmed or missing, differently at every camera angle.
+	var size := Vector2(viewport.size) * viewport.scaling_3d_scale
 	if size.x <= 0.0 or size.y <= 0.0:
 		return
 	global_position = camera.global_position

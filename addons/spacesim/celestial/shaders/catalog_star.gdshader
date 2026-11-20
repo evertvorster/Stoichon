@@ -2,7 +2,7 @@ shader_type spatial;
 #include "res://addons/spacesim/render/radiance.gdshaderinc"
 // A star is light added to the frame, drawn after everything opaque, writing no depth and testing none: it
 // sits at the far plane and asks the depth buffer whether anything is already there.
-render_mode unshaded, blend_add, depth_draw_never, depth_test_disabled, cull_disabled, fog_disabled;
+render_mode unshaded, blend_add, depth_draw_never, cull_disabled, fog_disabled;
 // The catalogued stars: one quad each, sized in PIXELS, snapped to a pixel when smaller than one.
 //
 // ------------------------------------------------------------------ THE TWO REGIMES
@@ -28,12 +28,16 @@ render_mode unshaded, blend_add, depth_draw_never, depth_test_disabled, cull_dis
 // the right brightness and the wrong *shape*, and is hard to see. `SpacesimCelestialDome` reads the render
 // target's size and the camera's field of view every frame and hands them over, so there is nothing to guess.
 //
-// ------------------------------------------------------------------ NO DEPTH, IN EITHER DIRECTION
+// ------------------------------------------------------------------ OCCLUSION, BY THE HARDWARE
 //
-// The quads sit at the far plane, never write depth and never test it. **Testing it was a mistake**: the sampled
-// depth is not a stable per-pixel answer under MSAA and multi-pass rendering, and a star whose pixel was
-// sometimes behind and sometimes not switched on and off — which is the flicker this whole layer exists to
-// remove. A background that occasionally draws in front of a planet is a far smaller lie than a sky that blinks.
+// The quads never write depth, and they are depth **tested** at the far plane. That puts a star behind a planet
+// without asking a float32 to tell the far plane's distance from a star's, and it is per sample, so it costs the
+// field nothing.
+//
+// **Sampling the depth buffer by hand was tried and removed.** The sample is not a stable per-pixel answer in a
+// frame with MSAA and several passes, so a star switched on and off — the flicker this layer exists to remove.
+// Drawing with no depth test at all was tried next, and a bright star crossing a planet's limb vanished into it
+// and popped out again, which reads as blinking too. The hardware's own test has neither problem.
 
 uniform sampler2D u_stars;        // RGBA32F: xyz unit direction, V magnitude
 uniform sampler2D u_star_colour;  // RGBA32F: B-V in R (the rest unused)
@@ -131,7 +135,11 @@ void vertex() {
 
 	vec2 corner = centre + VERTEX.xy * (2.0 * half_px * visible);
 	vec2 final_ndc = vec2(corner.x / u_view_size.x * 2.0 - 1.0, 1.0 - corner.y / u_view_size.y * 2.0);
-	POSITION = vec4(final_ndc, CLIP_SPACE_FAR, 1.0);
+	// **A hair inside the far plane**, so the hardware depth test hides a star behind a body and lets it through
+	// only where the frame is empty. Reversed-Z clears to 0 and "nearer" is larger, so this is nearer than the
+	// cleared value by construction — written directly, never derived from a projection, which is what made an
+	// earlier attempt at this noise.
+	POSITION = vec4(final_ndc, CLIP_SPACE_FAR + 1.0e-6, 1.0);
 }
 
 void fragment() {

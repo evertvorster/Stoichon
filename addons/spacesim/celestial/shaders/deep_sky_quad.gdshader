@@ -2,7 +2,7 @@ shader_type spatial;
 #include "res://addons/spacesim/render/radiance.gdshaderinc"
 // Additive light over the frame, like the stars it sits behind: an extended object is a source, not a surface,
 // and it must not occlude anything.
-render_mode unshaded, blend_add, depth_draw_never, depth_test_disabled, cull_disabled, fog_disabled;
+render_mode unshaded, blend_add, depth_draw_never, cull_disabled, fog_disabled;
 // The extended objects — galaxies and nebulae — one quad each, placed by the same five numbers the stars use.
 //
 // A galaxy at a wide field of view is a few pixels across; the same galaxy close up is a resolved ellipse. Both
@@ -89,7 +89,11 @@ void vertex() {
 
 	vec2 corner = centre + VERTEX.xy * (2.0 * half_px * visible);
 	vec2 final_ndc = vec2(corner.x / u_view_size.x * 2.0 - 1.0, 1.0 - corner.y / u_view_size.y * 2.0);
-	POSITION = vec4(final_ndc, CLIP_SPACE_FAR, 1.0);
+	// **A hair inside the far plane**, so the hardware depth test hides a star behind a body and lets it through
+	// only where the frame is empty. Reversed-Z clears to 0 and "nearer" is larger, so this is nearer than the
+	// cleared value by construction — written directly, never derived from a projection, which is what made an
+	// earlier attempt at this noise.
+	POSITION = vec4(final_ndc, CLIP_SPACE_FAR + 1.0e-6, 1.0);
 }
 
 void fragment() {

@@ -40,7 +40,6 @@ extends Node3D
 
 const STAR_SHADER := preload("res://addons/spacesim/celestial/shaders/catalog_star.gdshader")
 const DEEP_SKY_SHADER := preload("res://addons/spacesim/celestial/shaders/deep_sky_quad.gdshader")
-const BAND_SHADER := preload("res://addons/spacesim/celestial/shaders/galactic_band.gdshader")
 const SKY_SHADER := preload("res://addons/spacesim/celestial/shaders/celestial_sky.gdshader")
 
 ## Texels per row of a catalogue texture. The star data is `(direction.xyz, magnitude)` per star, which is what
@@ -70,10 +69,8 @@ const DEEP_SKY_GAIN := 30.0
 var _catalogue: SpacesimStarCatalogue
 var _stars: MultiMeshInstance3D
 var _deep_sky: MultiMeshInstance3D
-var _band: MeshInstance3D
 var _star_material: ShaderMaterial
 var _deep_sky_material: ShaderMaterial
-var _band_material: ShaderMaterial
 var _sky_material: ShaderMaterial
 var _faint: MultiMeshInstance3D
 var _faint_material: ShaderMaterial
@@ -92,7 +89,6 @@ func build(catalogue: SpacesimStarCatalogue) -> bool:
 	_build_stars()
 	_build_faint()
 	_build_deep_sky()
-	_build_band()
 	return true
 
 
@@ -134,6 +130,8 @@ func set_gain(gain: float) -> void:
 func _build_sky() -> void:
 	_sky_material = ShaderMaterial.new()
 	_sky_material.shader = SKY_SHADER
+	# The band's tilt, built from the published pole and centre rather than from Euler angles.
+	_sky_material.set_shader_parameter("u_galactic", SpacesimDeepSky.galactic_basis())
 	sky = Sky.new()
 	sky.sky_material = _sky_material
 
@@ -256,27 +254,11 @@ func _build_deep_sky() -> void:
 	_deep_sky_material.set_shader_parameter("u_tint", _float_texture(tint))
 
 
-## The galactic band: a sphere the camera sits inside, and a function of galactic latitude and longitude.
-##
-## **A function, not a photograph.** The band has no resolution of its own to lose, so it cannot shimmer: a pixel
-## asks which way in the galactic frame it is looking and gets a value. A real image of the Milky Way would need
-## a texture, a mip chain and a filter, and those are what keep a picture still — an analytic field is still by
-## construction. The sphere is only there to give the fragment stage a surface to compute on.
-func _build_band() -> void:
-	var sphere := SphereMesh.new()
-	sphere.radius = 100.0
-	sphere.height = 200.0
-	sphere.radial_segments = 64
-	sphere.rings = 32
-	_band_material = ShaderMaterial.new()
-	_band_material.shader = BAND_SHADER
-	_band_material.render_priority = -3
-	_band_material.set_shader_parameter("u_galactic", SpacesimDeepSky.galactic_basis())
-	_band = MeshInstance3D.new()
-	_band.name = "MilkyWaySphere"
-	_band.mesh = sphere
-	_band.material_override = _band_material
-	add_child(_band)
+## The band is in the sky slot, not on a mesh: it is a function of the direction you look in, and a sky shader is
+## handed exactly that per pixel. See `celestial_sky.gdshader` — a 100 m sphere in a 1.6e12 m scene never appeared.
+func set_band(basis: Basis) -> void:
+	if _sky_material != null:
+		_sky_material.set_shader_parameter("u_galactic", basis)
 
 
 ## One MultiMesh layer: a unit quad per instance, identity transforms, and an AABB that says "always visible".

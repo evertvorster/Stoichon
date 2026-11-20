@@ -30,7 +30,7 @@ func _initialize() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
 	var path := "%s/milky_way.exr" % OUT_DIR
 	var error := image.save_exr(path)
-	var note := FileAccess.open("%s/PROVENANCE.md" % OUT_DIR, FileAccess.WRITE)
+	var note := FileAccess.open("%s/milky_way.provenance.md" % OUT_DIR, FileAccess.WRITE)
 	if note != null:
 		note.store_string(NOTE)
 		note.close()

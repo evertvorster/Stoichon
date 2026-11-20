@@ -112,6 +112,8 @@ layout(push_constant, std430) uniform Params {
 	vec2 grid;
 	float cap;
 	float sigma;
+	float inv_gain;
+	float pad;
 } params;
 void main() {
 	ivec2 cell = ivec2(gl_GlobalInvocationID.xy);
@@ -126,7 +128,9 @@ void main() {
 			if (x >= int(params.size.x) || y >= int(params.size.y)) {
 				continue;
 			}
-			float l = dot(imageLoad(color_image, ivec2(x, y)).rgb, vec3(0.2126, 0.7152, 0.0722));
+			// **`inv_gain` undoes the frame's radiance lift** (`SpacesimRadiance`): the metre's `cap` and
+			// `target` are in the currency they were measured in, so the frame is read back in that currency.
+			float l = dot(imageLoad(color_image, ivec2(x, y)).rgb, vec3(0.2126, 0.7152, 0.0722)) * params.inv_gain;
 			sum += min(l, params.cap);
 			count += 1.0;
 		}
@@ -202,7 +206,7 @@ layout(std430, set = 0, binding = 1) buffer State {
 } state;
 layout(push_constant, std430) uniform Params {
 	vec2 size;
-	float pad0;
+	float inv_gain;
 	float pad1;
 } params;
 void main() {
@@ -213,7 +217,9 @@ void main() {
 	vec4 c = imageLoad(color_image, pos);
 	// **Alpha is left alone**: it is the frame's coverage, not its light, and scaling it would change
 	// how things composite rather than how they look.
-	imageStore(color_image, pos, vec4(c.rgb * state.value.x, c.a));
+	// **`inv_gain` is the last step of the lift**: the frame was written `GAIN` times its radiance, so the
+	// multiplier is applied against a frame that is that much larger. See `SpacesimRadiance`.
+	imageStore(color_image, pos, vec4(c.rgb * state.value.x * params.inv_gain, c.a));
 }
 """
 
@@ -301,7 +307,8 @@ func _render_callback(_callback_type: int, render_data: RenderData) -> void:
 	rd.compute_list_set_push_constant(list, PackedFloat32Array([
 		size.x, size.y, float(SAMPLES_X), float(SAMPLES_Y),
 		SpacesimExposureMeter.CAP, SpacesimExposureMeter.SIGMA,
-	]).to_byte_array(), 24)
+		1.0 / SpacesimRadiance.GAIN, 0.0,
+	]).to_byte_array(), 32)
 	# One workgroup per cell: the shader's local size *is* the grid, so the dispatch is one group wide and
 	# tall and each invocation owns exactly one cell of the frame.
 	rd.compute_list_dispatch(list, SAMPLES_X / 32, SAMPLES_Y / 18, 1)
@@ -320,7 +327,7 @@ func _render_callback(_callback_type: int, render_data: RenderData) -> void:
 	rd.compute_list_bind_compute_pipeline(list, _pipeline_apply)
 	rd.compute_list_bind_uniform_set(list, apply_set, 0)
 	rd.compute_list_set_push_constant(list, PackedFloat32Array([
-		size.x, size.y, 0.0, 0.0,
+		size.x, size.y, 1.0 / SpacesimRadiance.GAIN, 0.0,
 	]).to_byte_array(), 16)
 	rd.compute_list_dispatch(
 		list, ceili(size.x / float(BLOCK)), ceili(size.y / float(BLOCK)), 1

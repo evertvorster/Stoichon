@@ -251,9 +251,11 @@ func _test_the_star_light(h, sol: SpacesimSolarSystem, root: Node) -> void:
 	h.check(scene.star_light != null, "and makes a star light")
 	if scene.star_light != null:
 		var distance := lit_earth.node.global_position.distance_to(star_node.node.global_position)
+		# **Times the frame's radiance gain**, because the light is lifted with every other radiance path so that
+		# a lit surface and a splat of the same body stay in step — see `SpacesimRadiance`.
 		h.check_near(scene.star_light.light.light_intensity_lux,
-			SpacesimStarLight.illuminance(luminosity, distance),
-			"whose strength is the illuminance at the observer", 10.0)
+			SpacesimStarLight.illuminance(luminosity, distance) * SpacesimRadiance.GAIN,
+			"whose strength is the illuminance at the observer, lifted into the frame's currency", 10.0)
 		# A DirectionalLight3D shines along its -Z, so its +Z points back at the star.
 		var to_star := (star_node.node.global_position - lit_earth.node.global_position).normalized()
 		h.check(scene.star_light.light.global_transform.basis.z.dot(to_star) > 0.99,

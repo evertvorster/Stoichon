@@ -280,8 +280,10 @@ func _test_the_scene_applies_it(h, root: Node) -> void:
 		# material declares `uniform vec4 albedo : source_color` (`scene/resources/material.cpp`).
 		var spot := (mars.point.material_override as StandardMaterial3D).albedo_color
 		var decoded := spot.srgb_to_linear()
+		# **In the frame's currency**, which carries `SpacesimRadiance.GAIN` — the lift that keeps a faint
+		# splat inside the 16-bit buffer's normal range.
 		var expected_radiance := scene.body_luminance(mars, camera.global_position,
-			star_node.node.global_position) / SpacesimBodyRenderer.UNIT_LUX_PER_SR
+			star_node.node.global_position) * SpacesimRadiance.GAIN / SpacesimBodyRenderer.UNIT_LUX_PER_SR
 		h.check_near(decoded.get_luminance(), expected_radiance,
 			"what arrives in the shader is the body's radiance, unchanged by the tint or the encode",
 			maxf(expected_radiance * 0.02, 1.0e-6))

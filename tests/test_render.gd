@@ -820,6 +820,10 @@ func _test_hiding_a_body_hides_everything_it_draws(h, scene: SpacesimSystemScene
 	var orphaned: Array[String] = []
 	for node in scene.container.find_children("*", "MeshInstance3D", true, false):
 		var mesh := node as MeshInstance3D
+		# **The celestial background is not a body.** Its band is a mesh, and asking whether a body owns it would
+		# be asking the wrong question — it belongs to nothing but the sky.
+		if scene.celestial != null and scene.celestial.is_ancestor_of(mesh):
+			continue
 		var owned_now := false
 		var parent: Node = mesh.get_parent()
 		while parent != null and parent != scene.container:

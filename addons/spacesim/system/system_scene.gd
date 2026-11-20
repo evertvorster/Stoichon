@@ -53,6 +53,7 @@ var environment: Environment
 ## The background sky: the real star field. Null when the catalogue did not load, in which case the
 ## environment keeps a flat background colour rather than rendering a black sky that reads as a bug.
 var star_sky: SpacesimStarSky
+var celestial: SpacesimCelestialDome
 var _framing: SpacesimFraming
 ## The baked surface maps, one cache for the whole system.
 var _distributions := SpacesimSurfaceDistribution.new()
@@ -1003,6 +1004,19 @@ func _add_lighting() -> void:
 	world_environment.environment = environment
 	container.add_child(world_environment)
 
+	# **The celestial background as objects** — the catalogue's stars, the deep-sky objects and the galactic
+	# band — and Layer 1's faint field in the sky slot the environment just took. Nothing in it depends on the
+	# ship, the physics or a body; it takes a camera and the catalogue.
+	if star_sky != null:
+		celestial = SpacesimCelestialDome.new()
+		celestial.name = "CelestialDome"
+		if celestial.build(star_sky.catalogue):
+			container.add_child(celestial)
+			environment.sky = celestial.sky
+		else:
+			push_warning("the celestial background could not be built; the sky holds only its air")
+			celestial = null
+
 
 ## **Which body's air the frame is looking through** — the nearest one that has any, from the observer, with
 ## everything the march needs. Empty when there is nothing to draw.
@@ -1391,6 +1405,12 @@ func update_sky(camera: Camera3D) -> void:
 	# is and clipped at the frame's depth. So the switch goes off unconditionally, and `set_air` is kept only
 	# until the last reader of the parameter set is deleted.
 	star_sky.set_air_off()
+
+	# The celestial background: the same camera, the same depth and gain, every frame.
+	if celestial != null:
+		celestial.set_limit_magnitude(float(SpacesimSettings.get_value("sky.star_depth")))
+		celestial.set_gain(pow(10.0, float(SpacesimSettings.get_value("sky.star_gain"))))
+		celestial.update(camera)
 
 	# **The ambient is that same star field, summed from the catalogue.** Recomputed only when the depth
 	# changes, because the sum walks all 119,613 stars and this runs every frame — a float compare once

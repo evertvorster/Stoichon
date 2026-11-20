@@ -1337,6 +1337,16 @@ func _test_the_frame_holds_every_radiance_it_is_given(h) -> void:
 	var disc := SpacesimBodyRenderer.STAR_INTENSITY * SpacesimRadiance.GAIN
 	h.check(disc < LARGEST, "and the star's own disc still fits the format's top end (%s of 65504)" % str(disc))
 
+	# **A star's splat and its disc must land on the same number.** The disc writes `intensity` straight into a
+	# plain uniform, while the splat writes a colour that Godot DECODES from sRGB — so the splat's value has to
+	# be encoded to come back to the same level. It was not, and now that the value carries the gain the power
+	# would be the difference between a glow at 24x white and one at millions.
+	var tint := Color(1.0, 0.95, 0.9)
+	var level := SpacesimBodyRenderer.STAR_INTENSITY * SpacesimRadiance.GAIN
+	var written := SpacesimBodyRenderer._at_unit_luminance(tint, level).linear_to_srgb()
+	h.check_near(written.srgb_to_linear().get_luminance(), level,
+		"a star's splat decodes back to the level its disc writes", level * 0.01)
+
 	# A sunlit surface is lifted too, and must not clip.
 	var sunlit := SpacesimRadiance.frame(SpacesimExposure.REFERENCE_LUX / PI)
 	h.check(sunlit < LARGEST, "and a sunlit surface does too (%s)" % str(sunlit))

@@ -1,5 +1,8 @@
 shader_type spatial;
 #include "res://addons/spacesim/render/radiance.gdshaderinc"
+// Additive light: the band is a source seen through everything else, and the sphere is only a surface to
+// compute on.
+render_mode unshaded, blend_add, depth_draw_never, depth_test_disabled, cull_disabled, fog_disabled;
 // The galactic band, drawn on the inside of a sphere that carries the camera.
 //
 // Every pixel asks one question: **which way in the galactic frame am I looking?** The band is a function of that

@@ -1,5 +1,8 @@
 shader_type spatial;
 #include "res://addons/spacesim/render/radiance.gdshaderinc"
+// A star is light added to the frame, drawn after everything opaque, writing no depth and testing none: it
+// sits at the far plane and asks the depth buffer whether anything is already there.
+render_mode unshaded, blend_add, depth_draw_never, depth_test_disabled, cull_disabled, fog_disabled;
 // The catalogued stars: one quad each, sized in PIXELS, snapped to a pixel when smaller than one.
 //
 // ------------------------------------------------------------------ THE TWO REGIMES

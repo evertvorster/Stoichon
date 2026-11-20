@@ -1,5 +1,8 @@
 shader_type spatial;
 #include "res://addons/spacesim/render/radiance.gdshaderinc"
+// Additive light over the frame, like the stars it sits behind: an extended object is a source, not a surface,
+// and it must not occlude anything.
+render_mode unshaded, blend_add, depth_draw_never, depth_test_disabled, cull_disabled, fog_disabled;
 // The extended objects — galaxies and nebulae — one quad each, placed by the same five numbers the stars use.
 //
 // A galaxy at a wide field of view is a few pixels across; the same galaxy close up is a resolved ellipse. Both

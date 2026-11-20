@@ -90,7 +90,8 @@ static func aerosol_coefficient(clouds: SpacesimClouds) -> float:
 ## lux/sr, which is what a clear zenith sky measures. The old constant drew the same sky about seven
 ## times brighter than that.
 static func sky_scale(illuminance: float) -> float:
-	return illuminance * PI / REFERENCE_LUX
+	# **Lifted into the frame's currency** with every other radiance path — see `SpacesimRadiance`.
+	return SpacesimRadiance.frame_from_illuminance(illuminance * PI / REFERENCE_LUX)
 
 ## What a multiplier of 1.0 means to the camera. The same number `SpacesimExposure` uses, so the sky
 ## and the exposure cannot drift apart.

@@ -32,6 +32,7 @@ func run(h, root: Node) -> void:
 	_test_surface_is_derived(h, earth, luna)
 	_test_the_ground_is_the_field(h, earth)
 	_test_a_body_without_a_surface_has_no_field(h, scene)
+	_test_the_frame_holds_every_radiance_it_is_given(h)
 	_test_the_star_is_a_source(h, scene)
 	_test_the_background_is_the_real_sky(h, scene)
 	_test_the_phase_term_is_a_disc_average(h)
@@ -1292,3 +1293,55 @@ func _shader_default(code: String, name: String) -> Variant:
 	if found == null:
 		return null
 	return found.get_string(1).to_float()
+
+
+## **Every radiance the scene writes must land where the 16-bit float still has a mantissa.**
+##
+## The 3D buffer is `R16G16B16A16_SFLOAT` and cannot be changed from a project, so its normal range —
+## 6.1e-5 upward, and subnormal steps of 5.96e-8 below it — is the whole budget. A path that writes a
+## physical radiance without the frame's gain lands below it: the values quantise to a handful of levels
+## and then to zero, and no exposure applied afterwards can lift a zero. That is how the faint stars were
+## being lost, and this is the check that would have caught it in October.
+func _test_the_frame_holds_every_radiance_it_is_given(h) -> void:
+	# **`float` here is the 16-bit format's, not this build's `real_t`**: the engine's `double` build makes
+	# GDScript's numbers 64-bit, and the buffer is still half-float.
+	const SMALLEST_NORMAL := 6.1035e-5
+	const SUBNORMAL_STEP := 5.96e-8
+	const LARGEST := 65504.0
+
+	# The two halves of the one constant, which a shader and a script cannot share any other way.
+	var include := FileAccess.get_file_as_string(SpacesimRadiance.SHADER_INCLUDE)
+	var found := RegEx.create_from_string("RADIANCE_GAIN = ([0-9.]+)").search(include)
+	h.check(found != null, "the shader include declares RADIANCE_GAIN")
+	if found != null:
+		h.check_near(float(found.get_string(1)), SpacesimRadiance.GAIN,
+			"and the script's gain is the shader's number", 0.5)
+
+	# **A magnitude-8 star, the depth the catalogue ships**, as the sky computes it: its whole light over one
+	# pixel's solid angle, in the frame's currency, at 720p and a 75-degree field.
+	var pixel_angle := 2.0 * tan(deg_to_rad(75.0) * 0.5) / 720.0
+	var lux8 := 2.54e-6 * pow(10.0, -0.4 * 8.0)
+	var radiance8 := lux8 * SpacesimRadiance.GAIN / (pixel_angle * pixel_angle * SpacesimRadiance.UNIT_LUX_PER_SR)
+	var levels8 := int(radiance8 / SUBNORMAL_STEP)
+	h.check(levels8 >= 256,
+		"a magnitude-8 star's pixel has at least eight bits of mantissa left (%s levels)" % str(levels8))
+
+	# The star that started this: magnitude 6.5, which before the gain carried about five levels.
+	var lux65 := 2.54e-6 * pow(10.0, -0.4 * 6.5)
+	var radiance65 := lux65 * SpacesimRadiance.GAIN / (pixel_angle * pixel_angle * SpacesimRadiance.UNIT_LUX_PER_SR)
+	h.check(radiance65 > SMALLEST_NORMAL,
+		"and a magnitude-6.5 star is back inside the format's normal range (%s)" % str(snappedf(radiance65, 1e-7)))
+
+	# The ceiling binds the gain: the star's disc is authored at `STAR_INTENSITY` times white, and an
+	# infinity in the frame propagates through the glow rather than clipping quietly.
+	var disc := SpacesimBodyRenderer.STAR_INTENSITY * SpacesimRadiance.GAIN
+	h.check(disc < LARGEST, "and the star's own disc still fits the format's top end (%s of 65504)" % str(disc))
+
+	# A sunlit surface is lifted too, and must not clip.
+	var sunlit := SpacesimRadiance.frame(SpacesimExposure.REFERENCE_LUX / PI)
+	h.check(sunlit < LARGEST, "and a sunlit surface does too (%s)" % str(sunlit))
+
+	# The night-side ambient, the frame's dimmest authored light: 2e-4 lux, the whole naked-eye sky.
+	var ambient := 2.0e-4 / SpacesimExposure.REFERENCE_LUX * SpacesimRadiance.GAIN
+	h.check(ambient > SMALLEST_NORMAL * 0.02,
+		"and the night-side ambient is three decades off the format's floor (%s)" % str(snappedf(ambient, 1e-7)))

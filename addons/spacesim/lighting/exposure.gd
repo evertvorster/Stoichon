@@ -121,7 +121,11 @@ static func set_ambient_illuminance(environment: Environment, lux: float) -> voi
 		return
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
 	environment.ambient_light_color = Color.WHITE
-	environment.ambient_light_energy = maxf(lux, 0.0) / REFERENCE_LUX
+	# **Lifted into the frame's currency** with every other light path: the ambient is an illuminance like the
+	# sun's, so a night side and a day side keep their ratio. The exposure pass divides the gain back out.
+	environment.ambient_light_energy = SpacesimRadiance.frame_from_illuminance(
+		maxf(lux, 0.0) / REFERENCE_LUX
+	)
 
 
 ## The tone curve, the ambient and the star's glare.

@@ -33,6 +33,7 @@
 // ---------------------------------------------------------------- LICENCE
 // GPL-3.0-or-later. The star DATA beside it is CC BY-SA 4.0 — see PROVENANCE.md.
 shader_type sky;
+#include "res://addons/spacesim/render/radiance.gdshaderinc"
 
 // ===== THE CATALOGUE ============================================================
 // Built by tools/build_star_catalogue.py, bucketed by cube-face cell so a pixel tests one cell's
@@ -334,5 +335,8 @@ void sky() {
 	if (u_air_on > 0.5) {
 		air_in_scatter = air_sky(u_to_local * EYEDIR, air_transmittance);
 	}
-	COLOR = (acc * u_gain / UNIT_LUX_PER_SR) * air_transmittance + air_in_scatter;
+	// **Lifted into the frame's currency**: a faint star's radiance is below the 16-bit float's normal range
+	// on its own — see `radiance.gdshaderinc`. The air is already in that currency (its intensity comes from
+	// `SpacesimAtmosphereModel.sky_scale`), so only the starlight is lifted here.
+	COLOR = (acc * u_gain * RADIANCE_GAIN / UNIT_LUX_PER_SR) * air_transmittance + air_in_scatter;
 }

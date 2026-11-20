@@ -82,5 +82,7 @@ func aim_at(observer_position: Vector3, star_position: Vector3) -> void:
 	if absf(direction.dot(up)) > 0.999:
 		up = Vector3.RIGHT
 	light.global_transform = light.global_transform.looking_at(light.global_position + direction, up)
-	light.light_intensity_lux = lux_at(distance)
+	# **Lifted into the frame's currency** with every other radiance path, so a lit surface and a splat of
+	# the same body stay in step. `SpacesimExposurePass` divides the gain back out.
+	light.light_intensity_lux = SpacesimRadiance.light_lux(lux_at(distance))
 	light.light_angular_distance = rad_to_deg(2.0 * SpacesimLod.angular_radius(radius, distance))

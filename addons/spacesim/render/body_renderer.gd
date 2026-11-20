@@ -59,7 +59,7 @@ const RAMP_WIDTH := 256
 ## behind it are the same kind of quantity, and two currencies for one quantity is how they come to
 ## disagree. `tests/test_render.gd` checks the shader still carries this value, so a change in either
 ## place fails rather than drifting.
-const UNIT_LUX_PER_SR := 100000.0 / PI
+const UNIT_LUX_PER_SR := SpacesimRadiance.UNIT_LUX_PER_SR
 
 ## Triangles in the quad a point of light is drawn on. Counted in the HUD's total, because the HUD is
 ## an instrument for "is anything actually being applied" and an instrument that ignores part of what is
@@ -232,8 +232,10 @@ static func splat_fade(screen: float, floor: float) -> float:
 
 static func point_colour(body: SpacesimSceneBody, radiance: float) -> Color:
 	if body.content != null and body.content.kind == SpacesimSystemBody.Kind.STAR:
-		return star_color_of(body) * STAR_INTENSITY
-	return _at_unit_luminance(body.color, radiance / UNIT_LUX_PER_SR).linear_to_srgb()
+		return star_color_of(body) * STAR_INTENSITY * SpacesimRadiance.GAIN
+	# **Lifted into the frame's currency**, exactly as the sky's stars are: a faint body's splat is below the
+	# 16-bit float's normal range on its own. `SpacesimExposurePass` divides the gain back out.
+	return _at_unit_luminance(body.color, SpacesimRadiance.frame(radiance)).linear_to_srgb()
 
 
 ## A colour scaled so that its luminance is `level`, whatever its hue.

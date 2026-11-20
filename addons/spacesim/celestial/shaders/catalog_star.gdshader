@@ -18,16 +18,6 @@ render_mode unshaded, blend_add, depth_draw_never, cull_disabled, fog_disabled;
 // specification's "centre pixel keeps 100% peak" would add light as a star widens; a star's flux does not change
 // with how it is drawn, and the energy check in the acceptance test cannot pass the other way.
 //
-// ------------------------------------------------------------------ THE PROJECTION IS THE HOST'S FIVE NUMBERS
-//
-// `ndc = (dot(d, right), dot(d, up)) / (dot(d, fwd) * tan_half)`, and pixels are `ndc` scaled by the render
-// target's size. Nothing here reads `PROJECTION_MATRIX`, `VIEWPORT_SIZE` or a derivative.
-//
-// That is not fussiness. This project's window, its 3D buffer and its canvas are three different sizes, and a
-// shader that guesses which one it was handed gets the pixel size wrong in both axes — which shows as stars of
-// the right brightness and the wrong *shape*, and is hard to see. `SpacesimCelestialDome` reads the render
-// target's size and the camera's field of view every frame and hands them over, so there is nothing to guess.
-//
 // ------------------------------------------------------------------ OCCLUSION, BY THE HARDWARE
 //
 // The quads never write depth, and they are depth **tested** at the far plane. That puts a star behind a planet
@@ -38,6 +28,17 @@ render_mode unshaded, blend_add, depth_draw_never, cull_disabled, fog_disabled;
 // frame with MSAA and several passes, so a star switched on and off — the flicker this layer exists to remove.
 // Drawing with no depth test at all was tried next, and a bright star crossing a planet's limb vanished into it
 // and popped out again, which reads as blinking too. The hardware's own test has neither problem.
+
+// ------------------------------------------------------------------ THE PIXEL GRID IS THE DRAWING BUFFER'S
+//
+// `VIEWPORT_SIZE` is the buffer **this pass is being drawn into** — not the window, not the canvas the text is
+// laid out in, not the 3D scale setting. This project has all three at once and they are different numbers, and a
+// pixel grid taken from the wrong one puts a one-pixel star between two real pixels: it then contributes half to
+// each, dims or vanishes, and which stars do that changes as the camera turns.
+//
+// The placement itself is `VIEW_MATRIX` and `PROJECTION_MATRIX` — the arithmetic the rasteriser applies to every
+// other object in the frame — so there is no basis, no tangent, no sign and no convention of this shader's in it.
+// Together that is the whole dependency: the engine's matrices, and the buffer the engine is drawing into.
 
 uniform sampler2D u_stars;        // RGBA32F: xyz unit direction, V magnitude
 uniform sampler2D u_star_colour;  // RGBA32F: B-V in R (the rest unused)
@@ -54,10 +55,7 @@ uniform float u_size_exponent = 0.18;
 uniform float u_lux_reference = 1.011e-8;
 
 // ===== THIS FRAME ==================================================================================
-// **The only thing the host supplies is the render target's size.** Everything about where a star lands comes from
-// `VIEW_MATRIX` and `PROJECTION_MATRIX` — the same matrices the rasteriser uses for every other object — so there
-// is no basis, no tangent, no sign and no convention of this shader's in the placement at all.
-uniform vec2 u_view_size = vec2(1280.0, 720.0);
+
 
 const float LUX_PER_MAG0 = 2.54e-6;
 const float UNIT_LUX_PER_SR = 100000.0 / 3.14159265358979;
@@ -95,7 +93,7 @@ void vertex() {
 	vec2 ndc = clip.xy / max(w, 1.0e-9);
 
 	// One pixel, in NDC, from the render target's own size.
-	vec2 pixel_ndc = 2.0 / u_view_size;
+	vec2 pixel_ndc = 2.0 / VIEWPORT_SIZE;
 
 	// **The snap**: the star is placed on a pixel centre, so its light lands in one pixel and does not depend on
 	// where inside that pixel it happened to fall. Symmetric in the sign of NDC, so no screen-orientation
@@ -104,7 +102,7 @@ void vertex() {
 
 	// The pixel's own solid angle, for turning an illuminance into a radiance. `abs` because this engine hands a
 	// main-pass shader a projection whose vertical scale is negative.
-	float pixel_angle = 2.0 / (max(abs(PROJECTION_MATRIX[1][1]), 1.0e-6) * u_view_size.y);
+	float pixel_angle = 2.0 / (max(abs(PROJECTION_MATRIX[1][1]), 1.0e-6) * VIEWPORT_SIZE.y);
 
 	float lux = LUX_PER_MAG0 * pow(10.0, -0.4 * magnitude);
 	float bv = texelFetch(u_star_colour, texel, 0).r;

@@ -32,7 +32,6 @@ uniform float u_gain = 30.0;
 // it — read from GDScript it is the transform of the frame before the one being drawn — so the basis comes from
 // `INV_VIEW_MATRIX` instead, which is the camera this frame is actually rendered with.
 uniform vec2 u_tan_half = vec2(0.5, 0.5);
-uniform vec2 u_view_size = vec2(1280.0, 720.0);
 
 const float UNIT_LUX_PER_SR = 100000.0 / 3.14159265358979;
 const float TEXELS_PER_ROW = 512.0;
@@ -55,8 +54,8 @@ void vertex() {
 	vec4 clip = PROJECTION_MATRIX * vec4(view.xyz, 0.0);
 	float w = clip.w;
 	vec2 ndc = clip.xy / max(w, 1.0e-9);
-	vec2 pixel_ndc = 2.0 / u_view_size;
-	float pixel_angle = 2.0 / (max(abs(PROJECTION_MATRIX[1][1]), 1.0e-6) * u_view_size.y);
+	vec2 pixel_ndc = 2.0 / VIEWPORT_SIZE;
+	float pixel_angle = 2.0 / (max(abs(PROJECTION_MATRIX[1][1]), 1.0e-6) * VIEWPORT_SIZE.y);
 
 	// How wide the object is, in pixels, from its own angular size.
 	float diameter = 2.0 * placement.w / max(pixel_angle, 1.0e-12);

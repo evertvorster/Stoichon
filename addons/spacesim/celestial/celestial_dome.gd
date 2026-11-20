@@ -96,33 +96,17 @@ func build(catalogue: SpacesimStarCatalogue) -> bool:
 	return true
 
 
-## Follow the camera and hand the layers this frame's five numbers. Called once a frame.
+## Follow the camera. Called once a frame.
 ##
-## **The render target's size, not the window's and not the canvas's** — `viewport.size` is the buffer the 3D is
-## actually drawn into, and it is the only one a pixel means anything in.
+## **Nothing else is published, deliberately.** Every layer places itself with the engine's own `VIEW_MATRIX` and
+## `PROJECTION_MATRIX` and measures its pixels from the drawing buffer's own `VIEWPORT_SIZE` — all three of which
+## belong to the frame being drawn. A number read here would be the *previous* frame's camera, and this project
+## has three different resolutions (the 3D render resolution, the viewport, and the canvas the text is laid out
+## in) for a host-side number to be wrong about.
 func update(camera: Camera3D) -> void:
 	if camera == null:
 		return
-	var viewport := camera.get_viewport()
-	if viewport == null:
-		return
-	# **The buffer the 3D is actually drawn into**, which is the viewport's size times the 3D scale. This project
-	# renders the 3D at `scaling_3d_scale` of the viewport and upscales it, so the viewport's size is NOT the pixel
-	# grid: a star snapped to a grid that is finer than the real pixels lands between them, and half of the field
-	# ends up dimmed or missing, differently at every camera angle.
-	var size := Vector2(viewport.size) * viewport.scaling_3d_scale
-	if size.x <= 0.0 or size.y <= 0.0:
-		return
 	global_position = camera.global_position
-
-	# **Neither the basis nor the field of view is published.** The shaders place a direction with the engine's own
-	# `VIEW_MATRIX` and `PROJECTION_MATRIX`, which belong to the frame being drawn; anything read here would be the
-	# previous frame's camera. Only the render target's size is the host's, and it changes on a resize, never per
-	# frame.
-	for material in [_star_material, _deep_sky_material, _band_material]:
-		if material == null:
-			continue
-		material.set_shader_parameter("u_view_size", size)
 
 
 ## The depth tunable: which catalogue stars are drawn, not which are built. A uniform write, so sweeping it

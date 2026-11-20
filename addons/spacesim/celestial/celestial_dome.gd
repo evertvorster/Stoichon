@@ -129,6 +129,11 @@ func update(camera: Camera3D) -> void:
 func set_limit_magnitude(magnitude: float) -> void:
 	if _star_material != null:
 		_star_material.set_shader_parameter("u_limit_mag", magnitude)
+	# **The uncatalogued field appears only past the catalogue's own depth.** Below it the catalogue already holds
+	# everything the setting asks for, and a generated field underneath it would be light the catalogue does not
+	# have — which is how a sky ends up brighter than its own ambient.
+	if _faint != null:
+		_faint.visible = magnitude > FAINT_MAG_MIN
 
 
 ## The hand brightness scaler, in linear units (`sky.star_gain` arrives in decades and the host converts).

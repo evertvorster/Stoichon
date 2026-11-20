@@ -54,11 +54,9 @@ uniform float u_size_exponent = 0.18;
 uniform float u_lux_reference = 1.011e-8;
 
 // ===== THIS FRAME ==================================================================================
-// **Only the pixel geometry comes from the host**, and it has no time in it: the render target's size and the
-// field of view's tangents change on a resize or a zoom, never per frame. The camera's *basis* would have time in
-// it — read from GDScript it is the transform of the frame before the one being drawn — so the basis comes from
-// `INV_VIEW_MATRIX` instead, which is the camera this frame is actually rendered with.
-uniform vec2 u_tan_half = vec2(0.5, 0.5);
+// **The only thing the host supplies is the render target's size.** Everything about where a star lands comes from
+// `VIEW_MATRIX` and `PROJECTION_MATRIX` — the same matrices the rasteriser uses for every other object — so there
+// is no basis, no tangent, no sign and no convention of this shader's in the placement at all.
 uniform vec2 u_view_size = vec2(1280.0, 720.0);
 
 const float LUX_PER_MAG0 = 2.54e-6;
@@ -66,7 +64,6 @@ const float UNIT_LUX_PER_SR = 100000.0 / 3.14159265358979;
 const float TEXELS_PER_ROW = 512.0;
 
 varying vec3 v_radiance;
-varying float v_half_px;
 
 float planck(float nm, float t) {
 	float metres = nm * 1.0e-9;
@@ -89,65 +86,41 @@ void vertex() {
 	float magnitude = star.w;
 	vec3 direction = normalize(star.xyz);
 
-	// Where the star is on screen, in pixels. **The basis is the frame's own**: `INV_VIEW_MATRIX` takes camera
-	// space to world, so its columns are this frame's right, up and forward.
-	// **`right` is negated**: the engine's first column runs the other way round in X from the screen, which is
-	// why the field travelled *with* the camera instead of against it. Evert, 2026-11-20: *"when I turn the camera
-	// in one direction, the stars go in the opposite direction."*
-	vec3 right = -INV_VIEW_MATRIX[0].xyz;
-	vec3 up = INV_VIEW_MATRIX[1].xyz;
-	// **Column 2 is the camera's FORWARD axis, un-negated** — the engine says so itself:
-	// `CAMERA_DIRECTION_WORLD = inv_view_matrix[2].xyz` (`scene_shader_forward_clustered.cpp`). Negating it, as
-	// a `-Z is forward` habit suggests, mirrors the whole sky through the screen's centre: the field runs
-	// backwards and every star flips across the screen as the camera turns.
-	vec3 fwd = INV_VIEW_MATRIX[2].xyz;
-	float depth = dot(direction, fwd);
-	vec2 ndc = vec2(dot(direction, right), dot(direction, up)) / max(depth * u_tan_half, vec2(1.0e-9));
-	vec2 pixel = vec2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5) * u_view_size;
+	// **The placement is the engine's own arithmetic.** A direction goes through the view matrix as a point at
+	// infinity, then through the projection; `w` is how far in front of the camera it is. Nothing here invents a
+	// basis or a sign.
+	vec4 view = VIEW_MATRIX * vec4(direction, 0.0);
+	vec4 clip = PROJECTION_MATRIX * vec4(view.xyz, 0.0);
+	float w = clip.w;
+	vec2 ndc = clip.xy / max(w, 1.0e-9);
+
+	// One pixel, in NDC, from the render target's own size.
+	vec2 pixel_ndc = 2.0 / u_view_size;
+
+	// **The snap**: the star is placed on a pixel centre, so its light lands in one pixel and does not depend on
+	// where inside that pixel it happened to fall. Symmetric in the sign of NDC, so no screen-orientation
+	// convention is needed to get it right.
+	vec2 snapped = (floor(ndc / pixel_ndc) + 0.5) * pixel_ndc;
+
+	// The pixel's own solid angle, for turning an illuminance into a radiance. `abs` because this engine hands a
+	// main-pass shader a projection whose vertical scale is negative.
+	float pixel_angle = 2.0 / (max(abs(PROJECTION_MATRIX[1][1]), 1.0e-6) * u_view_size.y);
 
 	float lux = LUX_PER_MAG0 * pow(10.0, -0.4 * magnitude);
-
-	// **Every star is one pixel, snapped — bright ones included, and that is the whole reason it is steady.**
-	//
-	// A star below a pixel is snapped and cannot blink. A *bright* star used to be grown past a pixel, on the
-	// theory that a bright star should look wider; and that is exactly the class that flickered. A 1.5-pixel disk
-	// has a radius of 0.75 px, so the pixel under its centre is only half covered and the one beside it half
-	// covered too; as the camera turns, that coverage slides between its neighbours — in quarter steps under MSAA
-	// — so each pixel's share swings by tens of percent frame to frame. Total light is conserved, but a picture
-	// is made of pixels, and no single pixel's share was.
-	//
-	// So the footprint is one pixel for everything, and brightness is **intensity alone**. At the fields of view
-	// this game uses a catalogue star is far under a pixel anyway (Sirius would be 0.002 of one), so the growth
-	// was never showing a real size — only an artefact of it.
-	vec2 centre = floor(pixel) + 0.5;
-	float half_px = 0.5;
-	v_half_px = half_px;
-
-	// Its light over the pixels it covers, in the frame's currency. The pixel's own solid angle is what turns an
-	// illuminance into a radiance, and it comes from the same two numbers the projection did.
-	float pixel_angle = 2.0 * u_tan_half.y / u_view_size.y;
-	float area_px = max(3.14159265358979 * half_px * half_px, 1.0);
 	float bv = texelFetch(u_star_colour, texel, 0).r;
-	float visible = (magnitude <= u_limit_mag && depth > 1.0e-6) ? 1.0 : 0.0;
+	float visible = (magnitude <= u_limit_mag && w > 1.0e-6) ? 1.0 : 0.0;
 	v_radiance = star_tint(bv)
-		* (lux * u_gain * RADIANCE_GAIN / (area_px * pixel_angle * pixel_angle * UNIT_LUX_PER_SR))
+		* (lux * u_gain * RADIANCE_GAIN / (pixel_angle * pixel_angle * UNIT_LUX_PER_SR))
 		* visible;
 
-	vec2 corner = centre + VERTEX.xy * (2.0 * half_px * visible);
-	vec2 final_ndc = vec2(corner.x / u_view_size.x * 2.0 - 1.0, 1.0 - corner.y / u_view_size.y * 2.0);
-	// **A hair inside the far plane**, so the hardware depth test hides a star behind a body and lets it through
-	// only where the frame is empty. Reversed-Z clears to 0 and "nearer" is larger, so this is nearer than the
-	// cleared value by construction — written directly, never derived from a projection, which is what made an
-	// earlier attempt at this noise.
-	POSITION = vec4(final_ndc, CLIP_SPACE_FAR + 1.0e-6, 1.0);
+	// The quad is exactly one pixel: half a pixel either way, in clip space, then the far plane for z.
+	vec2 corner = snapped + VERTEX.xy * pixel_ndc * visible;
+	POSITION = vec4(corner * w, (CLIP_SPACE_FAR + 1.0e-6) * w, w);
 }
 
 void fragment() {
-	// One pixel at full coverage: `half_px` is 0.5, so the fragment covers the pixel's centre and the edge falls
-	// outside it. Nothing here varies with the star's sub-pixel position, which is the point.
-	vec2 p = UV * 2.0 - 1.0;
-	float radius = length(p) * v_half_px;
-	float coverage = 1.0 - smoothstep(v_half_px - 0.5, v_half_px + 0.5, radius);
-	ALBEDO = v_radiance * coverage;
+	// The quad is exactly one pixel, so every fragment in it is the star's light: no profile and no coverage term,
+	// because there is no sub-pixel position left to attenuate.
+	ALBEDO = v_radiance;
 	ALPHA = 1.0;
 }

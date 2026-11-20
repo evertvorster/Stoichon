@@ -111,16 +111,13 @@ func update(camera: Camera3D) -> void:
 		return
 	global_position = camera.global_position
 
-	# Typed explicitly: `get_global_transform_interpolated()` has no inferable return type. **The basis is not
-	# published**: the shaders take it from `INV_VIEW_MATRIX`, because a GDScript read here is the previous
-	# frame's camera and the sky would then lag the geometry it sits behind — which reads as a sky that follows
-	# the ship and blinks.
-	var tan_y := tan(deg_to_rad(camera.fov * 0.5))
-	var tan_half := Vector2(tan_y * size.x / size.y, tan_y)
+	# **Neither the basis nor the field of view is published.** The shaders place a direction with the engine's own
+	# `VIEW_MATRIX` and `PROJECTION_MATRIX`, which belong to the frame being drawn; anything read here would be the
+	# previous frame's camera. Only the render target's size is the host's, and it changes on a resize, never per
+	# frame.
 	for material in [_star_material, _deep_sky_material, _band_material]:
 		if material == null:
 			continue
-		material.set_shader_parameter("u_tan_half", tan_half)
 		material.set_shader_parameter("u_view_size", size)
 
 

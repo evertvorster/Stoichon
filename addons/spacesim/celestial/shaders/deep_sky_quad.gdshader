@@ -42,6 +42,7 @@ varying vec3 v_radiance;
 varying vec2 v_local;
 varying float v_ratio;
 varying float v_profile;
+varying float v_half_px;
 
 void vertex() {
 	int index = INSTANCE_ID;
@@ -49,34 +50,27 @@ void vertex() {
 	vec4 placement = texelFetch(u_object, texel, 0);
 	vec4 shape = texelFetch(u_shape, texel, 0);
 
-	float pixel_angle = 2.0 * u_tan_half.y / u_view_size.y;
-	// The major axis decides its angular size; the minor axis is the ratio of the two.
+	// The engine's matrices, as for a star: a direction at infinity through the view and the projection.
+	vec4 view = VIEW_MATRIX * vec4(placement.xyz, 0.0);
+	vec4 clip = PROJECTION_MATRIX * vec4(view.xyz, 0.0);
+	float w = clip.w;
+	vec2 ndc = clip.xy / max(w, 1.0e-9);
+	vec2 pixel_ndc = 2.0 / u_view_size;
+	float pixel_angle = 2.0 / (max(abs(PROJECTION_MATRIX[1][1]), 1.0e-6) * u_view_size.y);
+
+	// How wide the object is, in pixels, from its own angular size.
 	float diameter = 2.0 * placement.w / max(pixel_angle, 1.0e-12);
-
-	// **`right` is negated**: the engine's first column runs the other way round in X from the screen, which is
-	// why the field travelled *with* the camera instead of against it. Evert, 2026-11-20: *"when I turn the camera
-	// in one direction, the stars go in the opposite direction."*
-	vec3 right = -INV_VIEW_MATRIX[0].xyz;
-	vec3 up = INV_VIEW_MATRIX[1].xyz;
-	// **Column 2 is the camera's FORWARD axis, un-negated** — the engine says so itself:
-	// `CAMERA_DIRECTION_WORLD = inv_view_matrix[2].xyz` (`scene_shader_forward_clustered.cpp`). Negating it, as
-	// a `-Z is forward` habit suggests, mirrors the whole sky through the screen's centre: the field runs
-	// backwards and every star flips across the screen as the camera turns.
-	vec3 fwd = INV_VIEW_MATRIX[2].xyz;
-	float depth = dot(placement.xyz, fwd);
-	vec2 ndc = vec2(dot(placement.xyz, right), dot(placement.xyz, up))
-		/ max(depth * u_tan_half, vec2(1.0e-9));
-	vec2 pixel = vec2(ndc.x * 0.5 + 0.5, 0.5 - ndc.y * 0.5) * u_view_size;
-
-	// The same quantisation as the stars: an object under a pixel snaps to one, and the snap releases to 1.5 px.
-	float released = smoothstep(1.0, 1.5, diameter);
-	vec2 centre = mix(floor(pixel) + 0.5, pixel, released);
 	float half_px = 0.5 * max(diameter, 1.0);
+	v_half_px = half_px;
+
+	// **Under a pixel it snaps like a star**, so a distant galaxy is a point rather than an alias that comes and
+	// goes; above a pixel it keeps its own position and its own size.
+	vec2 centre = diameter <= 1.0 ? (floor(ndc / pixel_ndc) + 0.5) * pixel_ndc : ndc;
 
 	v_ratio = max(shape.x, 1.0e-4);
 	v_profile = shape.z;
 	float area_px = max(3.14159265358979 * half_px * half_px * v_ratio, 1.0);
-	float visible = depth > 1.0e-6 ? 1.0 : 0.0;
+	float visible = w > 1.0e-6 ? 1.0 : 0.0;
 	v_radiance = texelFetch(u_tint, texel, 0).rgb
 		* (shape.w * u_gain * RADIANCE_GAIN / (area_px * pixel_angle * pixel_angle * UNIT_LUX_PER_SR))
 		* visible;
@@ -87,13 +81,8 @@ void vertex() {
 	float s = sin(shape.y);
 	v_local = vec2(local.x * c + local.y * s, -local.x * s + local.y * c);
 
-	vec2 corner = centre + VERTEX.xy * (2.0 * half_px * visible);
-	vec2 final_ndc = vec2(corner.x / u_view_size.x * 2.0 - 1.0, 1.0 - corner.y / u_view_size.y * 2.0);
-	// **A hair inside the far plane**, so the hardware depth test hides a star behind a body and lets it through
-	// only where the frame is empty. Reversed-Z clears to 0 and "nearer" is larger, so this is nearer than the
-	// cleared value by construction — written directly, never derived from a projection, which is what made an
-	// earlier attempt at this noise.
-	POSITION = vec4(final_ndc, CLIP_SPACE_FAR + 1.0e-6, 1.0);
+	vec2 corner = centre + VERTEX.xy * pixel_ndc * half_px * 2.0 * visible;
+	POSITION = vec4(corner * w, (CLIP_SPACE_FAR + 1.0e-6) * w, w);
 }
 
 void fragment() {

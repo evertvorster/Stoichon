@@ -23,6 +23,13 @@ uniform sampler2D u_object;  // RGBA32F: xyz direction, major HALF-angle in radi
 uniform sampler2D u_shape;   // RGBA32F: minor/major ratio, roll, profile, illuminance
 uniform sampler2D u_tint;    // RGBA32F: linear tint
 
+// **The baked atlas, if the host made one**: one 512-pixel cell per object, in the order the layer was built, with
+// mipmaps so a small object filters down instead of aliasing.
+uniform sampler2D u_atlas : filter_linear_mipmap;
+uniform bool u_use_baked = false;
+// How far down the mip chain to go: cells share one texture, and past this level they bleed into their neighbours.
+uniform float u_max_lod = 6.0;
+
 // **A display gain, not physics.** At 1.0 each object is its own integrated magnitude over its own area — M31
 // works out at about 22 magnitudes per square arcsecond, which is dimmer per pixel than a magnitude-6 star and
 // therefore invisible. This lifts the layer to where it can be looked at.
@@ -42,6 +49,8 @@ varying vec3 v_radiance;
 varying vec2 v_local;
 varying float v_ratio;
 varying float v_profile;
+// The atlas cell this instance was built into — `INSTANCE_ID` is vertex-stage only, so it comes down as a varying.
+varying vec2 v_cell;
 varying float v_half_px;
 
 void vertex() {
@@ -68,6 +77,7 @@ void vertex() {
 	vec2 centre = diameter <= 1.0 ? (floor(ndc / pixel_ndc) + 0.5) * pixel_ndc : ndc;
 
 	v_ratio = max(shape.x, 1.0e-4);
+	v_cell = vec2(float(INSTANCE_ID % 4), float(INSTANCE_ID / 4));
 	v_profile = shape.z;
 	float area_px = max(3.14159265358979 * half_px * half_px * v_ratio, 1.0);
 	float visible = w > 1.0e-6 ? 1.0 : 0.0;
@@ -87,6 +97,12 @@ void vertex() {
 
 void fragment() {
 	vec2 local = vec2(v_local.x, v_local.y);
-	ALBEDO = v_radiance * object_emission(local, v_ratio, v_profile);
+	vec3 emission = object_emission(local, v_ratio, v_profile);
+	if (u_use_baked) {
+		// The cell this instance was built into, and the same -1..1 plane the profile works in.
+		vec2 uv = (v_cell * 512.0 + (local * 0.5 + vec2(0.5)) * 512.0) / vec2(2048.0, 1024.0);
+		emission = textureLod(u_atlas, uv, min(u_max_lod, 6.0)).rgb;
+	}
+	ALBEDO = v_radiance * emission;
 	ALPHA = 1.0;
 }

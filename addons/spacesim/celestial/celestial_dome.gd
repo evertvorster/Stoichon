@@ -61,6 +61,13 @@ const FAINT_MAG_MIN := 10.5
 const FAINT_MAG_MAX := 12.0
 const FAINT_SEED := 20261120
 
+## The baked maps: 2048x1024 each, made once when the dome is built and **held in memory** — they are a way of not
+## re-evaluating the same function every frame, not content to ship. The maths stays in the shaders, so the
+## procedural path is always there to tune against.
+const BAND_MAP_SIZE := Vector2i(2048, 1024)
+const DEEP_SKY_CELL := 512
+const DEEP_SKY_COLUMNS := 4
+
 ## The display gain on the deep-sky objects. At 1.0 each object is its own integrated magnitude spread over its
 ## own angular area — physically right, and invisible, because M31 really is about 22 magnitudes per square
 ## arcsecond. Evert flies with these visible, so this is a chosen gain and is named as one.
@@ -252,6 +259,38 @@ func _build_deep_sky() -> void:
 	_deep_sky_material.set_shader_parameter("u_object", _float_texture(placement))
 	_deep_sky_material.set_shader_parameter("u_shape", _float_texture(shape))
 	_deep_sky_material.set_shader_parameter("u_tint", _float_texture(tint))
+
+
+## Bake the band and the objects into textures, once, in memory.
+##
+## **Baking is a way of not doing the same arithmetic every frame**, not a way of shipping pictures: two
+## `ImageTexture`s are created here and dropped with the dome. The shaders keep the maths, so the procedural path
+## is always available to tune against — bake again after a change, or turn `u_use_baked` off and look at the
+## original.
+##
+## A failure is not fatal: if there is no local `RenderingDevice` (a headless run, or a driver without one) the
+## flag simply stays off and the shaders evaluate as before.
+func _bake_maps() -> void:
+	var band := SpacesimBandGpu.new()
+	var band_image := band.bake(BAND_MAP_SIZE.x, BAND_MAP_SIZE.y)
+	band.close()
+	if band_image != null:
+		_sky_material.set_shader_parameter("u_band_map", _textured(band_image))
+		_sky_material.set_shader_parameter("u_use_baked", true)
+
+	var atlas := SpacesimDeepSkyGpu.new()
+	var atlas_image := atlas.bake(SpacesimDeepSky.objects())
+	atlas.close()
+	if atlas_image != null:
+		_deep_sky_material.set_shader_parameter("u_atlas", _textured(atlas_image))
+		_deep_sky_material.set_shader_parameter("u_use_baked", true)
+
+
+## An `ImageTexture` with a mip chain: the maps are drawn at every size from a few pixels to the whole sky, and
+## without mips the small end aliases.
+func _textured(image: Image) -> ImageTexture:
+	image.generate_mipmaps()
+	return ImageTexture.create_from_image(image)
 
 
 ## The band is in the sky slot, not on a mesh: it is a function of the direction you look in, and a sky shader is

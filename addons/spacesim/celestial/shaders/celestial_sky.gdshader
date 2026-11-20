@@ -36,11 +36,25 @@ uniform float u_band_radiance = 2.9e-4;
 // as a star.
 uniform float u_gain = 30.0;
 
+// **The baked band, if the host made one.** An equirectangular map of the band's shape and colour in the galactic
+// frame — see `SpacesimBandGpu` — sampled here instead of evaluating the maths. The bake is the same function, so
+// the picture is the same picture; what changes is where the work happened.
+uniform sampler2D u_band_map : filter_linear_mipmap;
+uniform bool u_use_baked = false;
+
 const float LUX_PER_ENGINE_UNIT = 100000.0 / 3.14159265358979;
 
 void sky() {
 	// The band is defined in galactic coordinates, so the rotation happens here, once, and the shape function stays
 	// a function of the galactic direction alone.
 	vec3 galactic = normalize(u_galactic * normalize(EYEDIR));
-	COLOR = band_shape(galactic) * (u_band_radiance * u_gain * RADIANCE_GAIN / LUX_PER_ENGINE_UNIT);
+	vec3 shape = band_shape(galactic);
+	if (u_use_baked) {
+		// The map's own convention, the inverse of the bake's: longitude across, latitude up.
+		float longitude = atan(galactic.y, galactic.x);
+		float latitude = asin(clamp(galactic.z, -1.0, 1.0));
+		vec2 uv = vec2(longitude / (2.0 * PI_F) + 0.5, latitude / PI_F + 0.5);
+		shape = texture(u_band_map, uv).rgb;
+	}
+	COLOR = shape * (u_band_radiance * u_gain * RADIANCE_GAIN / LUX_PER_ENGINE_UNIT);
 }

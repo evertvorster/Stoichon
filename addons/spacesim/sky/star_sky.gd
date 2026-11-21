@@ -40,36 +40,10 @@ func create() -> bool:
 
 	material = ShaderMaterial.new()
 	material.shader = SHADER
-	material.set_shader_parameter("u_stars", catalogue.stars_texture)
-	material.set_shader_parameter("u_star_colour", catalogue.colour_texture)
-	material.set_shader_parameter("u_cells", catalogue.cells_texture)
-	material.set_shader_parameter("u_stars_size", catalogue.star_image_size())
-	material.set_shader_parameter("u_colour_size", catalogue.colour_image_size())
-	material.set_shader_parameter("u_cells_size", catalogue.cell_image_size())
-	material.set_shader_parameter("u_grid", catalogue.grid)
 
 	sky = Sky.new()
 	sky.sky_material = material
 	return true
-
-
-## The depth tunable. Changing it is a uniform write, not a rebuild: the catalogue holds the whole
-## sky and this only decides how much of it is shown, so sweeping it cannot reshuffle the field.
-func set_limit_magnitude(mag: float) -> void:
-	if material != null:
-		material.set_shader_parameter("u_limit_mag", mag)
-
-
-## The hand tuner on the field's brightness, as a plain multiplier.
-##
-## **This is a calibration knob, not physics.** The brightness is derived from measured illuminance
-## and this scales it; if the right value turns out to be far from 1, that is a fact about the model
-## worth chasing, not a constant to keep. Its setting is in DECADES (`sky.star_gain`), so a slider in
-## the settings screen can cross orders of magnitude — which is the only way a manual control is
-## useful when the level is uncertain by that much.
-func set_gain(gain: float) -> void:
-	if material != null:
-		material.set_shader_parameter("u_gain", gain)
 
 
 ## **The body's air, for the far half of the atmosphere the star shader now draws.**
@@ -103,38 +77,6 @@ func set_air(
 func set_air_off() -> void:
 	if material != null:
 		material.set_shader_parameter("u_air_on", 0.0)
-
-
-## Point the sky at a camera.
-##
-## Only the **camera basis, the field and the aspect** are handed over. The pixel count is deliberately
-## not: the shader measures its own pixel size from screen-space derivatives, which is exact at whatever
-## resolution the 3D is drawn at, so there is no host number for the two to disagree about. See
-## `sky_stars.gdshader` for what that replaced and why.
-func update(camera: Camera3D) -> void:
-	if material == null or camera == null:
-		return
-	var viewport := camera.get_viewport()
-	if viewport == null:
-		return
-	# The **render target's** size in pixels — `viewport.size`, and not `get_visible_rect()`, which is
-	# the CANVAS rect in screen coordinates. The two agree under the default `expand` aspect and part
-	# company the moment the aspect is kept, where the canvas is letterboxed over a full-width 3D
-	# buffer; the camera's horizontal field follows the buffer.
-	var size := Vector2(viewport.size)
-	if size.x <= 0.0 or size.y <= 0.0:
-		return
-
-	# Typed explicitly: `get_global_transform_interpolated()` has no inferable return type, so `:=`
-	# on it is the `INFERENCE_ON_VARIANT` error.
-	var basis: Basis = camera.get_global_transform_interpolated().basis
-	material.set_shader_parameter("u_right", basis.x)
-	material.set_shader_parameter("u_up", basis.y)
-	material.set_shader_parameter("u_fwd", -basis.z)
-
-	# Godot's `fov` is the VERTICAL one (keep height), so the horizontal tangent follows the aspect.
-	var tan_y := tan(deg_to_rad(camera.fov * 0.5))
-	material.set_shader_parameter("u_tan_half", Vector2(tan_y * size.x / size.y, tan_y))
 
 
 ## The sky's own light, in lux — the sum of every star at or above the depth limit.

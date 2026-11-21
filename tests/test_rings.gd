@@ -562,9 +562,9 @@ func _test_a_spot_becomes_a_rock_by_one_rule(h, root: Node) -> void:
 	var far_bodies := view.pieces(far, pixel, 4)
 	h.check(far_bodies.size() == 1,
 		"from far away only the nearest spot is a body (%d)" % far_bodies.size())
-	var far_marked := view.marker_targets(far, pixel, SpacesimSystemScene.RING_ROCK_CANDIDATES)
-	h.check(far_marked.size() == SpacesimSystemScene.RING_ROCK_CANDIDATES,
-		"while the pool of 24 is named (%d)" % far_marked.size())
+	# **`R23` is retired**: a spot is no longer NAMED from far away. Evert, 2026-11-21: *"Maybe we just don't
+	# label them at all unless we are starting to resolve them with actual bodies?"* — so the assertion that 24
+	# spots were marked from 30,000 km is gone, and there is nothing left to name until one resolves.
 	# **And the nearest spot is a PLACE for the travel unit, with no body behind it** — `S3`, so the speed falls as
 	# the ship closes on a band before anything resolves.
 	var place := view.nearest_spot(far)

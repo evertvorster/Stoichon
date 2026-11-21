@@ -219,60 +219,18 @@ func _test_the_background_is_the_real_sky(h, scene: SpacesimSystemScene) -> void
 	var code := material.shader.code
 	h.check(code.contains("shader_type sky"),
 		"of the sky kind, so EYEDIR is a world direction and no mesh has to be centred on the camera")
-	# The shader is an INPUT: it reports radiance, and the exposure decides what is seen. If it ever
-	# grows a tone curve of its own it has become display referred, which is what made every earlier
-	# star field unable to respond to a varying EV.
-	#
-	# Checked as `aces(` and not as `aces`: the first version of this matched the bare word, which is
-	# inside "Spacesim" and "surfaces", so it failed for a reason that had nothing to do with tone
-	# curves. A substring scan over source is blunt enough that it needs to be aimed.
+	# **The stars are not this shader's business any more.** They were a per-pixel cell search here, and a cell
+	# search makes the pixel the unit: a star near a cell boundary is visited by some of the pixels that should
+	# carry it and not others, which reads as stars dimming and a few vanishing as the camera turns. They are
+	# drawn as objects now — one quad each, in `SpacesimCelestialDome` — and what is checked here is that this
+	# shader has let go of them, because half a star field left behind is worse than none.
+	h.check(not code.contains("u_stars") and not code.contains("MAX_PER_CELL"),
+		"and carries no star field: the catalogue is drawn as objects, not evaluated per pixel")
+	h.check(not code.contains("u_limit_mag") and not code.contains("u_gain"),
+		"with none of the star field's tunables left behind")
+	# The shader is still an INPUT: it reports radiance and the exposure decides what is seen.
 	h.check(not code.contains("aces(") and not code.contains("0.4545"),
-		"and returns linear HDR: no tone curve in the shader, or the exposure cannot reach it")
-	h.check(code.contains("UNIT_LUX_PER_SR"),
-		"converted into the engine's units, which is a unit conversion and not a gain")
-
-	# **The pixel's size is measured in the shader, not sent from the host.** Godot draws a sky as a
-	# fullscreen triangle whose vertices ARE the NDC corners, so NDC is affine in the fragment
-	# coordinate and the screen-space derivative is exactly one pixel, at whatever resolution the 3D
-	# is drawn at. The host alternative is `Viewport.get_visible_rect()`, which is the CANVAS rect —
-	# right only while the render resolution's height equals the canvas's, and wrong by its SQUARE at
-	# every other. A wrong solid angle is a wrong star brightness and a wrong half-pixel is a star in
-	# the wrong pixel, and neither announces itself. Both halves are checked, because either one alone
-	# would look perfectly reasonable in a diff.
-	# **The shader's per-cell loop bound must cover the worst cell in the catalogue, or the stars in the
-	# densest cell are silently dropped.** The build tool prints the number it wrote to ("stars a cell:
-	# median .., 99th .., worst ..") and this reads it back from the asset — the same kind of
-	# cross-language constant as `cell_of`, which the tool already guards, and worth a check for the same
-	# reason: a grid change moves the worst cell and nothing else would notice.
-	var bound := 0
-	var declaration := RegEx.new()
-	declaration.compile("MAX_PER_CELL\\s*=\\s*([0-9]+)")
-	var found := declaration.search(code)
-	if found != null:
-		bound = int(found.get_string(1))
-	h.check(bound > 0, "the shader declares a per-cell loop bound (%d)" % bound)
-	var cell_image: Image = sky.catalogue.cells_texture.get_image()
-	var worst_cell := 0
-	var empty_cells := 0
-	for i in sky.catalogue.cell_count:
-		var held := int(cell_image.get_pixel(i % cell_image.get_width(), i / cell_image.get_width()).g)
-		worst_cell = maxi(worst_cell, held)
-		if held == 0:
-			empty_cells += 1
-	h.check(bound >= worst_cell,
-		"and it covers the catalogue's worst cell, so the bound drops no star (bound %d, worst %d, "
-			% [bound, worst_cell]
-			+ "%d cells empty of %d)" % [empty_cells, sky.catalogue.cell_count])
-
-	h.check(code.contains("dFdx") and code.contains("dFdy"),
-		"and MEASURES its own pixel size, so the star's solid angle cannot be a square law in disguise")
-	h.check(not code.contains("u_inv_viewport"),
-		"with no viewport size handed in for the shader and the host to disagree about")
-
-	# The depth tunable must reach the shader, since sweeping it is how the sky gets iterated on.
-	sky.set_limit_magnitude(7.25)
-	h.check_near(material.get_shader_parameter("u_limit_mag"), 7.25,
-		"and the depth tunable is a uniform, so it costs a write rather than a rebuild", 1e-6)
+		"and returns linear HDR, so the exposure can still reach it")
 
 	# The whole naked-eye sky is 2e-4 lux, which is the measured figure the calibration was checked
 	# against -- so this is the calibration asserted, not a shape assertion.
@@ -862,6 +820,10 @@ func _test_hiding_a_body_hides_everything_it_draws(h, scene: SpacesimSystemScene
 	var orphaned: Array[String] = []
 	for node in scene.container.find_children("*", "MeshInstance3D", true, false):
 		var mesh := node as MeshInstance3D
+		# **The celestial background is not a body.** Its band is a mesh, and asking whether a body owns it would
+		# be asking the wrong question — it belongs to nothing but the sky.
+		if scene.celestial != null and scene.celestial.is_ancestor_of(mesh):
+			continue
 		var owned_now := false
 		var parent: Node = mesh.get_parent()
 		while parent != null and parent != scene.container:
@@ -1336,6 +1298,16 @@ func _test_the_frame_holds_every_radiance_it_is_given(h) -> void:
 	# infinity in the frame propagates through the glow rather than clipping quietly.
 	var disc := SpacesimBodyRenderer.STAR_INTENSITY * SpacesimRadiance.GAIN
 	h.check(disc < LARGEST, "and the star's own disc still fits the format's top end (%s of 65504)" % str(disc))
+
+	# **A star's splat and its disc must land on the same number.** The disc writes `intensity` straight into a
+	# plain uniform, while the splat writes a colour that Godot DECODES from sRGB — so the splat's value has to
+	# be encoded to come back to the same level. It was not, and now that the value carries the gain the power
+	# would be the difference between a glow at 24x white and one at millions.
+	var tint := Color(1.0, 0.95, 0.9)
+	var level := SpacesimBodyRenderer.STAR_INTENSITY * SpacesimRadiance.GAIN
+	var written := SpacesimBodyRenderer._at_unit_luminance(tint, level).linear_to_srgb()
+	h.check_near(written.srgb_to_linear().get_luminance(), level,
+		"a star's splat decodes back to the level its disc writes", level * 0.01)
 
 	# A sunlit surface is lifted too, and must not clip.
 	var sunlit := SpacesimRadiance.frame(SpacesimExposure.REFERENCE_LUX / PI)

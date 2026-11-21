@@ -53,6 +53,7 @@ var environment: Environment
 ## The background sky: the real star field. Null when the catalogue did not load, in which case the
 ## environment keeps a flat background colour rather than rendering a black sky that reads as a bug.
 var star_sky: SpacesimStarSky
+var celestial: SpacesimCelestialDome
 var _framing: SpacesimFraming
 ## The baked surface maps, one cache for the whole system.
 var _distributions := SpacesimSurfaceDistribution.new()
@@ -284,7 +285,16 @@ func update_rings(pixel: float, observer: Vector3, camera: Camera3D = null) -> v
 			continue
 		var centre := parent.node.global_position
 		var albedo := SpacesimSurfaceModel.bond_albedo(_ring_probes[index], _materials())
-		var illuminance := star_light.lux_at((centre - star_position).length())
+		# **The same illuminance the light itself carries.** `light_intensity_lux` has been through
+		# `SpacesimRadiance.light_lux` since the frame's radiance gain went in; the ring was still being handed the
+		# raw figure, so it sat 2048x below everything lit by that light — Saturn blazing while its rings were a
+		# scatter of grey points. Evert, 2026-11-21: *"Saturn itself is way brighter than its rings... the rings
+		# might have been left behind."*
+		#
+		# **The rings stay short of their calculated brightness on purpose**, and it is the dust that is missing
+		# rather than the arithmetic: the drawn particles carry ~2e-7 of a band's optical depth, so most of the
+		# reflected light has no rock to come from yet.
+		var illuminance := SpacesimRadiance.light_lux(star_light.lux_at((centre - star_position).length()))
 		rings[index].update(pixel, illuminance, albedo, centre, star_position, observer, camera)
 
 
@@ -1003,6 +1013,19 @@ func _add_lighting() -> void:
 	world_environment.environment = environment
 	container.add_child(world_environment)
 
+	# **The celestial background as objects** — the catalogue's stars, the deep-sky objects and the galactic
+	# band — and Layer 1's faint field in the sky slot the environment just took. Nothing in it depends on the
+	# ship, the physics or a body; it takes a camera and the catalogue.
+	if star_sky != null:
+		celestial = SpacesimCelestialDome.new()
+		celestial.name = "CelestialDome"
+		if celestial.build(star_sky.catalogue):
+			container.add_child(celestial)
+			environment.sky = celestial.sky
+		else:
+			push_warning("the celestial background could not be built; the sky holds only its air")
+			celestial = null
+
 
 ## **Which body's air the frame is looking through** — the nearest one that has any, from the observer, with
 ## everything the march needs. Empty when there is nothing to draw.
@@ -1380,11 +1403,6 @@ func _light_at(body: SpacesimSceneBody) -> Vector2:
 func update_sky(camera: Camera3D) -> void:
 	if star_sky == null or camera == null:
 		return
-	star_sky.set_limit_magnitude(float(SpacesimSettings.get_value("sky.star_depth")))
-	# The manual brightness scaler, in DECADES. Read every frame so it is hot by construction and can
-	# be dragged while flying.
-	star_sky.set_gain(pow(10.0, float(SpacesimSettings.get_value("sky.star_gain"))))
-	star_sky.update(camera)
 	# **The sky is a star field again: the air is not its business any more.** Between 2026-11-01 and today the
 	# sky shader drew the FAR half of every column, on the argument that a sky is drawn behind all geometry and so
 	# a cloud on a mesh would composite over it correctly. It did that, and it also hid the air in front of every
@@ -1396,6 +1414,12 @@ func update_sky(camera: Camera3D) -> void:
 	# is and clipped at the frame's depth. So the switch goes off unconditionally, and `set_air` is kept only
 	# until the last reader of the parameter set is deleted.
 	star_sky.set_air_off()
+
+	# The celestial background: the same camera, the same depth and gain, every frame.
+	if celestial != null:
+		celestial.set_limit_magnitude(float(SpacesimSettings.get_value("sky.star_depth")))
+		celestial.set_gain(pow(10.0, float(SpacesimSettings.get_value("sky.star_gain"))))
+		celestial.update(camera)
 
 	# **The ambient is that same star field, summed from the catalogue.** Recomputed only when the depth
 	# changes, because the sum walks all 119,613 stars and this runs every frame — a float compare once

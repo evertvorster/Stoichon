@@ -192,45 +192,6 @@ func pieces(eye: Vector3, pixel_angle: float, count: int) -> Array[Dictionary]:
 	return list
 
 
-## **The spots worth NAMING** — `R23`: the next few rocks on the HUD, as a position and a string and nothing else.
-##
-## **Marked, not simulated.** Each entry is a marker target: `{id, position, text, priority, parent}` with a
-## negative id of its own, because it has no node to borrow one from. The spots that resolve are bodies and arrive
-## through `significant_nodes()` instead, so they are skipped here.
-func marker_targets(eye: Vector3, pixel_angle: float, count: int) -> Array[Dictionary]:
-	var list: Array[Dictionary] = []
-	if _cloud == null or _population == null or count <= 0:
-		return list
-	var plane_eye := global_transform.affine_inverse() * eye
-	var on_sheet := SpacesimParticleCloud.closest_point(
-		plane_eye, _population.semi_major_axis.x, _population.semi_major_axis.y
-	)
-	var candidates := _cloud.nearest(on_sheet, count + 8, INF)
-	var ship := plane_eye
-	candidates.sort_custom(
-		func(a: int, b: int) -> bool:
-			return (
-				_cloud.positions[a].distance_squared_to(ship)
-				< _cloud.positions[b].distance_squared_to(ship)
-			)
-	)
-	for index in candidates:
-		if list.size() >= count:
-			break
-		if _hidden.has(index):
-			continue
-		list.append({
-			"id": -(index + 1),
-			"position": global_transform * _cloud.positions[index],
-			"text": "%s Rock  %s" % [
-				_band_name(), SpacesimMarkers.format_distance(_cloud.radii[index] * 2.0)
-			],
-			"priority": SpacesimMarkers.Priority.ASTEROID,
-			"parent": SpacesimMarkers.NO_PARENT,
-		})
-	return list
-
-
 ## **The nearest spot, as a place with a radius** — the travel unit's reference, with no body behind it.
 ##
 ## `S3`: a rock is significant from the moment it exists, so the speed falls as the ship closes on the band and

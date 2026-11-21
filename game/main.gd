@@ -311,6 +311,8 @@ func _handle_key(event: InputEventKey) -> void:
 				body.node.visible = _bodies_visible
 	elif _triggered(event, "cycle_target"):
 		_cycle_target()
+	elif _triggered(event, "cycle_target_back"):
+		_cycle_target(-1)
 	elif _triggered(event, "throttle_stop"):
 		_throttle_stop = true
 	elif _triggered(event, "mouse_release"):
@@ -463,11 +465,13 @@ func _triggered(event: InputEvent, action: String) -> bool:
 
 ## Selection is the input half of targeting, and the smallest stand-in for the navigation we
 ## have not designed yet: cycle the significant bodies and hold the choice.
-func _cycle_target() -> void:
+func _cycle_target(direction: int = 1) -> void:
 	var targets := _system.significant_nodes()
 	if targets.is_empty():
 		return
-	_selected_index = (_selected_index + 1) % targets.size()
+	# `direction` is +1 forwards and -1 back; the modulo is taken into range before it is applied, so the
+	# backwards step from the first target lands on the last rather than on -1.
+	_selected_index = (_selected_index + direction + targets.size()) % targets.size()
 	_markers.selected = targets[_selected_index]
 
 
@@ -579,8 +583,8 @@ func _physics_process(delta: float) -> void:
 ## per field and a `PackedStringArray` to join it, sixty times a second, for a display. Measured at
 ## 0.12% of a frame it is not a cost problem; it is a *shape* problem, and this is the shape.
 ## **How many spots of one band may be BODIES at once.** A body is a node, a material, a point of light and an
-## orbital frame, so this is a budget for geometry, not for names — the names are `RING_ROCK_CANDIDATES` and cost a
-## position and a string. Four is what a band puts on screen as resolvable shapes at once.
+## orbital frame, so this is a budget for geometry — and it is also the budget for NAMES now that a rock is only
+## named once it is one of these. Four is what a band puts on screen as resolvable shapes at once.
 const BODIES_PER_RING := 4
 
 const HUD_INTERVAL := 0.1
@@ -905,13 +909,12 @@ func _update_rocks(eye: Vector3, pixel: float) -> void:
 		manager.update(view.pieces(eye, pixel, BODIES_PER_RING), eye, _camera, pixel, _system.wireframe)
 		# **The shape replaces the dot** (`R26`): a splat left behind grows through the shape it stood in for.
 		view.set_hidden_ids(manager.ids())
-		# **`R23`, and the frame-rate argument with it**: the pool of spots is NAMED only while this band is nearer
-		# than everything else — Evert, 2026-11-15: *"when the nearest spot on the ring is nearer than any of the
-		# other bodies, you can then check for and mark the next 24 rocks on the HUD."*
-		if view.nearest_distance(eye) <= other:
-			rings_marked.append_array(
-				view.marker_targets(eye, pixel, SpacesimSystemScene.RING_ROCK_CANDIDATES)
-			)
+	# **`R23` is retired: no spot is named.** It used to mark the next 24 rocks of the nearest band — Evert,
+	# 2026-11-15: *"when the nearest spot on the ring is nearer than any of the other bodies, you can then check for
+	# and mark the next 24 rocks on the HUD"* — and at 100 Mm those labels named rocks that are a fraction of a
+	# pixel across. A rock is named when it resolves into a body, and not before: Evert, 2026-11-21: *"Maybe we just
+	# don't label them at all unless we are starting to resolve them with actual bodies?"* The splats still draw,
+	# so the band is never empty — it is the *names* that wait.
 	_ring_marked = rings_marked
 	_sync_rocks()
 
@@ -930,9 +933,24 @@ func _update_markers(camera: Camera3D) -> void:
 		context = _system.significant_nodes()
 	# **Rocks are places' equals on the HUD and are ranked as asteroids within it** — one list, from the one
 	# registry, so a ring's spot and a belt's fragment travel the same path as a moon and differ only in rank.
+	# **A rock earns a label only once it is being drawn as a body.** A splat is a smear of light; a shape is a
+	# thing you can see, and naming it is the point at which its name tells you something. Evert, 2026-11-21:
+	# *"Maybe we just don't label them at all unless we are starting to resolve them with actual bodies?"*
+	#
+	# **The test is the rock's own apparent size**, not its membership of a list. `ids()` was the wrong question:
+	# a band's NEAREST spot is always a body — `pieces()` keeps it by distance so the travel unit has something to
+	# close on (`S3`) — so every band was handing the HUD one name at any range, which is exactly the three
+	# "Saturn Rock" labels in the report at 138 Mm.
+	var pixel_angle := _pixel_angle()
 	var rock_nodes := {}
 	for body in rocks():
 		if body.node == null:
+			continue
+		var distance := camera.global_position.distance_to(body.node.global_position)
+		var screen := SpacesimLod.screen_radius_pixels(
+			SpacesimLod.angular_radius(body.radius, distance), pixel_angle
+		)
+		if screen < SpacesimIrregularBody.RESOLVE_PIXELS:
 			continue
 		context.append(body.node)
 		rock_nodes[body.node] = true

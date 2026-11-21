@@ -232,7 +232,13 @@ static func splat_fade(screen: float, floor: float) -> float:
 
 static func point_colour(body: SpacesimSceneBody, radiance: float) -> Color:
 	if body.content != null and body.content.kind == SpacesimSystemBody.Kind.STAR:
-		return star_color_of(body) * STAR_INTENSITY * SpacesimRadiance.GAIN
+		# **Lifted into the frame's currency AND sRGB-encoded**, and the encode is not optional for a star
+		# either: `albedo_color` is decoded by Godot's material, so a value written raw arrives as its own
+		# power — and now that the value carries the gain, that power is the difference between a splat at
+		# 24x white and one at millions. See the note above on why the star's branch used to skip it.
+		return _at_unit_luminance(
+			star_color_of(body), STAR_INTENSITY * SpacesimRadiance.GAIN
+		).linear_to_srgb()
 	# **Lifted into the frame's currency**, exactly as the sky's stars are: a faint body's splat is below the
 	# 16-bit float's normal range on its own. `SpacesimExposurePass` divides the gain back out.
 	return _at_unit_luminance(body.color, SpacesimRadiance.frame(radiance)).linear_to_srgb()
@@ -267,7 +273,11 @@ static func star_material(body: SpacesimSceneBody) -> ShaderMaterial:
 	var material := ShaderMaterial.new()
 	material.shader = STAR_SHADER
 	material.set_shader_parameter("star_color", star_color_of(body))
-	material.set_shader_parameter("intensity", STAR_INTENSITY)
+	# **The disc carries the frame's radiance gain like every other path** — it is unshaded and writes
+	# `ALBEDO` straight into the buffer, so without this a star's disc would enter 2048 times dimmer than the
+	# sky beside it and stop clearing the glow threshold: the star keeps its dot and loses its glare.
+	# `intensity` is a plain uniform, not a `source_color`, so no sRGB conversion is involved.
+	material.set_shader_parameter("intensity", STAR_INTENSITY * SpacesimRadiance.GAIN)
 	return material
 
 

@@ -157,7 +157,11 @@ void fragment() {
 	float radial_excess = max(max(u_inner - r_eye, r_eye - u_outer), 0.0);
 	float distance_to_band = sqrt(radial_excess * radial_excess + u_eye_local.z * u_eye_local.z);
 	float near_share = clamp(distance_to_band / max(u_near_range, 1.0), 0.0, 1.0);
-	float near_cap = mix(0.10, 1.0, smoothstep(0.0, 1.0, near_share));
+	// **Zero at the eye, not 0.10.** A floor of a tenth left the sheet drawing a faint line wherever the plane
+	// crossed a nearby rock — small on its own, and unmistakable once the eye is close enough to see it, because a
+	// straight edge is a straight edge however faint. The dust's appearance at these distances belongs to the fog,
+	// not to a surface.
+	float near_cap = mix(0.0, 1.0, smoothstep(0.0, 1.0, near_share));
 
 	// The sheet removes what is behind it by its own opacity and adds its reflectance over the alpha.
 	//

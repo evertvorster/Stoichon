@@ -153,14 +153,12 @@ void fragment() {
 	// the band's radial extent is *inside* the medium, and a height test would call that far away. So the distance is
 	// the eye's straight-line distance to the nearest point of the annulus — the radial excess beyond the band's inner
 	// or outer edge, and the height above the plane, together.
-	float r_eye = length(u_eye_local.xy);
-	float radial_excess = max(max(u_inner - r_eye, r_eye - u_outer), 0.0);
-	float distance_to_band = sqrt(radial_excess * radial_excess + u_eye_local.z * u_eye_local.z);
-	float near_share = clamp(distance_to_band / max(u_near_range, 1.0), 0.0, 1.0);
-	// **Zero at the eye, not 0.10.** A floor of a tenth left the sheet drawing a faint line wherever the plane
-	// crossed a nearby rock — small on its own, and unmistakable once the eye is close enough to see it, because a
-	// straight edge is a straight edge however faint. The dust's appearance at these distances belongs to the fog,
-	// not to a surface.
+	// **EACH PIXEL KNOWS ITS OWN DISTANCE FROM THE EYE**, and the ramp uses it: `length(v_local - u_eye_local)` is the
+	// distance to the dust at that pixel, so the gradient falls out by itself — the band in front of you is thin
+	// enough to see through, the same band a hundred thousand kilometres away is a wall. Measuring the eye's distance
+	// to the band instead gave the whole band one opacity, which is why a band seen along its length could not be
+	// see-through anywhere and looked like one flat surface.
+	float near_share = clamp(length(v_local - u_eye_local) / max(u_near_range, 1.0), 0.0, 1.0);
 	float near_cap = mix(0.0, 1.0, smoothstep(0.0, 1.0, near_share));
 
 	// The sheet removes what is behind it by its own opacity and adds its reflectance over the alpha.

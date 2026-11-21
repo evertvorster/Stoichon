@@ -49,6 +49,10 @@ uniform vec3 u_star_local = vec3(0.0, 0.0, 1.0);
 uniform vec3 u_eye_local = vec3(0.0, 0.0, 1.0);
 // The planet's radius, for the shadow it casts across the sheet.
 uniform float u_planet_radius = 0.0;
+// **How near the plane the dust starts letting you see through it**, in metres — see
+// `SpacesimRingModel.DUST_NEAR_RANGE`. A look rule and not an optical one: a band's column is opaque at any aspect a
+// camera looks through it from, but a ship flying among the rocks has to be able to see them.
+uniform float u_near_range = 1.0e6;
 
 const float PI_F = 3.14159265358979;
 // A physical radiance becomes the engine's units by dividing by this — a white Lambertian surface under 100,000
@@ -143,6 +147,13 @@ void fragment() {
 	float in_shadow = (along < 0.0 && perp < u_planet_radius) ? 0.0 : 1.0;
 	// The floor, not zero: the band's shadow is a dark part of it, not a gap.
 	float lit = mix(UNLIT_FLOOR, 1.0, in_shadow);
+
+	// **The dust thins as the eye comes down into it**, ramping smoothly to nothing at the midplane and to the band's
+	// own opacity by `u_near_range` above it — so the rocks you are flying among are visible, and the band is a band
+	// again as soon as you are clear of it.
+	float near_share = clamp(abs(u_eye_local.z) / max(u_near_range, 1.0), 0.0, 1.0);
+	float near_fade = mix(0.10, 1.0, smoothstep(0.0, 1.0, near_share));
+	tau *= near_fade;
 
 	// The sheet removes what is behind it by its own opacity and adds its reflectance over the alpha.
 	float alpha = 1.0 - exp(-tau / mu);

@@ -58,6 +58,15 @@ const MIN_COSINE := 0.02
 ## the planet disappearing, they should just not be lit from the sun."*
 const UNLIT := 0.04
 
+## **How close to a band's plane the dust starts letting you see through it**, in metres.
+##
+## A look rule, and named as one. A band's column really is opaque at any aspect you look through it from — that is
+## what `tau = 1.2` means — but a ship that has flown *among* the rocks needs to see the rocks, so the dust's opacity
+## ramps down as the eye comes down into the plane and is the band's own by about this height above it. The figure is
+## the range at which the biggest rocks resolve into bodies: a kilometre-wide rock reaches one pixel at ~500 km, and
+## this is twice that, so the ramp has finished by the time there is anything to see.
+const DUST_NEAR_RANGE := 1.0e6
+
 
 ## The cosine of a direction above the ring plane, floored — see [constant MIN_COSINE].
 ##

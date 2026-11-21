@@ -937,15 +937,20 @@ func _update_markers(camera: Camera3D) -> void:
 	# thing you can see, and naming it is the point at which its name tells you something. Evert, 2026-11-21:
 	# *"Maybe we just don't label them at all unless we are starting to resolve them with actual bodies?"*
 	#
-	# The renderers already know which rocks they have resolved: `ids()` is the list they are drawing shapes for,
-	# and it is the same list the splats are hidden with. So the HUD asks that rather than inventing a distance.
-	var resolved := {}
-	for manager in _fragment_bodies + _system.ring_bodies:
-		for designation in manager.ids():
-			resolved[designation] = true
+	# **The test is the rock's own apparent size**, not its membership of a list. `ids()` was the wrong question:
+	# a band's NEAREST spot is always a body — `pieces()` keeps it by distance so the travel unit has something to
+	# close on (`S3`) — so every band was handing the HUD one name at any range, which is exactly the three
+	# "Saturn Rock" labels in the report at 138 Mm.
+	var pixel_angle := _pixel_angle()
 	var rock_nodes := {}
 	for body in rocks():
-		if body.node == null or not resolved.has(body.id):
+		if body.node == null:
+			continue
+		var distance := camera.global_position.distance_to(body.node.global_position)
+		var screen := SpacesimLod.screen_radius_pixels(
+			SpacesimLod.angular_radius(body.radius, distance), pixel_angle
+		)
+		if screen < SpacesimIrregularBody.RESOLVE_PIXELS:
 			continue
 		context.append(body.node)
 		rock_nodes[body.node] = true

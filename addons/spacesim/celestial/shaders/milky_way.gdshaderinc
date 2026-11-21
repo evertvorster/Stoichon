@@ -29,6 +29,18 @@ const float DUST_WIDTH = 0.055;
 const float DUST_OFFSET = -0.022;   // the Great Rift is south of the midplane
 const float CORE_WIDTH = 0.16;
 const float CORE_THICK = 0.13;
+// **How much longer the structure is along the band than across it.** This is the number that separates filaments
+// from smoke: the noise is sampled from a direction whose latitude axis is stretched, so a feature spans several
+// times more longitude than latitude. Isotropic noise on the direction — what this was — gives round clouds, and no
+// amount of colour tuning makes round clouds look like a galaxy.
+const float STRUCTURE_STRETCH = 7.0;
+// Where the arc fades: present through the middle, gone towards the anticentre, in degrees from the centre.
+const float ARC_FADE_START = 115.0;
+const float ARC_FADE_END = 155.0;
+// Opaque dust is not a hole. It reads as very dark brown, so the composite is an "over" of that colour rather than
+// a multiply down to black — and extinction is chromatic, eating blue first.
+const vec3 DUST_COLOUR = vec3(0.055, 0.030, 0.016);
+const vec3 DUST_ABSORPTION = vec3(0.60, 0.82, 1.10);
 
 float hash13(vec3 cell) {
 	vec3 p = fract(cell * 0.1031);
@@ -81,61 +93,59 @@ float fbm(vec3 p, int octaves, float lacunarity) {
 // same frame.
 vec3 band_shape(vec3 galactic_direction) {
 	vec3 g = normalize(galactic_direction);
-	float latitude = g.z;
-	float longitude = atan(g.y, g.x);
 
-	// How close to the galactic centre we are looking: 1 at the centre, 0 at the anticentre. The disk is brighter,
-	// thicker and more structured there, and that asymmetry is most of what makes it look real.
-	float towards_centre = exp(-pow(longitude / 1.15, 2.0));
+	// **Band coordinates, from the frame itself.** In galactic coordinates `z` is the sine of latitude and the
+	// angle in the xy plane is longitude, zero at the centre and ±pi at the anticentre — so the band's own
+	// coordinate system costs two lines rather than a pair of built basis vectors.
+	float latitude = g.z;
+	float along = degrees(atan(g.y, g.x));
+	float towards_centre = exp(-pow(along / 66.0, 2.0));
+	// The arc: present through the middle, gone towards the anticentre.
+	float present = 1.0 - smoothstep(ARC_FADE_START, ARC_FADE_END, abs(along));
 
 	// ------------------------------------------------------------------ the starlight behind
 	float thickness = mix(BAND_THIN, BAND_THICK, towards_centre) * (1.0 - BAND_TAPER * (1.0 - towards_centre));
-	float band = exp(-pow(latitude / thickness, 2.0));
+	float band = exp(-pow(latitude / thickness, 2.0)) * present;
 
-	// **Star clouds, at three scales**, each one warped by the one above it. That nesting is what gives the band its
-	// clumpy, layered look instead of an even glow — the coarse field decides where the clouds are, the medium one
-	// gives them a shape, the fine one gives them an edge.
-	vec3 warp = g * 3.2 + vec3(11.7, 5.3, 9.1);
-	float clouds = fbm(g * 7.0 + warp * 0.35, 4, 2.1);
-	float clumps = fbm(g * 26.0, 3, 2.3);
-	float grain = fbm(g * 90.0, 2, 2.4);
-	float structure = clouds * 0.62 + clumps * 0.28 + grain * 0.10;
-	// The turbulence modulates the band but never to nothing: even the gaps have light in them.
-	float starlight = band * (0.30 + 1.55 * structure) * (0.22 + 1.9 * towards_centre);
+	// **Anisotropic turbulence.** The sample point has its latitude axis stretched, so the field varies slowly along
+	// the band and quickly across it: filaments that run *with* the plane, which is what a galaxy's structure is.
+	// Sampling the direction isotropically gave round clouds, and no palette makes round clouds look like this.
+	vec3 q = vec3(g.x, g.y, g.z * STRUCTURE_STRETCH);
+	float clouds = fbm(q * 7.0, 4, 2.1);
+	float clumps = fbm(q * 26.0, 3, 2.3);
+	float n = smoothstep(0.30, 0.78, clouds * 0.62 + clumps * 0.38);
+	// Knots: a thresholded fine field, so the band has bright star clouds *on* it rather than only gaps in it.
+	float knots = smoothstep(0.62, 0.95, fbm(q * 70.0, 3, 2.4));
+	float starlight = band * (0.18 + 1.55 * n + 1.10 * knots) * (0.25 + 1.8 * towards_centre);
 
 	// ------------------------------------------------------------------ the core
-	float core = exp(-pow(longitude / CORE_WIDTH, 2.0)) * exp(-pow(latitude / CORE_THICK, 2.0));
-	core *= 0.55 + 0.9 * fbm(g * 16.0 + vec3(31.0, 7.0, 3.0), 3, 2.2);
+	// The angle from the galactic centre, in degrees — a round bulge, not a band profile.
+	float core_angle = degrees(acos(clamp(dot(g, vec3(1.0, 0.0, 0.0)), -1.0, 1.0)));
+	float core = exp(-pow(core_angle / 9.0, 2.0));
+	core *= mix(0.35, 1.0, n);   // the bulge has its own dust across it
 
 	// ------------------------------------------------------------------ the dust, in front
-	// Its own field, its own scale, and broken into filaments by a warped fbm rather than one smooth blob.
-	vec3 dust_warp = vec3(
-		fbm(g * 5.0 + vec3(1.0, 0.0, 0.0), 2, 2.0),
-		fbm(g * 5.0 + vec3(0.0, 1.0, 0.0), 2, 2.0),
-		fbm(g * 5.0 + vec3(0.0, 0.0, 1.0), 2, 2.0)
-	);
-	float dust_field = fbm(g * 13.0 + dust_warp * 1.6, 4, 2.35);
-	// The lane: dense near the midplane (offset), and it widens where the dust field is strong.
-	float lane = exp(-pow((latitude - DUST_OFFSET) / (DUST_WIDTH * (1.0 + 1.8 * dust_field)), 2.0));
-	float tau = DUST_TAU * lane * smoothstep(0.34, 0.82, dust_field);
-	float transmission = exp(-tau);
-	// Dust reddens what survives it: blue is scattered out first.
-	vec3 through = vec3(transmission * (1.0 - 0.35 * (1.0 - transmission)),
-		transmission * 0.86,
-		transmission * 0.68);
-	through = max(through, vec3(1.0e-4));
+	// Its own field, at its own scale and its own stretch, so the lanes do not line up with the bright band's gaps.
+	vec3 qd = vec3(g.x, g.y, g.z * (STRUCTURE_STRETCH * 0.7));
+	float dust_broad = fbm(qd * 12.0 + vec3(31.0, 17.0, 5.0), 4, 2.35);
+	float dust_fine = fbm(qd * 40.0 + vec3(7.0, 23.0, 11.0), 3, 2.5);
+	float dust_field = mix(dust_broad, dust_fine, 0.4);
+	float lane = exp(-pow((latitude - DUST_OFFSET) / (DUST_WIDTH * (1.0 + 2.6 * dust_field)), 2.0));
+	float dark = lane * present * (0.45 + 1.30 * smoothstep(0.25, 0.75, dust_field));
+
+	// **Chromatic extinction, and an over-composite.** Dust eats blue first; where it is thick the result is a very
+	// dark brown, not a hole in the sky, so the composite is `mix(dust, light_behind, T)`.
+	vec3 transmission = exp(-DUST_ABSORPTION * DUST_TAU * dark);
 
 	// ------------------------------------------------------------------ colour
-	// The disk is slightly warm-neutral; the core is warmer; and HII regions sit *on* the band as small warm-pink
-	// patches, which is what the eye picks out in a photograph of the Sagittarius arm.
-	vec3 disk_colour = mix(vec3(0.80, 0.86, 1.00), vec3(1.00, 0.95, 0.86), towards_centre);
-	vec3 core_colour = vec3(1.00, 0.88, 0.72);
-	float hii = smoothstep(0.62, 0.86, clumps) * band * towards_centre;
-	vec3 hii_colour = vec3(1.00, 0.42, 0.40);
+	// The disk's integrated light is warm — G and K giants carry most of it — with young associations a little blue
+	// and H II regions pink on the band.
+	vec3 disk_colour = mix(vec3(0.90, 0.92, 1.00), vec3(1.00, 0.93, 0.84), towards_centre);
+	vec3 young = vec3(0.70, 0.84, 1.00);
+	vec3 light = disk_colour * starlight;
+	light = mix(light, young * starlight, smoothstep(0.55, 0.90, knots) * 0.55);
+	light += vec3(1.00, 0.90, 0.72) * core * 1.35;
+	light += vec3(1.00, 0.42, 0.40) * smoothstep(0.70, 0.95, knots) * band * towards_centre * 0.35;
 
-	vec3 radiance = disk_colour * starlight * through
-		+ core_colour * core * through
-		+ hii_colour * hii * 0.35 * through;
-
-	return radiance;
+	return mix(DUST_COLOUR, light, transmission);
 }

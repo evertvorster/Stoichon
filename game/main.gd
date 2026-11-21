@@ -978,6 +978,7 @@ func _update_markers(camera: Camera3D) -> void:
 	# **The belt marks its own fragments**, every one the field holds, through the path it had before `38598b9`;
 	# a ring's spots keep the pixel rule below. One rock must not arrive twice, so the belt's designations are
 	# collected here and skipped there.
+	_markers.targets = _fragment_targets()
 	var field_ids := {}
 	for field in _fields:
 		for fragment in field.fragments():
@@ -997,11 +998,7 @@ func _update_markers(camera: Camera3D) -> void:
 		rock_nodes[body.node] = true
 	_markers.rocks = rock_nodes
 	_markers.context_targets = context
-	# **One field, two writers, and the second one was winning.** The belt's targets were assigned above and then
-	# overwritten here by the rings' — so every belt fragment was produced and thrown away on the same frame, which
-	# is why the ship still slowed on an asteroid with no label to show for it. The two lists are appended, and
-	# there is one assignment to `targets` in the function.
-	_markers.targets = _ring_marked + _fragment_targets()
+	_markers.targets = _ring_marked
 	# **The band, because the camera draws into it.** The camera is inside the band's `SubViewport`, so
 	# `unproject_position` answers in the band's pixels while the labels are laid out in the root canvas;
 	# `refresh` converts with this rect. See `SpacesimMarkers.to_canvas`.

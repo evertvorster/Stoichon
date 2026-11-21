@@ -408,6 +408,9 @@ func update(
 		var to_local := global_transform.affine_inverse()
 		_sheet.set_shader_parameter("u_illuminance", illuminance)
 		_sheet.set_shader_parameter("u_bond_colour", Vector3(tint.r, tint.g, tint.b))
+		# **Per frame, not at build.** The scene sets `planet_radius` in the same call that updates the rings, so a
+		# build-time publish read zero and the planet's shadow could never appear on the dust.
+		_sheet.set_shader_parameter("u_planet_radius", planet_radius)
 		_sheet.set_shader_parameter("u_star_local", to_local.basis * (star_position - centre).normalized())
 		_sheet.set_shader_parameter("u_eye_local", to_local * observer)
 

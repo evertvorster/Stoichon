@@ -57,6 +57,10 @@ const float PI_F = 3.14159265358979;
 // this shader showed, a white blob where Saturn's rings were.
 const float UNIT_LUX_PER_SR = 100000.0 / PI_F;
 const float MIN_COSINE = 0.02;
+// **Dust in shadow does not vanish.** It is out of the star's light and still in the sky, so it keeps existing and
+// is lit by what reaches it from elsewhere — the same floor a drawn particle carries (`SpacesimRingModel.UNLIT`).
+// Multiplying the radiance by zero instead made the shadow a hole in the band rather than a dark part of it.
+const float UNLIT_FLOOR = 0.04;
 // Where the radial structure lives, relative to the band's width: ringlets per unit of normalised radius.
 const float RINGLET_FREQUENCY = 260.0;
 const float WAVE_FREQUENCY = 9.0;
@@ -136,10 +140,12 @@ void fragment() {
 	vec3 star_local = normalize(u_star_local);
 	float along = dot(v_local, star_local);
 	float perp = length(v_local - star_local * along);
-	float shadowed = (along < 0.0 && perp < u_planet_radius) ? 0.0 : 1.0;
+	float in_shadow = (along < 0.0 && perp < u_planet_radius) ? 0.0 : 1.0;
+	// The floor, not zero: the band's shadow is a dark part of it, not a gap.
+	float lit = mix(UNLIT_FLOOR, 1.0, in_shadow);
 
 	// The sheet removes what is behind it by its own opacity and adds its reflectance over the alpha.
 	float alpha = 1.0 - exp(-tau / mu);
-	ALBEDO = radiance * shadowed / max(alpha, 1.0e-3);
+	ALBEDO = radiance * lit / max(alpha, 1.0e-3);
 	ALPHA = alpha;
 }

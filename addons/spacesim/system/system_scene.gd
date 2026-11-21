@@ -295,6 +295,7 @@ func update_rings(pixel: float, observer: Vector3, camera: Camera3D = null) -> v
 		# rather than the arithmetic: the drawn particles carry ~2e-7 of a band's optical depth, so most of the
 		# reflected light has no rock to come from yet.
 		var illuminance := SpacesimRadiance.light_lux(star_light.lux_at((centre - star_position).length()))
+		rings[index].planet_radius = parent.radius
 		rings[index].update(pixel, illuminance, albedo, centre, star_position, observer, camera)
 
 

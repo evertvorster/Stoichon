@@ -40,6 +40,11 @@ const RING_PRIORITY := 100
 
 
 const SHADER := preload("res://addons/spacesim/render/shaders/ring_splats.gdshader")
+## The dust: one sheet per band, under the rocks.
+const SHEET_SHADER := preload("res://addons/spacesim/render/shaders/ring_sheet.gdshader")
+## How many azimuth segments the sheet's mesh has. The radial structure is per pixel — the mesh only has to
+## bound the annulus — so this is a roundness budget and nothing else.
+const SHEET_SEGMENTS := 512
 
 var _population: SpacesimPopulation
 var _cloud: SpacesimParticleCloud
@@ -84,6 +89,10 @@ static func of(
 		return view
 	view._build_multimesh()
 	view._build_draws()
+	# **A band with an optical depth is a sheet**, and a belt (tau = 0) is not: the same node type serves both, and
+	# the number is what tells them apart.
+	if population != null and population.optical_depth > 0.0:
+		view._build_sheet()
 	return view
 
 
@@ -120,6 +129,56 @@ func _build_draws() -> void:
 	add_child(node)
 	_materials.append(material)
 	_nodes.append(node)
+
+
+## The dust sheet: an annulus in this node's own plane, shaded by a density function in ring coordinates.
+##
+## **Drawn under the rocks** (`RING_PRIORITY - 1`), because the two layers are one object: the sheet carries the
+## band's reflectance and its opacity, and a rock drawn over it adds the one part of the light the sheet cannot —
+## its own surface brightness. Only their sum is the band's calibrated albedo.
+func _build_sheet() -> void:
+	var inner := _population.semi_major_axis.x
+	var outer := _population.semi_major_axis.y
+	if outer <= inner:
+		return
+	var mesh := ArrayMesh.new()
+	var vertices := PackedVector3Array()
+	var indices := PackedInt32Array()
+	for segment in SHEET_SEGMENTS + 1:
+		var angle := TAU * float(segment) / float(SHEET_SEGMENTS)
+		var x := cos(angle)
+		var y := sin(angle)
+		vertices.append(Vector3(x * inner, y * inner, 0.0))
+		vertices.append(Vector3(x * outer, y * outer, 0.0))
+	for segment in SHEET_SEGMENTS:
+		var a := segment * 2
+		indices.append_array([a, a + 1, a + 2, a + 1, a + 3, a + 2])
+	var arrays := []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = vertices
+	arrays[Mesh.ARRAY_INDEX] = indices
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+
+	var material := ShaderMaterial.new()
+	material.shader = SHEET_SHADER
+	material.render_priority = RING_PRIORITY - 1
+	material.set_shader_parameter("u_tau", _population.optical_depth)
+	material.set_shader_parameter("u_inner", inner)
+	material.set_shader_parameter("u_outer", outer)
+	material.set_shader_parameter("u_planet_radius", planet_radius)
+	var node := MeshInstance3D.new()
+	node.name = "Sheet"
+	node.mesh = mesh
+	node.material_override = material
+	# A ring is a medium, not an obstacle — no shadow of its own.
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(node)
+	_sheet = material
+
+
+## The radius of the planet the band orbits, for the shadow it casts across the sheet. Set by the scene at build.
+var planet_radius := 0.0
+var _sheet: ShaderMaterial = null
 
 
 ## **The spots that have earned a BODY** — an id, a world position, a diameter and a label, in the shape
@@ -337,6 +396,14 @@ func update(
 			_view_star = (basis.inverse() * (star_position - centre)).normalized()
 		material.set_shader_parameter("u_star_view", _view_star)
 	_uniforms = {"radiance": radiance}
+	if _sheet != null:
+		# The star and the eye in the band's own frame — the same frame the sheet's vertices and the particles
+		# live in, so nothing is reconstructed from world coordinates in the shader.
+		var to_local := global_transform.affine_inverse()
+		_sheet.set_shader_parameter("u_illuminance", illuminance)
+		_sheet.set_shader_parameter("u_bond_albedo", albedo)
+		_sheet.set_shader_parameter("u_star_local", to_local.basis * (star_position - centre).normalized())
+		_sheet.set_shader_parameter("u_eye_local", to_local * observer)
 
 
 ## **The star's direction as the shader receives it** — a unit vector in view space, which is the frame the

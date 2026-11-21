@@ -148,10 +148,15 @@ void fragment() {
 	// The floor, not zero: the band's shadow is a dark part of it, not a gap.
 	float lit = mix(UNLIT_FLOOR, 1.0, in_shadow);
 
-	// **The dust thins as the eye comes down into it**, ramping smoothly to nothing at the midplane and to the band's
-	// own opacity by `u_near_range` above it — so the rocks you are flying among are visible, and the band is a band
-	// again as soon as you are clear of it.
-	float near_share = clamp(abs(u_eye_local.z) / max(u_near_range, 1.0), 0.0, 1.0);
+	// **The dust opens up with the DISTANCE FROM THE EYE TO THE BAND**, not with height above its plane. Those are
+	// different questions and only one of them was asked: a ship beside a rock 50 m from the plane but well down in
+	// the band's radial extent is *inside* the medium, and a height test would call that far away. So the distance is
+	// the eye's straight-line distance to the nearest point of the annulus — the radial excess beyond the band's inner
+	// or outer edge, and the height above the plane, together.
+	float r_eye = length(u_eye_local.xy);
+	float radial_excess = max(max(u_inner - r_eye, r_eye - u_outer), 0.0);
+	float distance_to_band = sqrt(radial_excess * radial_excess + u_eye_local.z * u_eye_local.z);
+	float near_share = clamp(distance_to_band / max(u_near_range, 1.0), 0.0, 1.0);
 	float near_cap = mix(0.10, 1.0, smoothstep(0.0, 1.0, near_share));
 
 	// The sheet removes what is behind it by its own opacity and adds its reflectance over the alpha.

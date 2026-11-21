@@ -583,8 +583,8 @@ func _physics_process(delta: float) -> void:
 ## per field and a `PackedStringArray` to join it, sixty times a second, for a display. Measured at
 ## 0.12% of a frame it is not a cost problem; it is a *shape* problem, and this is the shape.
 ## **How many spots of one band may be BODIES at once.** A body is a node, a material, a point of light and an
-## orbital frame, so this is a budget for geometry, not for names — the names are `RING_ROCK_CANDIDATES` and cost a
-## position and a string. Four is what a band puts on screen as resolvable shapes at once.
+## orbital frame, so this is a budget for geometry — and it is also the budget for NAMES now that a rock is only
+## named once it is one of these. Four is what a band puts on screen as resolvable shapes at once.
 const BODIES_PER_RING := 4
 
 const HUD_INTERVAL := 0.1
@@ -909,13 +909,12 @@ func _update_rocks(eye: Vector3, pixel: float) -> void:
 		manager.update(view.pieces(eye, pixel, BODIES_PER_RING), eye, _camera, pixel, _system.wireframe)
 		# **The shape replaces the dot** (`R26`): a splat left behind grows through the shape it stood in for.
 		view.set_hidden_ids(manager.ids())
-		# **`R23`, and the frame-rate argument with it**: the pool of spots is NAMED only while this band is nearer
-		# than everything else — Evert, 2026-11-15: *"when the nearest spot on the ring is nearer than any of the
-		# other bodies, you can then check for and mark the next 24 rocks on the HUD."*
-		if view.nearest_distance(eye) <= other:
-			rings_marked.append_array(
-				view.marker_targets(eye, pixel, SpacesimSystemScene.RING_ROCK_CANDIDATES)
-			)
+	# **`R23` is retired: no spot is named.** It used to mark the next 24 rocks of the nearest band — Evert,
+	# 2026-11-15: *"when the nearest spot on the ring is nearer than any of the other bodies, you can then check for
+	# and mark the next 24 rocks on the HUD"* — and at 100 Mm those labels named rocks that are a fraction of a
+	# pixel across. A rock is named when it resolves into a body, and not before: Evert, 2026-11-21: *"Maybe we just
+	# don't label them at all unless we are starting to resolve them with actual bodies?"* The splats still draw,
+	# so the band is never empty — it is the *names* that wait.
 	_ring_marked = rings_marked
 	_sync_rocks()
 

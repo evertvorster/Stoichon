@@ -54,7 +54,9 @@ func _test_the_registry(h) -> void:
 	h.check(no_category.is_empty(), "every action is in a category the screen shows%s"
 		% _detail(no_category))
 	h.check(bad_default.is_empty(), "and every default binding parses%s" % _detail(bad_default))
-	h.check(Actions.ids().size() == 13, "there are thirteen actions: twelve presses and the free-mouse key (%d)" % Actions.ids().size())
+	# Fourteen since `cycle_target_back` — the count is asserted so that an action added without a place on the
+	# settings screen is noticed, not so that the number itself means anything.
+	h.check(Actions.ids().size() == 14, "there are fourteen actions: thirteen presses and the free-mouse key (%d)" % Actions.ids().size())
 
 	# **Every category has something in it**, or the Bindings tab shows a heading over nothing.
 	var empty: Array = []

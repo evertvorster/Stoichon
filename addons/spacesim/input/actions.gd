@@ -112,6 +112,12 @@ const REGISTRY := {
 		"category": "Interface",
 		"defaults": ["T"],
 	},
+	"cycle_target_back": {
+		"label": "Cycle target back",
+		"kind": "trigger",
+		"category": "Interface",
+		"defaults": ["Shift+T"],
+	},
 	"bodies_toggle": {
 		"label": "Bodies on/off",
 		"kind": "trigger",

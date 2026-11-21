@@ -311,6 +311,8 @@ func _handle_key(event: InputEventKey) -> void:
 				body.node.visible = _bodies_visible
 	elif _triggered(event, "cycle_target"):
 		_cycle_target()
+	elif _triggered(event, "cycle_target_back"):
+		_cycle_target(-1)
 	elif _triggered(event, "throttle_stop"):
 		_throttle_stop = true
 	elif _triggered(event, "mouse_release"):
@@ -463,11 +465,13 @@ func _triggered(event: InputEvent, action: String) -> bool:
 
 ## Selection is the input half of targeting, and the smallest stand-in for the navigation we
 ## have not designed yet: cycle the significant bodies and hold the choice.
-func _cycle_target() -> void:
+func _cycle_target(direction: int = 1) -> void:
 	var targets := _system.significant_nodes()
 	if targets.is_empty():
 		return
-	_selected_index = (_selected_index + 1) % targets.size()
+	# `direction` is +1 forwards and -1 back; the modulo is taken into range before it is applied, so the
+	# backwards step from the first target lands on the last rather than on -1.
+	_selected_index = (_selected_index + direction + targets.size()) % targets.size()
 	_markers.selected = targets[_selected_index]
 
 
@@ -855,6 +859,10 @@ func _sync_rocks() -> void:
 ## **Every rock in the game, from the two places they are made.** A belt's fragment and a ring's spot are the
 ## same kind of object — a `SpacesimSceneBody` built by [SpacesimFragmentBodies] — so the marker path, the
 ## travel unit and the mesh all read this one list.
+## How far out a rock's label survives, as a fraction of the ring's own radius. See `_update_markers`.
+const ROCK_LABEL_FRACTION := 0.2
+
+
 func rocks() -> Array[SpacesimSceneBody]:
 	var list: Array[SpacesimSceneBody] = []
 	for manager in _fragment_bodies + _system.ring_bodies:
@@ -934,6 +942,18 @@ func _update_markers(camera: Camera3D) -> void:
 	for body in rocks():
 		if body.node == null:
 			continue
+		# **A rock's label is a detail of a ring, and it expires.** Once the eye is farther than a fifth of the
+		# ring's radius from the rock, the rock cannot be made out and its name is noise on a HUD that has moons
+		# waiting for the space. The ring's radius is the rock's own distance from its parent, so no extra data is
+		# needed: a rock at 130,000 km is labelled while you are within ~26,000 km of it.
+		# Evert, 2026-11-21: *"once we are outside lets say 20% of the radius of the rings, the rock is
+		# insignificant and can be dropped from the HUD."*
+		var parent := _system.body_by_id(body.parent_id)
+		if parent != null and parent.node != null:
+			var ring_radius := body.node.global_position.distance_to(parent.node.global_position)
+			if ring_radius > 0.0 and \
+					camera.global_position.distance_to(body.node.global_position) > ROCK_LABEL_FRACTION * ring_radius:
+				continue
 		context.append(body.node)
 		rock_nodes[body.node] = true
 	_markers.rocks = rock_nodes

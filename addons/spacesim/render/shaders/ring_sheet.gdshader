@@ -152,11 +152,16 @@ void fragment() {
 	// own opacity by `u_near_range` above it — so the rocks you are flying among are visible, and the band is a band
 	// again as soon as you are clear of it.
 	float near_share = clamp(abs(u_eye_local.z) / max(u_near_range, 1.0), 0.0, 1.0);
-	float near_fade = mix(0.10, 1.0, smoothstep(0.0, 1.0, near_share));
-	tau *= near_fade;
+	float near_cap = mix(0.10, 1.0, smoothstep(0.0, 1.0, near_share));
 
 	// The sheet removes what is behind it by its own opacity and adds its reflectance over the alpha.
+	//
+	// **The near rule is a CAP on the alpha, not a scale on the tau**, and that distinction is the whole of getting
+	// it to work: down in the plane the view is grazing by definition, `mu` is at its floor, and `exp(-tau/mu)`
+	// saturates however small `tau` is — so scaling the optical depth changed nothing at the one place the rule
+	// exists for. Capping the opacity says what was meant: near the band you see through it, whatever the aspect.
 	float alpha = 1.0 - exp(-tau / mu);
+	alpha = min(alpha, near_cap);
 	ALBEDO = radiance * lit / max(alpha, 1.0e-3);
 	ALPHA = alpha;
 }

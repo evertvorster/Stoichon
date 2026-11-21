@@ -285,7 +285,16 @@ func update_rings(pixel: float, observer: Vector3, camera: Camera3D = null) -> v
 			continue
 		var centre := parent.node.global_position
 		var albedo := SpacesimSurfaceModel.bond_albedo(_ring_probes[index], _materials())
-		var illuminance := star_light.lux_at((centre - star_position).length())
+		# **The same illuminance the light itself carries.** `light_intensity_lux` has been through
+		# `SpacesimRadiance.light_lux` since the frame's radiance gain went in; the ring was still being handed the
+		# raw figure, so it sat 2048x below everything lit by that light — Saturn blazing while its rings were a
+		# scatter of grey points. Evert, 2026-11-21: *"Saturn itself is way brighter than its rings... the rings
+		# might have been left behind."*
+		#
+		# **The rings stay short of their calculated brightness on purpose**, and it is the dust that is missing
+		# rather than the arithmetic: the drawn particles carry ~2e-7 of a band's optical depth, so most of the
+		# reflected light has no rock to come from yet.
+		var illuminance := SpacesimRadiance.light_lux(star_light.lux_at((centre - star_position).length()))
 		rings[index].update(pixel, illuminance, albedo, centre, star_position, observer, camera)
 
 

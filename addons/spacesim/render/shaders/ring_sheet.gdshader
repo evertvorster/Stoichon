@@ -165,8 +165,13 @@ void fragment() {
 	// it to work: down in the plane the view is grazing by definition, `mu` is at its floor, and `exp(-tau/mu)`
 	// saturates however small `tau` is — so scaling the optical depth changed nothing at the one place the rule
 	// exists for. Capping the opacity says what was meant: near the band you see through it, whatever the aspect.
-	float alpha = 1.0 - exp(-tau / mu);
-	alpha = min(alpha, near_cap);
+	float alpha_full = 1.0 - exp(-tau / mu);
+	float alpha = min(alpha_full, near_cap);
+	// **And the band's light follows its opacity down.** A medium that blocks less also scatters less: capping only
+	// the alpha left the band exactly as bright while letting 90 % of what was behind it through, which reads as a
+	// bright fog wall and not as thinned dust — the rocks were visible only where they were brighter than the haze.
+	// So the radiance is scaled by the same fraction the opacity lost.
+	radiance *= alpha / max(alpha_full, 1.0e-4);
 	ALBEDO = radiance * lit / max(alpha, 1.0e-3);
 	ALPHA = alpha;
 }

@@ -925,40 +925,6 @@ func _update_rocks(eye: Vector3, pixel: float) -> void:
 ##
 ## The ids are negative so that they cannot collide with a node's instance id in the same frame, which
 ## is all `choose` and the label placement need them for.
-## Every fragment a belt's field holds, as a marker target. **No node, no ring, and the label is the whole
-## marker**: a fragment is a fraction of a pixel at every distance it is worth marking from.
-##
-## **This is the path `38598b9` removed, and removing it is what stopped asteroids being named.** That commit
-## unified rocks onto one object — right — but it left the belt's fragments going through the ring's rule, and a
-## ring's rule is "label it once its own disc has passed `RESOLVE_PIXELS`". A ring spot is metres across and the
-## eye is close; a belt fragment starts at ten metres and the eye is hundreds of kilometres away, so the belt's
-## names never appeared at all. Evert, 2026-11-22: *"I went looking for asteroids... my ship slowed down, but I did
-## not get any asteroid labels."*
-##
-## The ids are negative so they cannot collide with a node's instance id in the same frame, which is all `choose`
-## and the label placement need them for.
-func _fragment_targets() -> Array[Dictionary]:
-	var list: Array[Dictionary] = []
-	for index in _fields.size():
-		var parent := _field_parents[index]
-		if parent.node == null:
-			continue
-		var origin := parent.node.global_position
-		var fragments := _fields[index].fragments()
-		for slot in fragments.size():
-			var fragment: SpacesimPopulationField.Fragment = fragments[slot]
-			list.append({
-				"id": -(index * 4096 + slot + 1),
-				"position": _fields[index].position_of(fragment, origin),
-				"text": "%s  %s" % [
-					fragment.designation, SpacesimMarkers.format_distance(fragment.diameter)
-				],
-				"priority": SpacesimMarkers.Priority.ASTEROID,
-				"parent": SpacesimMarkers.NO_PARENT,
-			})
-	return list
-
-
 func _update_markers(camera: Camera3D) -> void:
 	var frame: Frame = _system.frame_tree.active_frame
 	var in_space: bool = frame.kind == Frame.Kind.SPACE or frame.kind == Frame.Kind.ORBITAL
@@ -975,18 +941,10 @@ func _update_markers(camera: Camera3D) -> void:
 	# a band's NEAREST spot is always a body — `pieces()` keeps it by distance so the travel unit has something to
 	# close on (`S3`) — so every band was handing the HUD one name at any range, which is exactly the three
 	# "Saturn Rock" labels in the report at 138 Mm.
-	# **The belt marks its own fragments**, every one the field holds, through the path it had before `38598b9`;
-	# a ring's spots keep the pixel rule below. One rock must not arrive twice, so the belt's designations are
-	# collected here and skipped there.
-	_markers.targets = _fragment_targets()
-	var field_ids := {}
-	for field in _fields:
-		for fragment in field.fragments():
-			field_ids[fragment.designation] = true
 	var pixel_angle := _pixel_angle()
 	var rock_nodes := {}
 	for body in rocks():
-		if body.node == null or field_ids.has(body.id):
+		if body.node == null:
 			continue
 		var distance := camera.global_position.distance_to(body.node.global_position)
 		var screen := SpacesimLod.screen_radius_pixels(

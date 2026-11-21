@@ -53,8 +53,11 @@ vec3 object_emission(vec2 local_in, float ratio, float profile) {
 	vec2 local = vec2(local_in.x, local_in.y / max(ratio, 1.0e-4));
 	float radius = length(local);
 	float angle = atan(local.y, local.x);
-	// The ellipse's own edge: soft, so a baked cell has no hard rim.
-	float coverage = 1.0 - smoothstep(0.90, 1.0, radius);
+	// **The ellipse's edge, faded over the outer 40 % of the object.** An exponential profile has not reached zero
+	// where the ellipse ends — `exp(-3)` is still five percent — so a narrow window there drew a rim around every
+	// object, and against a star field a rim reads as a cut-out. Evert, 2026-11-21: *"their edges are a little too
+	// sharply defined"*. The galaxies and nebulae in a photograph simply fade into the sky.
+	float coverage = 1.0 - smoothstep(0.60, 1.0, radius);
 	vec3 WARM_CORE = vec3(1.00, 0.86, 0.64);   // G and K stars, an old population
 	vec3 YOUNG_BLUE = vec3(0.62, 0.78, 1.00);  // O and B stars, hot and short-lived
 	vec3 HII_PINK = vec3(1.00, 0.42, 0.42);    // H-alpha + [N II]

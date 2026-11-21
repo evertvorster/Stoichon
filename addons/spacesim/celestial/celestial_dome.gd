@@ -68,10 +68,13 @@ const BAND_MAP_SIZE := Vector2i(2048, 1024)
 const DEEP_SKY_CELL := 512
 const DEEP_SKY_COLUMNS := 4
 
-## The display gain on the deep-sky objects. At 1.0 each object is its own integrated magnitude spread over its
-## own angular area — physically right, and invisible, because M31 really is about 22 magnitudes per square
-## arcsecond. Evert flies with these visible, so this is a chosen gain and is named as one.
-const DEEP_SKY_GAIN := 30.0
+## The display gain on the deep-sky objects — the same balance the band has, and for the same reason: an object is
+## a surface and a star is a point, so no exposure makes the two agree by themselves.
+##
+## At 1.0 each object is its own integrated magnitude spread over its own angular area, which is physically right and
+## invisible, because M31 really is about 22 magnitudes per square arcsecond. Evert, 2026-11-21: *"they are a little
+## too bright too, compared to the stars around them"* — at 30 they were.
+const DEEP_SKY_GAIN := 12.0
 
 var _catalogue: SpacesimStarCatalogue
 var _stars: MultiMeshInstance3D

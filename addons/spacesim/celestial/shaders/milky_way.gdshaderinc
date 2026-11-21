@@ -21,14 +21,14 @@
 const float PI_F = 3.14159265358979;
 
 // ===== THE BAND'S SHAPE ============================================================================
-const float BAND_THIN = 0.070;      // half-thickness in sine of latitude, away from the centre
-const float BAND_THICK = 0.165;     // and towards it
-const float BAND_TAPER = 0.45;      // how far the band thins towards the anticentre
-const float DUST_TAU = 4.5;         // extinction through the densest dust
-const float DUST_WIDTH = 0.055;
-const float DUST_OFFSET = -0.022;   // the Great Rift is south of the midplane
-const float CORE_WIDTH = 0.16;
-const float CORE_THICK = 0.13;
+const float BAND_THIN = 0.075;      // half-thickness in sine of latitude, away from the centre
+const float BAND_THICK = 0.150;     // and towards it
+const float BAND_TAPER = 0.40;      // how far the band thins towards the anticentre
+const float DUST_TAU = 2.6;         // extinction through the densest dust — measured, see below
+const float DUST_WIDTH = 0.030;     // and they are NARROW — a haze is not a lane
+const float DUST_OFFSET = -0.020;   // the Great Rift is south of the midplane
+const float CORE_WIDTH = 0.15;
+const float CORE_THICK = 0.11;
 
 float hash13(vec3 cell) {
 	vec3 p = fract(cell * 0.1031);
@@ -92,50 +92,65 @@ vec3 band_shape(vec3 galactic_direction) {
 	float thickness = mix(BAND_THIN, BAND_THICK, towards_centre) * (1.0 - BAND_TAPER * (1.0 - towards_centre));
 	float band = exp(-pow(latitude / thickness, 2.0));
 
-	// **Star clouds, at three scales**, each one warped by the one above it. That nesting is what gives the band its
-	// clumpy, layered look instead of an even glow — the coarse field decides where the clouds are, the medium one
-	// gives them a shape, the fine one gives them an edge.
+	// **Star clouds at four scales**, each warped by the one above it. The weights lean towards the FINER octaves:
+	// a band weighted to the coarse one is a smear, because all of its structure is ten degrees wide. The finest
+	// scale is set by what the bake can hold — a 2048-wide equirectangular map has 0.18 degrees a texel, so
+	// nothing below about two texels survives it.
 	vec3 warp = g * 3.2 + vec3(11.7, 5.3, 9.1);
 	float clouds = fbm(g * 7.0 + warp * 0.35, 4, 2.1);
 	float clumps = fbm(g * 26.0, 3, 2.3);
-	float grain = fbm(g * 90.0, 2, 2.4);
-	float structure = clouds * 0.62 + clumps * 0.28 + grain * 0.10;
-	// The turbulence modulates the band but never to nothing: even the gaps have light in them.
-	float starlight = band * (0.30 + 1.55 * structure) * (0.22 + 1.9 * towards_centre);
+	float grain = fbm(g * 95.0, 3, 2.4);
+	float structure = clouds * 0.45 + clumps * 0.36 + grain * 0.19;
+	// The turbulence modulates the band but never to nothing. **The contrast is measured, not chosen**: in the
+	// ESO/Brunier all-sky panorama the band at its 90-99th percentile is about twelve times the darkest fifth of the
+	// frame, and the lane is not black — so a mild power and a floor, rather than the deep gaps a gradient tempts
+	// you into.
+	float starlight = band * pow(max(0.22 + 1.60 * structure, 0.0), 1.10) * (0.22 + 1.9 * towards_centre);
 
 	// ------------------------------------------------------------------ the core
 	float core = exp(-pow(longitude / CORE_WIDTH, 2.0)) * exp(-pow(latitude / CORE_THICK, 2.0));
 	core *= 0.55 + 0.9 * fbm(g * 16.0 + vec3(31.0, 7.0, 3.0), 3, 2.2);
 
 	// ------------------------------------------------------------------ the dust, in front
-	// Its own field, its own scale, and broken into filaments by a warped fbm rather than one smooth blob.
+	// Two fields: a broad one that decides where dust is, and a fine one that breaks it into filaments. The
+	// smoothstep is what gives a lane an EDGE — dust has a boundary, and a soft Gaussian blur is what makes a band
+	// look like smoke instead of a photograph.
 	vec3 dust_warp = vec3(
 		fbm(g * 5.0 + vec3(1.0, 0.0, 0.0), 2, 2.0),
 		fbm(g * 5.0 + vec3(0.0, 1.0, 0.0), 2, 2.0),
 		fbm(g * 5.0 + vec3(0.0, 0.0, 1.0), 2, 2.0)
 	);
-	float dust_field = fbm(g * 13.0 + dust_warp * 1.6, 4, 2.35);
+	float dust_broad = fbm(g * 11.0 + dust_warp * 1.6, 4, 2.35);
+	float dust_fine = fbm(g * 38.0 + dust_warp * 2.4, 3, 2.5);
+	float dust_field = mix(dust_broad, dust_fine, 0.45);
 	// The lane: dense near the midplane (offset), and it widens where the dust field is strong.
-	float lane = exp(-pow((latitude - DUST_OFFSET) / (DUST_WIDTH * (1.0 + 1.8 * dust_field)), 2.0));
-	float tau = DUST_TAU * lane * smoothstep(0.34, 0.82, dust_field);
+	float lane = exp(-pow((latitude - DUST_OFFSET) / (DUST_WIDTH * (1.0 + 2.6 * dust_field)), 2.0));
+	float tau = DUST_TAU * lane * smoothstep(0.30, 0.62, dust_field);
 	float transmission = exp(-tau);
-	// Dust reddens what survives it: blue is scattered out first.
-	vec3 through = vec3(transmission * (1.0 - 0.35 * (1.0 - transmission)),
-		transmission * 0.86,
-		transmission * 0.68);
-	through = max(through, vec3(1.0e-4));
+	// Dust reddens what survives it — blue is removed first — but only where it is thin. A heavy lane is simply
+	// black, and tinting it brown is what made this look like smoke rather than a rift.
+	float reddening = 0.12 * smoothstep(0.0, 1.0, transmission) * (1.0 - transmission);
+	vec3 through = vec3(transmission * (1.0 - reddening), transmission * (1.0 - 0.55 * reddening),
+		transmission * (1.0 - 1.2 * reddening));
 
 	// ------------------------------------------------------------------ colour
-	// The disk is slightly warm-neutral; the core is warmer; and HII regions sit *on* the band as small warm-pink
-	// patches, which is what the eye picks out in a photograph of the Sagittarius arm.
-	vec3 disk_colour = mix(vec3(0.80, 0.86, 1.00), vec3(1.00, 0.95, 0.86), towards_centre);
-	vec3 core_colour = vec3(1.00, 0.88, 0.72);
-	float hii = smoothstep(0.62, 0.86, clumps) * band * towards_centre;
-	vec3 hii_colour = vec3(1.00, 0.42, 0.40);
+	// The disk's integrated light is warm — G and K giants carry most of it, which is why a photograph of the band
+	// is yellow-white and not blue. Blue comes from the young associations INSIDE the cloud structure, and pink from
+	// the H II regions on the band.
+	// **Measured against the ESO/Brunier panorama**: the band's integrated light there is near-neutral with a slight
+	// warm bias — r/b 1.01-1.05, g/r 0.93 — so the disk's own colour is a neutral white that warms a little towards
+	// the centre, and the young associations shift it only slightly blue. A blue band is a photograph of somebody's
+	// processing, not of the sky.
+	vec3 disk_colour = mix(vec3(0.97, 0.96, 1.00), vec3(1.00, 0.94, 0.92), towards_centre);
+	vec3 young = vec3(0.82, 0.90, 1.00);
+	vec3 young_mix = mix(disk_colour, young, smoothstep(0.52, 0.86, clumps) * 0.35);
+	vec3 core_colour = vec3(1.00, 0.86, 0.66);
+	float hii = smoothstep(0.62, 0.86, clumps) * smoothstep(0.02, 0.10, abs(latitude)) * towards_centre;
+	vec3 hii_colour = vec3(1.00, 0.40, 0.38);
 
-	vec3 radiance = disk_colour * starlight * through
+	vec3 radiance = young_mix * starlight * through
 		+ core_colour * core * through
-		+ hii_colour * hii * 0.35 * through;
+		+ hii_colour * hii * 0.30 * through;
 
 	return radiance;
 }

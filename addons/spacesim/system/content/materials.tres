@@ -141,6 +141,20 @@ strength = 100000000.0
 color = Color(0.45, 0.45, 0.5, 1)
 condensation_temperature = 1687.0
 
+[sub_resource type="Resource" id="Sp_tholin"]
+script = ExtResource("species")
+species_name = "tholin"
+domain = 0
+; **Irradiated organic residue** — the brown gunk ultraviolet light and cosmic rays cook out of ice and carbon
+; over an age, and the reason Saturn's rings read warmer than pure ice is blue. Bond albedo low: it is nearly black
+; per unit mass and its colour comes through the ice it contaminates.
+density = 1400.0
+molar_mass = 26.0
+albedo = 0.08
+strength = 1000000.0
+color = Color(0.62, 0.5, 0.42, 1)
+condensation_temperature = 0.0
+
 [sub_resource type="Resource" id="Sp_water_ice"]
 script = ExtResource("species")
 species_name = "water_ice"
@@ -149,7 +163,7 @@ density = 917.0
 molar_mass = 18.015
 albedo = 0.6
 strength = 2000000.0
-color = Color(0.85, 0.9, 0.95, 1)
+color = Color(0.9, 0.91, 0.93, 1)
 ; **water's 1-atm vapour-pressure reference is its BOILING point, 373.15 K** -- the same number for every
 ; phase the substance is stored in, because the field describes what the substance does at one atmosphere
 ; and not what this block happens to be. It carried 273.15 (the triple point) until 2026-10-19: a different
@@ -466,4 +480,4 @@ condensation_temperature = 0.0
 
 [resource]
 script = ExtResource("table")
-species = Array[ExtResource("species")]([SubResource("Sp_iron"), SubResource("Sp_nickel"), SubResource("Sp_silicate"), SubResource("Sp_sulfur"), SubResource("Sp_carbon"), SubResource("Sp_magnesium"), SubResource("Sp_silicon"), SubResource("Sp_water_ice"), SubResource("Sp_ammonia_ice"), SubResource("Sp_methane_ice"), SubResource("Sp_hydrogen_metallic"), SubResource("Sp_hydrogen"), SubResource("Sp_helium"), SubResource("Sp_nitrogen"), SubResource("Sp_oxygen"), SubResource("Sp_carbon_dioxide"), SubResource("Sp_argon"), SubResource("Sp_water_vapour"), SubResource("Sp_methane"), SubResource("Sp_ammonia"), SubResource("Sp_sulfur_dioxide"), SubResource("Sp_neon"), SubResource("Sp_ozone"), SubResource("Sp_ocean"), SubResource("Sp_ice_cap"), SubResource("Sp_nitrogen_ice"), SubResource("Sp_regolith"), SubResource("Sp_vegetation"), SubResource("Sp_carbonaceous")])
+species = Array[ExtResource("species")]([SubResource("Sp_iron"), SubResource("Sp_nickel"), SubResource("Sp_silicate"), SubResource("Sp_sulfur"), SubResource("Sp_carbon"), SubResource("Sp_magnesium"), SubResource("Sp_silicon"), SubResource("Sp_water_ice"), SubResource("Sp_ammonia_ice"), SubResource("Sp_methane_ice"), SubResource("Sp_hydrogen_metallic"), SubResource("Sp_hydrogen"), SubResource("Sp_helium"), SubResource("Sp_nitrogen"), SubResource("Sp_oxygen"), SubResource("Sp_carbon_dioxide"), SubResource("Sp_argon"), SubResource("Sp_water_vapour"), SubResource("Sp_methane"), SubResource("Sp_ammonia"), SubResource("Sp_sulfur_dioxide"), SubResource("Sp_neon"), SubResource("Sp_ozone"), SubResource("Sp_ocean"), SubResource("Sp_ice_cap"), SubResource("Sp_nitrogen_ice"), SubResource("Sp_regolith"), SubResource("Sp_vegetation"), SubResource("Sp_carbonaceous"), SubResource("Sp_tholin")])

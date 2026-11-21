@@ -2207,8 +2207,8 @@ display_name = "C ring"
 parent_id = "planet:saturn"
 seed_value = 4711
 composition = Dictionary[String, float]({
-"water_ice": 0.9,
-"silicate": 0.1
+"water_ice": 0.70,
+"tholin": 0.30
 })
 semi_major_axis = Vector2(74658000.0, 91975000.0)
 particle_count = 9000
@@ -2228,8 +2228,8 @@ display_name = "B ring"
 parent_id = "planet:saturn"
 seed_value = 4712
 composition = Dictionary[String, float]({
-"water_ice": 0.95,
-"silicate": 0.05
+"water_ice": 0.82,
+"tholin": 0.18
 })
 semi_major_axis = Vector2(91975000.0, 117580000.0)
 particle_count = 207000
@@ -2249,8 +2249,8 @@ display_name = "A ring"
 parent_id = "planet:saturn"
 seed_value = 4713
 composition = Dictionary[String, float]({
-"water_ice": 0.92,
-"silicate": 0.08
+"water_ice": 0.75,
+"tholin": 0.25
 })
 semi_major_axis = Vector2(122170000.0, 136775000.0)
 particle_count = 84000

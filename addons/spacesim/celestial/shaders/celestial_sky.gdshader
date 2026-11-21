@@ -28,13 +28,20 @@ shader_type sky;
 
 uniform mat3 u_galactic = mat3(1.0);
 
-// The band's surface brightness at the centre, in lux per steradian. About 21.5 magnitudes per square arcsecond is
-// the measured figure for the bright band.
-uniform float u_band_radiance = 2.9e-4;
+// The band's surface brightness, in lux per steradian — the *mean* over the band rather than its brightest knot.
+//
+// 21.5 magnitudes per square arcsecond is the measured figure for the bright band, and the whole naked-eye sky comes
+// to about 2e-4 lux; the band is a large fraction of that spread over a couple of steradians, which puts its mean
+// near 1.5e-4. It was 2.9e-4, the *peak*, which made the whole band read as bright as its brightest part.
+uniform float u_band_radiance = 1.5e-4;
 // **A display gain, and it is one.** At 1.0 this is the physical layer, which is below the bottom of an eight-bit
 // frame at the exposure a star field needs: a surface that dim, spread over the whole sky, is not the same thing
 // as a star.
-uniform float u_gain = 30.0;
+// **The band-to-stars balance**, and the one knob to turn if it reads wrong against the star field: the band is a
+// surface and the stars are points, so no exposure can make the two agree by itself — a point of light at one pixel
+// is a different thing from a haze over a million of them. Evert, 2026-11-21: *"Its too bright, though, when
+// compared to the stars around it"* — at 30 it was.
+uniform float u_gain = 10.0;
 
 // **The baked band, if the host made one.** An equirectangular map of the band's shape and colour in the galactic
 // frame — see `SpacesimBandGpu` — sampled here instead of evaluating the maths. The bake is the same function, so

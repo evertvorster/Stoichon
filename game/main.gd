@@ -991,6 +991,12 @@ func _update_camera(camera: Camera3D) -> void:
 	# `SpacesimSystemScene.sky_reach` for why the sky is that far away.
 	if frame.kind == Frame.Kind.SPACE or _system.air_body(frame) != null:
 		far = maxf(far, maxf(_system.sky_reach(frame), _system.view_distance()))
+	# **And in EVERY frame, reach the nearest air shell's far side.** This is `ec59384`'s rule — *make the far plane
+	# reach the sky* — with the hole it left: the rule above fires only in space or in a body's own air, and a rock's
+	# `ORBITAL` frame is neither, so the plane stayed at `camera.range_orbital`'s 1e8 m. From out in Saturn's rings
+	# that is nearer than the far side of its air, and a plane cutting a sphere leaves a CIRCLE — which is exactly
+	# the shape that went missing on Saturn whenever a rock's frame was entered.
+	far = maxf(far, _system.air_reach_from(camera.global_position))
 	camera.far = far
 
 

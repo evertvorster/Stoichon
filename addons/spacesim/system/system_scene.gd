@@ -498,6 +498,26 @@ func air_body(frame: SpacesimFrame) -> SpacesimSceneBody:
 	return null
 
 
+## **How far the nearest air shell's far side is**, from an arbitrary position — the far plane must reach it, or
+## the shell is cut by the plane and a plane through a sphere is a CIRCLE.
+##
+## Evert, 2026-11-22: *"When I get near a ring rock, the atmosphere stops rendering in a circle on Saturn. It
+## happens when I enter the frame of the rock."* A rock's frame is `Frame.Kind.ORBITAL`, whose far plane is
+## `camera.range_orbital` — 1e8 m — and the ship out in the rings is further than that from Saturn's outer air, so
+## the plane crossed the shell. Every other frame either is SPACE or stands in a body's own air, and both raise the
+## plane past the sky; a rock's neighbourhood had nothing to raise it.
+##
+## Zero when no body near enough has air.
+func air_reach_from(position: Vector3) -> float:
+	var nearest := INF
+	for body in bodies:
+		if body.air_shell == null:
+			continue
+		var reach := position.distance_to(body.node.global_position) + body.radius + body.sky_top
+		nearest = minf(nearest, reach)
+	return 0.0 if nearest == INF else nearest
+
+
 ## How far away the sky can be, from an observer inside this frame. Zero in space, where there is
 ## none.
 ##

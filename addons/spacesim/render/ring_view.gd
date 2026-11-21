@@ -374,7 +374,7 @@ func bake_shadow(
 ## so drawing them as the sheet made the ring orders of magnitude too bright. Evert, 2026-11-16: *"We don't want
 ## these rocks to make up the entire reflectance, we'll add the dust layer later."*
 func update(
-	pixel_angle: float, illuminance: float, albedo: float, centre: Vector3, star_position: Vector3,
+	pixel_angle: float, illuminance: float, tint: Color, centre: Vector3, star_position: Vector3,
 	observer: Vector3, camera: Camera3D = null
 ) -> void:
 	if _materials.is_empty() or _cloud == null:
@@ -382,13 +382,19 @@ func update(
 	# **`disc_luminance` with the phase left out**, because the phase is per particle and the shader computes it:
 	# what is handed over is the light arriving divided by pi times the albedo, which is everything Lambert's law
 	# needs that is the same for the whole band.
-	var radiance := illuminance * albedo / PI
+	var radiance := illuminance / PI
 	for material in _materials:
 		# **A reciprocal, not an angle**: the vertex stage multiplies instead of dividing, 1.2M times a frame.
 		material.set_shader_parameter("pixel_scale", 1.0 / max(pixel_angle, 1.0e-9))
-		material.set_shader_parameter("glow_linear", Color(radiance, radiance, radiance))
+		# **The band's own colour**, not grey: `tint` carries the material blend's hue at the bond albedo's
+		# luminance, so this is the same number as before with the colour the composition implies.
+		material.set_shader_parameter("glow_linear", Color(
+			tint.r * radiance, tint.g * radiance, tint.b * radiance
+		))
 		var floor := SpacesimRingModel.unlit_radiance(radiance)
-		material.set_shader_parameter("unlit_linear", Color(floor, floor, floor))
+		material.set_shader_parameter("unlit_linear", Color(
+			tint.r * floor, tint.g * floor, tint.b * floor
+		))
 		# **The star as a unit direction in VIEW space** — computed once per band per frame, in the frame the shader
 		# has its particles in, so nothing has to be reconstructed from world coordinates there.
 		if camera != null:
@@ -401,7 +407,7 @@ func update(
 		# live in, so nothing is reconstructed from world coordinates in the shader.
 		var to_local := global_transform.affine_inverse()
 		_sheet.set_shader_parameter("u_illuminance", illuminance)
-		_sheet.set_shader_parameter("u_bond_albedo", albedo)
+		_sheet.set_shader_parameter("u_bond_colour", Vector3(tint.r, tint.g, tint.b))
 		_sheet.set_shader_parameter("u_star_local", to_local.basis * (star_position - centre).normalized())
 		_sheet.set_shader_parameter("u_eye_local", to_local * observer)
 

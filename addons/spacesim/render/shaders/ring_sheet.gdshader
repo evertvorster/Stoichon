@@ -43,7 +43,7 @@ uniform float u_outer = 1.0;
 // The star: its illuminance at the band, the material's bond albedo, and its direction in this node's frame — one
 // set of numbers for the whole band, because a star is at infinity.
 uniform float u_illuminance = 0.0;
-uniform float u_bond_albedo = 0.0;
+uniform vec3 u_bond_colour = vec3(1.0);
 uniform vec3 u_star_local = vec3(0.0, 0.0, 1.0);
 // The eye, in this node's frame (the planet's centre is the origin, the ring plane is z = 0).
 uniform vec3 u_eye_local = vec3(0.0, 0.0, 1.0);
@@ -129,7 +129,7 @@ void fragment() {
 
 	// **The slab's reflectance**, the dust's own law — see `SpacesimRingModel.reflectance`.
 	float reflectance = 0.25 * mu0 / (mu0 + mu) * (1.0 - exp(-tau * (1.0 / mu0 + 1.0 / mu)));
-	float radiance = u_illuminance * u_bond_albedo * reflectance / (PI_F * UNIT_LUX_PER_SR);
+	vec3 radiance = u_illuminance * u_bond_colour * reflectance / (PI_F * UNIT_LUX_PER_SR);
 
 	// **The planet's shadow is a cylinder of its radius along the star's direction** — exact for a sphere and a star
 	// at infinity, and the only shadow a sheet needs: a point is dark when it is behind the planet along that line.
@@ -140,6 +140,6 @@ void fragment() {
 
 	// The sheet removes what is behind it by its own opacity and adds its reflectance over the alpha.
 	float alpha = 1.0 - exp(-tau / mu);
-	ALBEDO = vec3(radiance * shadowed) / max(alpha, 1.0e-3);
+	ALBEDO = radiance * shadowed / max(alpha, 1.0e-3);
 	ALPHA = alpha;
 }

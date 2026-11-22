@@ -820,7 +820,7 @@ func _test_the_shader_is_told_the_two_vectors_it_multiplies(h, root: Node) -> vo
 	var pixel_angle := SpacesimLod.pixel_angle(70.0, 1080.0)
 	camera.global_position = centre + Vector3(1.0, 0.3, 0.2).normalized() * 1.64e8
 	camera.look_at(centre, Vector3.UP)
-	view.update(pixel_angle, 1.0, 0.4, centre, star_position, camera.global_position, camera)
+	view.update(pixel_angle, 1.0, Color(0.4, 0.4, 0.4), centre, star_position, camera.global_position, camera)
 
 	var told: Vector3 = view.view_star()
 	h.check_near(told.length(), 1.0, "the star is a unit direction", 1.0e-5)

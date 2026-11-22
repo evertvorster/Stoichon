@@ -285,6 +285,12 @@ func update_rings(pixel: float, observer: Vector3, camera: Camera3D = null) -> v
 			continue
 		var centre := parent.node.global_position
 		var albedo := SpacesimSurfaceModel.bond_albedo(_ring_probes[index], _materials())
+		# **The band's colour, derived like every other colour in the game**: the same material blend the surface
+		# uses, linearised, and scaled so its luminance is the bond albedo — so the tint carries the *hue* and the
+		# albedo carries the *level*, and neither can drift from the composition in `sol.tres`. A ring of ice is
+		# pale and warm because ice is; a ring of rock would be browner for the same reason.
+		var hue := SpacesimSurfaceModel.color(_ring_probes[index], _materials()).srgb_to_linear()
+		var tint := hue * (albedo / maxf(hue.get_luminance(), 1.0e-4))
 		# **The same illuminance the light itself carries.** `light_intensity_lux` has been through
 		# `SpacesimRadiance.light_lux` since the frame's radiance gain went in; the ring was still being handed the
 		# raw figure, so it sat 2048x below everything lit by that light — Saturn blazing while its rings were a
@@ -295,7 +301,8 @@ func update_rings(pixel: float, observer: Vector3, camera: Camera3D = null) -> v
 		# rather than the arithmetic: the drawn particles carry ~2e-7 of a band's optical depth, so most of the
 		# reflected light has no rock to come from yet.
 		var illuminance := SpacesimRadiance.light_lux(star_light.lux_at((centre - star_position).length()))
-		rings[index].update(pixel, illuminance, albedo, centre, star_position, observer, camera)
+		rings[index].planet_radius = parent.radius
+		rings[index].update(pixel, illuminance, tint, centre, star_position, observer, camera)
 
 
 func body_by_id(id: String) -> SpacesimSceneBody:
@@ -489,6 +496,26 @@ func air_body(frame: SpacesimFrame) -> SpacesimSceneBody:
 		if body.atmosphere == frame or body.surface == frame:
 			return body
 	return null
+
+
+## **How far the nearest air shell's far side is**, from an arbitrary position — the far plane must reach it, or
+## the shell is cut by the plane and a plane through a sphere is a CIRCLE.
+##
+## Evert, 2026-11-22: *"When I get near a ring rock, the atmosphere stops rendering in a circle on Saturn. It
+## happens when I enter the frame of the rock."* A rock's frame is `Frame.Kind.ORBITAL`, whose far plane is
+## `camera.range_orbital` — 1e8 m — and the ship out in the rings is further than that from Saturn's outer air, so
+## the plane crossed the shell. Every other frame either is SPACE or stands in a body's own air, and both raise the
+## plane past the sky; a rock's neighbourhood had nothing to raise it.
+##
+## Zero when no body near enough has air.
+func air_reach_from(position: Vector3) -> float:
+	var nearest := INF
+	for body in bodies:
+		if body.air_shell == null:
+			continue
+		var reach := position.distance_to(body.node.global_position) + body.radius + body.sky_top
+		nearest = minf(nearest, reach)
+	return 0.0 if nearest == INF else nearest
 
 
 ## How far away the sky can be, from an observer inside this frame. Zero in space, where there is

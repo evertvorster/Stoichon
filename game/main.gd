@@ -120,6 +120,14 @@ var _system_scale: Array[SpacesimScaleBody] = []
 var _ring_spots: Array[SpacesimScaleBody] = []
 ## The ring spots that are NAMED this frame — `R23`'s pool, for the marker overlay.
 var _ring_marked: Array[Dictionary] = []
+## **A population's real rocks** — the ones big enough to have a position — and the one draw that shows them.
+var _rock_clouds: Array[SpacesimBeltCloud] = []
+var _rock_sets: Array[SpacesimPopulationRocks] = []
+## The glow a cloud's rocks reflect, derived once: a population's composition does not change.
+var _cloud_glow: Array[Color] = []
+## One place per cloud, kept alive for the session: the travel unit's reference out in a belt, where the nearest
+## real rock is millions of kilometres away and the field's pebbles are not what the ship is closing on.
+var _cloud_spots: Array[SpacesimScaleBody] = []
 var _scale_bodies: Array[SpacesimScaleBody] = []
 var _rocks_version := -1
 
@@ -566,6 +574,7 @@ func _physics_process(delta: float) -> void:
 	# **Before the step**, so the ship is slowed by the fragments that are there now rather than by the
 	# ones that were there last tick.
 	_update_fields(delta)
+	_update_rock_sets(_camera)
 	_ship.step(delta, input)
 	# **Both clocks, one second at a time** — Evert, 2026-11-08. The world's runs faster only when
 	# relativistic travel lands, and `SpacesimSession.advance` is the one place either of them moves.
@@ -806,6 +815,20 @@ func _build_fields() -> void:
 		bodies.name = "Fragments_%s" % population.id.replace(":", "_")
 		add_child(bodies)
 		_fragment_bodies.append(bodies)
+		# **And the rocks big enough to be objects**, drawn once and never respawned. They hang off the body they
+		# orbit, like a ring hangs off its planet, so their positions need no rebasing.
+		var rocks := SpacesimPopulationRocks.of(population)
+		if rocks.size() > 0 and parent.node != null:
+			var cloud := SpacesimBeltCloud.of(rocks)
+			cloud.name = "Rocks_%s" % population.id.replace(":", "_")
+			parent.node.add_child(cloud)
+			var light := _system.population_glow(population)
+			var spot := SpacesimScaleBody.new(null, 0.0)
+			spot.solid = false
+			_rock_sets.append(rocks)
+			_rock_clouds.append(cloud)
+			_cloud_glow.append(light.get("glow", Color(0, 0, 0)))
+			_cloud_spots.append(spot)
 	# One place per band, kept alive for the session: the travel unit's reference near a ring.
 	for _ring in _system.rings:
 		var spot := SpacesimScaleBody.new(null, 0.0)
@@ -832,6 +855,31 @@ func _update_fields(delta: float) -> void:
 	_sync_rocks()
 
 
+## **The real rocks, once a frame**: the numbers their splats need, and the place the travel unit holds on when one
+## of them is what the ship is closing on. The nearest is a scan of a few thousand — the belt's floor is what keeps
+## that cheap, and a ring's 300,000 is why the rings carry an index instead.
+func _update_rock_sets(camera: Camera3D) -> void:
+	if _rock_clouds.is_empty():
+		return
+	var star := _system.star()
+	if star == null or star.node == null:
+		return
+	var pixel := _pixel_angle()
+	var eye := camera.global_position
+	var to_star := (star.node.global_position - eye).normalized()
+	var star_view := camera.global_transform.basis.inverse() * to_star
+	var to_local := star.node.global_transform.affine_inverse()
+	for index in _rock_clouds.size():
+		_rock_clouds[index].update_view(pixel, _cloud_glow[index], star_view)
+		var found := _rock_sets[index].nearest(to_local * eye, 1)
+		if found.is_empty():
+			continue
+		var at := found[0]
+		_cloud_spots[index].position = star.node.global_transform * _rock_sets[index].positions[at]
+		_cloud_spots[index].radius = _rock_sets[index].radii[at]
+		_cloud_spots[index].name = _rock_sets[index].designations[at]
+
+
 ## **A rock is significant from the moment it exists**: it sets the local travel unit, so full throttle drops as
 ## a belt is entered or a band is approached, and the readout can name what is nearest.
 ##
@@ -851,6 +899,10 @@ func _sync_rocks() -> void:
 	# **And each band's nearest spot**, a place without a body: `S3`, the speed falls as the ship closes on a band,
 	# before anything resolves. It has no marker of its own, so it is not in `rocks()`.
 	for spot in _ring_spots:
+		wanted.append(spot)
+	# **And the nearest real rock of each population**, so a belt slows the ship by its own sparsity and not only by
+	# the pebbles the field made up around it.
+	for spot in _cloud_spots:
 		wanted.append(spot)
 	_scale_bodies = wanted
 	_ship.bodies = _scale_bodies

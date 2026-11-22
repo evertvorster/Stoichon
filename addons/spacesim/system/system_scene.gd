@@ -305,6 +305,27 @@ func update_rings(pixel: float, observer: Vector3, camera: Camera3D = null) -> v
 		rings[index].update(pixel, illuminance, tint, centre, star_position, observer, camera)
 
 
+## **The light a population's rocks reflect, and their own colour** — the same derivation the rings take, so a belt
+## of rock and a ring of ice differ because their composition differs and for no other reason.
+##
+## One value for the whole population: `glow` is `illuminance / pi * tint`, with the tint carrying the material
+## blend's hue at the bond albedo's luminance. The `1/r²` across a belt's width is not modelled — see
+## `SpacesimBeltCloud.update_view`.
+func population_glow(population: SpacesimPopulation) -> Dictionary:
+	if population == null or star_light == null:
+		return {}
+	var probe := SpacesimFragmentBodies.content_for(population, "%s/shown" % population.id, 1.0)
+	var surface := SpacesimSurface.new()
+	surface.coverage = population.composition.duplicate()
+	probe.surface = surface
+	var albedo := SpacesimSurfaceModel.bond_albedo(probe, _materials())
+	var hue := SpacesimSurfaceModel.color(probe, _materials()).srgb_to_linear()
+	var tint := hue * (albedo / maxf(hue.get_luminance(), 1.0e-4))
+	var mean_radius := 0.5 * (population.semi_major_axis.x + population.semi_major_axis.y)
+	var illuminance := SpacesimRadiance.light_lux(star_light.lux_at(mean_radius))
+	return {"glow": tint * (illuminance / PI), "albedo": albedo}
+
+
 func body_by_id(id: String) -> SpacesimSceneBody:
 	for body in bodies:
 		if body.id == id:

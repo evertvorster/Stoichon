@@ -237,7 +237,14 @@ func _fragment_at(local: Vector3, mu: float) -> Fragment:
 
 
 ## N(>D) proportional to D^-index, inverted: a uniform draw is a diameter with the right distribution.
+## **Only the rocks below the shown floor.** Everything at or above it already has a fixed position and is drawn by
+## `SpacesimPopulationRocks`; a fragment drawn here at that size would be a second rock in the same population, which
+## is the double count this split exists to avoid. What is left below the floor is the density to within 10⁻⁸ of it —
+## the belt loses 3,479 rocks of 10 km and up from a population of 1.1e11 — so the ball's radius does not move.
 func _random_diameter() -> float:
 	var u := maxf(_rng.randf(), 1.0e-9)
 	var diameter := population.size_floor * pow(u, -1.0 / population.size_index)
-	return minf(diameter, population.size_ceiling)
+	var ceiling := population.size_ceiling
+	if population.shown_floor > 0.0:
+		ceiling = minf(ceiling, population.shown_floor)
+	return minf(diameter, ceiling)

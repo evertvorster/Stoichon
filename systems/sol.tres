@@ -2180,6 +2180,7 @@ count = 1100000
 size_index = 2.5
 size_floor = 10.0
 size_ceiling = 500000.0
+shown_floor = 10000.0
 
 ; **Saturn's main rings, as three populations.** The gaps are the space between populations rather than a
 ; density profile, because the bands ARE separate objects: the C ring, the B ring, and the A ring outside the

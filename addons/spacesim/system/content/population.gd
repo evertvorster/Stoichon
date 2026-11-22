@@ -80,3 +80,15 @@ extends Resource
 @export var size_floor: float = 10.0
 ## The largest, where the power law is clamped — it is only valid below ~100 km, and Ceres is 940.
 @export var size_ceiling: float = 5.0e5
+
+## **The size at which a rock is a real object rather than a statistic**, in metres — zero means none.
+##
+## A population's density says how many rocks there are; this says how many of them have a *position*. Everything
+## at or above it is drawn once, generated from the seed, and never respawned — so flying away and coming back
+## gives the same rock. Everything below it is a density still, sampled around the ship by
+## `SpacesimPopulationField` and forgotten when the ship leaves.
+##
+## The split exists because the real distribution cannot be drawn: the belt holds 1.1e11 rocks of 10 m and up,
+## and even 1e8 splats would be ten times sparser than it is. Below the floor the population is what it always
+## was — a number per cubic metre.
+@export var shown_floor: float = 0.0

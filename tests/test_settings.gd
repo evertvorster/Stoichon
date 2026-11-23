@@ -18,6 +18,7 @@ func run(h, root: Node) -> void:
 	_test_unreadable_values_fall_back(h)
 	_test_coercion(h)
 	_test_unknown_keys_survive(h)
+	_test_legacy_directory_is_adopted(h)
 	_test_xdg_fallbacks(h)
 	Fixture.clean()
 	_fixture.release()
@@ -109,6 +110,76 @@ func _test_unknown_keys_survive(h) -> void:
 
 
 
+## **A directory from before the rename is adopted, once, and never deleted.** The world is the player's;
+## the game learning a new name is not a reason to lose one.
+func _test_legacy_directory_is_adopted(h) -> void:
+	var saved_config := OS.get_environment("XDG_CONFIG_HOME")
+	var saved_data := OS.get_environment("XDG_DATA_HOME")
+	var root := "/tmp/stoichon-adopt-test"
+	var configs: String = root.path_join("config")
+	var data: String = root.path_join("data")
+	_remove_tree(root)
+	DirAccess.make_dir_recursive_absolute(configs.path_join(Xdg.LEGACY_APP_DIR))
+	DirAccess.make_dir_recursive_absolute(
+		data.path_join(Xdg.LEGACY_APP_DIR).path_join("worlds").path_join("sol")
+	)
+	var file := FileAccess.open(
+		configs.path_join(Xdg.LEGACY_APP_DIR).path_join("settings.cfg"), FileAccess.WRITE
+	)
+	file.store_string("[camera]\nfov=90.0\n")
+	file.close()
+
+	OS.set_environment("XDG_CONFIG_HOME", configs)
+	OS.set_environment("XDG_DATA_HOME", data)
+	Xdg.adopt_legacy(true)
+
+	h.check(
+		not DirAccess.dir_exists_absolute(configs.path_join(Xdg.LEGACY_APP_DIR)),
+		"a pre-rename settings directory is moved to the new name"
+	)
+	h.check(
+		FileAccess.get_file_as_string(
+			configs.path_join(Xdg.APP_DIR).path_join("settings.cfg")
+		).contains("fov=90.0"),
+		"and the settings in it arrive intact"
+	)
+	h.check(
+		DirAccess.dir_exists_absolute(
+			data.path_join(Xdg.APP_DIR).path_join("worlds").path_join("sol")
+		),
+		"the worlds move with them"
+	)
+	h.check(
+		Xdg.config_dir() == configs.path_join(Xdg.APP_DIR),
+		"and the store now asks for the new directory"
+	)
+
+	# A second run must not fight a directory that is already there: an old one left beside a new one is
+	# not merged, because the new one is what the player has been using since the rename.
+	DirAccess.make_dir_recursive_absolute(configs.path_join(Xdg.LEGACY_APP_DIR))
+	Xdg.adopt_legacy(true)
+	h.check(
+		DirAccess.dir_exists_absolute(configs.path_join(Xdg.APP_DIR))
+			and DirAccess.dir_exists_absolute(configs.path_join(Xdg.LEGACY_APP_DIR)),
+		"an old directory beside a new one is left alone, not merged"
+	)
+
+	_remove_tree(root)
+	OS.set_environment("XDG_CONFIG_HOME", saved_config)
+	OS.set_environment("XDG_DATA_HOME", saved_data)
+
+
+func _remove_tree(path: String) -> void:
+	var dir := DirAccess.open(path)
+	if dir == null:
+		return
+	for name in dir.get_directories():
+		_remove_tree(path.path_join(name))
+	for name in dir.get_files():
+		DirAccess.remove_absolute(path.path_join(name))
+	DirAccess.remove_absolute(path)
+
+
 func _test_xdg_fallbacks(h) -> void:
 	# The specification: unset, empty, or not absolute means the fallback.
 	var saved := OS.get_environment("XDG_CONFIG_HOME")
@@ -125,7 +196,7 @@ func _test_xdg_fallbacks(h) -> void:
 	OS.set_environment("XDG_CONFIG_HOME", "/tmp/spacesim-xdg-test")
 	h.check(Xdg.config_home() == "/tmp/spacesim-xdg-test", "an absolute value is used")
 	h.check(
-		Xdg.settings_path() == "/tmp/spacesim-xdg-test/spacesim/settings.cfg",
+		Xdg.settings_path() == "/tmp/spacesim-xdg-test/stoichon/settings.cfg",
 		"and the settings path is built from it"
 	)
 

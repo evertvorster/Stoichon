@@ -101,7 +101,7 @@ func _test_unknown_keys_survive(h) -> void:
 	file.close()
 
 	var reloaded := _fixture.open()
-	reloaded.set_value("markers.pool_size", 20)
+	reloaded.set_value("markers.moon_count", 20)
 	reloaded.save(true)
 	h.check(
 		FileAccess.get_file_as_string(Fixture.TEST_PATH).contains("future_setting=42"),

@@ -193,8 +193,8 @@ func _test_the_tabs_group_the_registry(h, root: Node) -> void:
 		"and nothing else has been filed there by accident (%d)" % trouble.size()
 	)
 	h.check(
-		hud.size() == 14,
-		"HUD holds the camera, the four HUD switches and the markers (%d)" % hud.size()
+		hud.size() == 16,
+		"HUD holds the camera, the HUD switches and the three marker budgets (%d)" % hud.size()
 	)
 	var stray := 0
 	for key in hud:
@@ -213,8 +213,8 @@ func _test_the_tabs_group_the_registry(h, root: Node) -> void:
 		"and every setting is on exactly one tab (%d of %d)" % [total, Edit.editable_keys().size()]
 	)
 	h.check(
-		Edit.editable_keys().size() == 39,
-		"there are thirty-nine settings, the sixteen bindings having left (%d)"
+		Edit.editable_keys().size() == 41,
+		"there are forty-one settings, the sixteen bindings having left (%d)"
 			% Edit.editable_keys().size()
 	)
 

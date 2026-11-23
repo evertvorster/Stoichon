@@ -454,35 +454,6 @@ the space between the last two. The 300,000 drawn particles are **the largest em
 30 km** (Evert, 2026-11-15). `ring_axis` is in the **engine's frame**, not the orbital elements' — see the
 content's own comment, and the test that derives the elevation from the loaded positions.
 
-### `StoichonBeltCloud` — `Node3D`
-
-**A belt, drawn**: one `MultiMesh` of point quads written once, shaded by **the ring's own splat shader**
-(`ring_splats.gdshader`) — a rock is a disc of its own reflected light, its radius riding in the instance's
-basis scale, its coverage the true area its disc subtends, and its phase computed per vertex. What differs
-from a band is only where the particles come from: a ring is generated whole as a sheet, a belt is a *set*
-of rocks placed once.
-
-| Member | |
-|---|---|
-| `static of(rocks, population) -> StoichonBeltCloud` | build it: one instance per rock, the node parented in the frame its rocks are placed in |
-| `update(pixel_angle, illuminance, tint, centre, star_position, camera)` | **per frame**: `pixel_scale`, `glow_linear`, `unlit_linear`, and the star as a view-space direction |
-| `instance_count()`, `multimesh()`, `draw_node()` | for the tests, and for a caller that needs the buffer |
-| `shader_parameter(name)` | what the shader is told |
-
-**One `buffer` assignment, not a million `set_instance_transform` calls.** 1.1 million rocks is 17.6 million
-floats — twelve of transform (a diagonal basis scaled by the radius, then the origin) and four of custom data
-(`.r` lit, `.g` drawn) — and the whole thing is a single upload. **`custom_aabb` is set by hand**: a
-`MultiMesh` whose buffer was assigned whole has no instance data for the engine to compute bounds from, and
-one with no bounds is culled at once.
-
-**The position is `float32` in that buffer**, which at 3.6 × 10¹¹ m quantises to **32 km** — a quarter of a
-pixel at any distance a splat is drawn from. A rock close enough to look at is a real body with a
-double-precision node instead.
-
-**The illuminance is taken at the middle of the band** (2.1 to 3.3 AU is a factor of 2.5 either side). It is
-named rather than modelled: a per-rock value would cost a third custom-data channel and a divide in the
-vertex stage for a difference no eye separates in a scatter of kilometre rocks.
-
 ### `StoichonKepler` — `RefCounted`
 
 Where a body is, from its elements. A **pure function of time**: no integration, no state, nothing
@@ -1038,7 +1009,7 @@ screen-space budget in one place.
 | Member | |
 |---|---|
 | `Priority` | `CONTEXT`, `ASTEROID`, `PRIMARY`, `MISSION`, `SELECTED` — **a candidate is `{id, position, text, priority, parent, ring}`, not a `Node3D`**, so a thing with no node (a fragment) is as drawable as a planet. **`ASTEROID` is above `CONTEXT`**: a rock you are flying among outranks a moon on the far side of the system, and nothing outranks a place. At the bottom it was unreachable — Sol has 40 significant bodies, so a 24-slot pool was full before a fragment was considered, and the first flight showed a slowed ship and no asteroid markers |
-| `pool_size: int` | the cap, and the screen-space budget |
+| `budgets: Dictionary` | **one budget per kind of marker**: a `Priority` to a count. A rank with no entry is unlimited; `MISSION` and `SELECTED` are never truncated. **The nearest object of any kind is always marked**, whatever its queue is set to |
 | `font_size: int`, `margin: float` | applied from the settings; `margin` is the inset the labels are fitted inside |
 | `selected_color: Color` | the selected target's own colour — see `markers.selected_color` |
 | `colour_of(priority) -> Color` | that colour for `SELECTED`, `StoichonOverlay.COLOR` otherwise |
@@ -1048,7 +1019,7 @@ screen-space budget in one place.
 | `const NO_PARENT` | the parent id of a target that orbits nothing this overlay knows about |
 | `refresh(camera) -> void` | rebuild the set, place its labels, hand the rings to the overlay; call once a frame |
 | `orbits: Dictionary` | moon node → the [StoichonSceneBody] it orbits; handed in once, a fact about the system |
-| `static choose(candidates, limit) -> Array[Dictionary]` | the keyed union for one frame, by `id`; highest priority wins, then nearest |
+| `static choose(candidates, budgets) -> Array[Dictionary]` | **one queue per kind of object**, by `id`: the keyed union first (highest priority wins, so a body in two groups gets one label), then each rank truncated to its own budget, highest rank first and each nearest-first within itself |
 | every mark draws a ring | **there is no fragment-shaped marker.** The ring is the object's screen position and that is as true of a rock as of a moon; Evert, 2026-11-14: *"I like the ring."* The only thing a fragment's label adds is its diameter, which is in the entry's `text` |
 | `static clamp_to_edge(point, size, margin) -> Vector2` | the edge point in a direction — **and the point itself when it is already inside** |
 | `static screen_direction(camera, target) -> Vector2` | viewport direction, valid behind the camera |
@@ -1130,12 +1101,22 @@ nothing is free: an overlapping label still says where something is, and a missi
 
 **And a place has no range limit.** Markers are capped and ordered by distance, which is right for *details* and
 wrong for *places*: a system full of nearby moons spent the whole budget and the star fell off the list past a few
-hundred gigametres, a distance limit nobody had written as one. `Priority.PRIMARY` is the tier for anything that is
-not a moon — the star, the planets — and the cap is `max(pool_size, primaries)`, so the marker pool grows to fit the
-places in the system. A **moon** is a detail with no gate of its own: which moons are named is decided by the distance ordering, so the
-nearest fill whatever the pool has left after the places. Evert, 2026-11-12: *"when close to a body, I might be
-flying in between the moons, so I want the list of moons to be marked to be calculated from the moons that are
-closest to me"* — and the default pool is 24, because twelve could not name a planet's moons while flying among them.
+hundred gigametres, a distance limit nobody had written as one.
+
+**One pool was the wrong shape, and the tiers were a symptom of it.** Forty bodies in Sol fill a twenty-four slot
+pool before a rock is considered — which is why rocks had to be ranked above moons to be seen at all — and in the
+other direction a swarm of rocks could displace a moon. Each kind has its own queue now, and spends nothing but its
+own budget: `markers.place_count`, `markers.moon_count`, `markers.rock_count`. Evert, 2026-11-23: *"Maybe we should
+have multiple queues for markers, like nearest X amount, then significant X amount, moons x amount."*
+
+**A moon is a detail with no gate of its own**: which moons are named is decided by the distance ordering inside its
+queue, so the nearest fill it. Evert, 2026-11-12: *"when close to a body, I might be flying in between the moons, so
+I want the list of moons to be marked to be calculated from the moons that are closest to me."*
+
+**And a rock is labelled by distance, not by resolution.** A rock had to be resolving into a shape before it was
+named (2026-11-21); the belt is now invisible except for its markers, so a name is the only way to find one, and the
+rock you are about to arrive at is worth naming first. Evert, 2026-11-23: *"we should display the marker when it's
+the closest object, and not only when the asteroid gets a body."*
 
 ### A moon gives up its label, not its ring — but only where the two compete
 
@@ -1203,7 +1184,7 @@ INI via `ConfigFile`, machine read and written. Keys are `section.key`, which is
 fov=85.0
 range_space=Vector2(50, 50000000000)
 [markers]
-pool_size=8
+rock_count=8
 ```
 
 **Sparse and self-cleaning.** A value equal to its declared default is erased rather than written,
@@ -1274,7 +1255,9 @@ on change (`camera.fov`, the marker pool and font size).
 | `hud.debug` | player | **true** — the information block in the top left, which is **diagnostics now**: system, player, date, settings path, mode, nearest, local unit, state and the mesh's counts. **The ship's own readings live in the strip** (altitude, speed, throttle, target, frame), not here — the strip is the flying view's instrument panel and the block is what replaces it when asked for. Off hides the label, which is the point — the block is what a developer reads and a player stops seeing |
 | `hud.fps` | player | **true** — the frame rate, top right |
 | `hud.key_hints` | player | **true** — the three lines of key reminders under the readout. Read from the bindings, so a rebound key is right here without anyone editing text; off is a HUD with no reminders in it |
-| `markers.pool_size` | player | **24** — how many markers the pool holds. It is a budget for **details**: the places in a system (the star and the planets) are always marked and the pool grows to fit them, so this number only decides how many moons and mission targets get a name. Doubled from 12 on 2026-11-12, which could not name a planet's moons while you flew among them |
+| `markers.place_count` | player | **16** — how many places (the star and the planets) may be marked. A budget and not a cap on content: a system with more places than this has the nearest ones named |
+| `markers.moon_count` | player | **24** — how many moons. Doubled from 12 on 2026-11-12, which could not name a planet's moons while you flew among them |
+| `markers.rock_count` | player | **4** — how many rocks of a population (a belt's rocks, a ring's spots). The one you are about to arrive at is always marked whatever this says |
 | `markers.font_size` | player | 17 — the HUD's own size, so markers read as part of the screen |
 | `markers.margin` | player | 24.0 — breathing room; labels are fitted inside it, so it is not the clearance a clamped pointer needed |
 | `markers.selected_color` | player | `Color(1.0, 0.9, 0.3)` — the one thing on the overlay that stands out, so it can be made to stand out against what it is seen against |

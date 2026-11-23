@@ -41,7 +41,7 @@ func _test_keyed_union(h) -> void:
 		_target(7, Markers.Priority.CONTEXT, 100.0),
 		_target(7, Markers.Priority.MISSION, 500.0),
 	]
-	var chosen := Markers.choose(candidates, 10)
+	var chosen := Markers.choose(candidates, {})
 	h.check(chosen.size() == 1, "an object in two groups gets one marker")
 	h.check(int(chosen[0]["priority"]) == Markers.Priority.MISSION, "and the higher priority survives")
 
@@ -52,7 +52,7 @@ func _test_priority_ordering(h) -> void:
 			_target(1, Markers.Priority.CONTEXT, 10.0),
 			_target(2, Markers.Priority.SELECTED, 1.0e9),
 		],
-		10
+		{}
 	)
 	h.check(chosen.size() == 2 and int(chosen[0]["id"]) == 2, "a selected target outranks a nearer one")
 	# **A rock you are flying among outranks a moon on the far side of the system.** It used to be the
@@ -64,7 +64,7 @@ func _test_priority_ordering(h) -> void:
 			_target(4, Markers.Priority.CONTEXT, 10.0),
 			_target(5, Markers.Priority.PRIMARY, 1.0e12),
 		],
-		10
+		{}
 	)
 	h.check(int(mixed[0]["id"]) == 5, "a place outranks both")
 	h.check(int(mixed[1]["id"]) == 3, "the fragment outranks the nearer moon")
@@ -79,11 +79,16 @@ func _test_cap_keeps_what_matters(h) -> void:
 			_target(3, Markers.Priority.CONTEXT, 200.0),
 			_target(4, Markers.Priority.SELECTED, 1.0e9),
 		],
-		2
+		{Markers.Priority.CONTEXT: 2}
 	)
-	h.check(chosen.size() == 2, "the pool size is the cap")
-	h.check(int(chosen[0]["id"]) == 4, "the selected target survives it")
-	h.check(int(chosen[1]["id"]) == 2, "and the nearest ambient object fills the rest")
+	# **The cap is per kind, not per frame.** A budget of two moons marks two moons and nothing more, and the
+	# selection is never truncated — where one pool of two would have spent a slot on the selection and left one
+	# moon, or (before the selection was exempt) dropped it entirely.
+	h.check(chosen.size() == 3, "two moons and the selection, not two markers in total (%d)" % chosen.size())
+	h.check(int(chosen[0]["id"]) == 4, "the selected target survives whatever the budgets say")
+	h.check(int(chosen[1]["id"]) == 2, "and the budget goes to the NEAREST moons")
+	h.check(not chosen.any(func(entry: Dictionary) -> bool: return int(entry["id"]) == 1),
+		"the furthest moon is the one dropped")
 
 
 func _test_pointer_is_the_smallest_turn(h) -> void:
@@ -437,7 +442,7 @@ func _test_a_place_has_no_range_limit(h, root: Node) -> void:
 		if int(candidate["priority"]) >= Markers.Priority.PRIMARY:
 			places += 1
 	h.check(places == 1, "the star is a place and is a candidate at a terametre (%d)" % places)
-	var chosen := Markers.choose(gathered, maxi(4, places))
+	var chosen := Markers.choose(gathered, {Markers.Priority.PRIMARY: 4})
 	h.check(chosen.size() > 0 and int(chosen[0]["id"]) == star.get_instance_id(),
 		"and it is the FIRST marker chosen, ahead of twenty nearer moons")
 	container.free()
@@ -473,7 +478,7 @@ func _test_the_nearest_moons_are_marked(h, root: Node) -> void:
 		markers.context_targets.append(moon)
 
 	var gathered := markers._candidates(Vector3.ZERO)
-	var chosen := Markers.choose(gathered, 4)
+	var chosen := Markers.choose(gathered, {Markers.Priority.PRIMARY: 1, Markers.Priority.CONTEXT: 3})
 	var picked: Array = []
 	for entry in chosen:
 		picked.append(int(entry["id"]))
@@ -505,7 +510,7 @@ func _test_a_whole_system_leaves_room_for_the_belt(h) -> void:
 	for index in 24:
 		candidates.append(_target(-1 - index, Markers.Priority.ASTEROID, 4.6e7 + float(index)))
 
-	var chosen := Markers.choose(candidates, 24)
+	var chosen := Markers.choose(candidates, {Markers.Priority.PRIMARY: 16, Markers.Priority.CONTEXT: 24, Markers.Priority.ASTEROID: 4})
 	var places := 0
 	var rocks := 0
 	for entry in chosen:
@@ -514,8 +519,10 @@ func _test_a_whole_system_leaves_room_for_the_belt(h) -> void:
 		elif int(entry["priority"]) == Markers.Priority.ASTEROID:
 			rocks += 1
 	h.check(places == 9, "all nine places are marked")
-	h.check(rocks == 15, "and the rest of the pool goes to the belt (%d rocks)" % rocks)
+	h.check(rocks == 4, "and the belt still gets its own budget (%d rocks)" % rocks)
 	h.check(int(chosen[8]["priority"]) == Markers.Priority.PRIMARY,
 		"the places come first, in distance order")
 	h.check(int(chosen[9]["priority"]) == Markers.Priority.ASTEROID,
-		"and the rocks take the pool after them")
+		"then the rocks, which outrank a far moon")
+	h.check(int(chosen[chosen.size() - 1]["priority"]) == Markers.Priority.CONTEXT,
+		"and the moons have a queue of their own that nothing else can starve")

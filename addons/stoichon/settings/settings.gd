@@ -245,7 +245,14 @@ const REGISTRY := {
 	# strip at all**, which is a cockpit (HUD Strip §5), and that is why the floor is zero rather than
 	# something positive.
 	"hud.strip_height": {"default": 0.2, "scope": Scope.PLAYER, "min": 0.0, "max": 0.4, "tab": "hud"},
-	"markers.pool_size": {"default": 24, "scope": Scope.PLAYER, "min": 1, "max": 64, "tab": "hud"},
+	# **One budget per kind of marker**, because one pool was the wrong shape: forty places fill a pool before a
+	# rock is considered, and a swarm of rocks could displace a moon. Each queue spends nothing but its own.
+	# `markers.place_count` is a budget and not a cap on content — a system with more places than this would
+	# have the nearest ones named and the rest not. The nearest object of any kind is always marked whatever
+	# these say, and the selection and mission targets are never truncated.
+	"markers.place_count": {"default": 16, "scope": Scope.PLAYER, "min": 1, "max": 64, "tab": "hud"},
+	"markers.moon_count": {"default": 24, "scope": Scope.PLAYER, "min": 0, "max": 64, "tab": "hud"},
+	"markers.rock_count": {"default": 4, "scope": Scope.PLAYER, "min": 0, "max": 64, "tab": "hud"},
 	# --- the sky. How deep the star field is drawn, as a magnitude. The catalogue holds the whole sky
 	# and this only decides how much of it is shown, so sweeping it is a uniform write rather than a
 	# rebuild, and going deeper can only ADD stars. The catalogue is a COMPLETE sky to magnitude 8 and

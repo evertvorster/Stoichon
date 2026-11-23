@@ -504,15 +504,25 @@ func _apply_settings() -> void:
 		StoichonSettings.get_value("exposure.adaptation_rate")
 	)
 	_atmosphere_pass.fog_gain = float(StoichonSettings.get_value("fog.gain"))
-	_markers.rebuild_pool(int(StoichonSettings.get_value("markers.pool_size")))
 	_markers.font_size = int(StoichonSettings.get_value("markers.font_size"))
 	_markers.margin = float(StoichonSettings.get_value("markers.margin"))
 	_markers.selected_color = StoichonSettings.get_value("markers.selected_color")
+	# **One queue per kind of marker**, each with its own budget: a swarm of rocks cannot spend a moon's slot and
+	# forty places cannot starve the belt. See `StoichonMarkers.choose`.
+	_markers.budgets = {
+		StoichonMarkers.Priority.PRIMARY: int(StoichonSettings.get_value("markers.place_count")),
+		StoichonMarkers.Priority.CONTEXT: int(StoichonSettings.get_value("markers.moon_count")),
+		StoichonMarkers.Priority.ASTEROID: int(StoichonSettings.get_value("markers.rock_count")),
+	}
+	var pool := 4
+	for rank in _markers.budgets:
+		pool += int(_markers.budgets[rank])
+	_markers.rebuild_pool(pool)
 
 
 func _on_setting_changed(key: String, _value: Variant) -> void:
 	match key:
-		"camera.fov", "markers.pool_size", "markers.font_size", "markers.margin", "markers.selected_color", "exposure.range_stops", "exposure.adaptation_rate", "fog.gain":
+		"camera.fov", "markers.place_count", "markers.moon_count", "markers.rock_count", "markers.font_size", "markers.margin", "markers.selected_color", "exposure.range_stops", "exposure.adaptation_rate", "fog.gain":
 			_apply_settings()
 		# The HUD's switches are visibility, so they are read by the readout's own refresh — which is
 		# once every `HUD_INTERVAL`, and would otherwise leave a toggle looking broken for a moment.
@@ -763,7 +773,6 @@ func _update_view(delta: float) -> void:
 	# shader reads. Everything else about a ring was baked when the system was built.
 	var pixel := _pixel_angle()
 	_system.update_rings(pixel, observer, _camera)
-	_system.update_belts(pixel, _camera)
 	# **The rocks, advanced with the same rules and in the same frame as the bodies** — `update_lod` is where a
 	# moon's extraction threshold and wireframe are decided, so a rock's belong beside it.
 	_update_rocks(observer, pixel)
@@ -969,25 +978,20 @@ func _update_markers(camera: Camera3D) -> void:
 	if in_space:
 		context = _system.significant_nodes()
 	# **Rocks are places' equals on the HUD and are ranked as asteroids within it** — one list, from the one
-	# registry, so a ring's spot and a belt's fragment travel the same path as a moon and differ only in rank.
-	# **A rock earns a label only once it is being drawn as a body.** A splat is a smear of light; a shape is a
-	# thing you can see, and naming it is the point at which its name tells you something. Evert, 2026-11-21:
-	# *"Maybe we just don't label them at all unless we are starting to resolve them with actual bodies?"*
+	# registry, so a ring's spot and a belt's rock travel the same path as a moon and differ only in rank.
 	#
-	# **The test is the rock's own apparent size**, not its membership of a list. `ids()` was the wrong question:
-	# a band's NEAREST spot is always a body — `pieces()` keeps it by distance so the travel unit has something to
-	# close on (`S3`) — so every band was handing the HUD one name at any range, which is exactly the three
-	# "Saturn Rock" labels in the report at 138 Mm.
-	var pixel_angle := _pixel_angle()
+	# **A rock is labelled by distance, inside its own queue's budget** — not because it earned a body. This
+	# replaces the rule that a rock had to be resolving into a shape before it was named (2026-11-21: *"Maybe we
+	# just don't label them at all unless we are starting to resolve them with actual bodies?"*). The belt is
+	# now *invisible* except for its markers, so a name is the only way a rock can be found at all, and the one
+	# you are about to arrive at is worth naming first. Evert, 2026-11-23: *"we should display the marker when it's
+	# the closest object, and not only when the asteroid gets a body."*
+	#
+	# The budget is what keeps this from being a swarm: `markers.rock_count` rocks at most, the nearest of them,
+	# and `choose` guarantees the nearest object of ANY kind is marked whatever its queue is set to.
 	var rock_nodes := {}
 	for body in rocks():
 		if body.node == null:
-			continue
-		var distance := camera.global_position.distance_to(body.node.global_position)
-		var screen := StoichonLod.screen_radius_pixels(
-			StoichonLod.angular_radius(body.radius, distance), pixel_angle
-		)
-		if screen < StoichonIrregularBody.RESOLVE_PIXELS:
 			continue
 		context.append(body.node)
 		rock_nodes[body.node] = true

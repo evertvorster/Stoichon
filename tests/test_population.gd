@@ -26,7 +26,6 @@ func run(h, root: Node) -> void:
 	_test_the_belt_reaches_the_marker_pool(h, root)
 	_test_a_fragment_becomes_a_body(h, root)
 	_test_the_rocks_are_the_population(h)
-	_test_the_belt_is_drawn_as_one_multimesh(h)
 	_test_the_belt_slows_the_ship_by_its_own_sparseness(h)
 	_test_two_builds_give_the_same_rocks(h)
 	_test_the_index_answers_like_a_linear_scan(h)
@@ -357,7 +356,11 @@ func _test_the_belt_reaches_the_marker_pool(h, root: Node) -> void:
 	var gathered := markers._candidates(ship)
 	h.check(gathered.size() > 24, "a whole system is more candidates than the pool holds (%d)" % gathered.size())
 
-	var chosen := StoichonMarkers.choose(gathered, 24)
+	var chosen := StoichonMarkers.choose(gathered, {
+		StoichonMarkers.Priority.PRIMARY: 16,
+		StoichonMarkers.Priority.CONTEXT: 24,
+		StoichonMarkers.Priority.ASTEROID: 4,
+	})
 	var places := 0
 	var moons := 0
 	var rocks := 0
@@ -371,7 +374,8 @@ func _test_the_belt_reaches_the_marker_pool(h, root: Node) -> void:
 				rocks += 1
 	h.check(places == 9, "all nine places are marked (%d)" % places)
 	h.check(rocks > 0, "**the belt reaches the pool** (%d rocks)" % rocks)
-	h.check(rocks + moons + places == 24, "and the rest of the pool is a choice between moons and rocks")
+	h.check(rocks == 4, "and the rocks spend their own budget, not the moons' (%d)" % rocks)
+	h.check(moons > 0, "while the moons keep theirs (%d)" % moons)
 	root.remove_child(bodies)
 	bodies.free()
 	root.remove_child(camera)
@@ -491,38 +495,6 @@ func _test_the_rocks_are_the_population(h) -> void:
 		var away := middle.distance_to(rocks.position_of(nearest))
 		h.check(away > 1.0e9 and away < 2.0e10,
 			"millions of km away, as the density says (%.1f M km)" % (away / 1.0e9))
-
-
-## **The belt is one `MultiMesh`, written once.** A million rocks is a single buffer assignment; the check that
-## matters is that the transform and the custom data are both there and the count is the set's, plus what it
-## costs — a load time this large is a fact to know, not to discover in flight.
-func _test_the_belt_is_drawn_as_one_multimesh(h) -> void:
-	var belt := _belt()
-	belt.size_floor = belt.reference_size
-	var rocks := StoichonPopulationRocks.of(belt)
-	var started := Time.get_ticks_usec()
-	var cloud := StoichonBeltCloud.of(rocks, belt)
-	var build_ms := float(Time.get_ticks_usec() - started) / 1000.0
-
-	h.check(cloud.instance_count() == rocks.count(),
-		"one instance per rock (%d, built in %.0f ms)" % [cloud.instance_count(), build_ms])
-	var multimesh := cloud.multimesh()
-	h.check(multimesh.buffer.size() == rocks.count() * 16,
-		"twelve floats of transform plus four of custom data each (%d floats)" % multimesh.buffer.size())
-	# The first rock's own numbers, read back out of the buffer: a diagonal basis scaled by its radius, its
-	# position in the origin, and `lit, drawn, -, -` in the custom data. **The origin is `float32`**, so it is
-	# compared relatively: at 3.6 x 10^11 m the quantisation is 32 km, which is a quarter of a pixel at any
-	# distance a splat is drawn from.
-	var radius := rocks.diameter_of(0) * 0.5
-	var where := rocks.position_of(0)
-	h.check_near(multimesh.buffer[0], radius, "the basis carries the radius", 1.0e-2)
-	h.check_near(multimesh.buffer[3], where.x, "and the origin is the rock (x)", absf(where.x) * 1.2e-7)
-	h.check_near(multimesh.buffer[7], where.y, "and its y", absf(where.y) * 1.2e-7)
-	h.check_near(multimesh.buffer[11], where.z, "and its z", absf(where.z) * 1.2e-7)
-	h.check(multimesh.buffer[12] == 1.0 and multimesh.buffer[13] == 1.0,
-		"every rock is lit by the star and drawn")
-	h.check(cloud.draw_node() != null, "and there is a node drawing it")
-	cloud.free()
 
 
 ## **The belt slows the ship by its own sparseness** — the number the whole change is for.

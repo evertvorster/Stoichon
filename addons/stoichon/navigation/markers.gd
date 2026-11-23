@@ -52,6 +52,16 @@ const OFF_SCREEN_REACH := 1.0e6
 
 @export var pool_size := DEFAULT_POOL_SIZE
 
+## **How many of each kind may be marked** — a [enum Priority] to a count, filled from the settings. A priority
+## with no entry is unlimited, and `MISSION` and `SELECTED` are never truncated whatever this says.
+##
+## **One pool was the wrong shape.** Forty bodies in Sol fill a twenty-four slot pool before a rock is
+## considered, which is why rocks had to be given a rank above the moons to be seen at all; and in the other
+## direction a swarm of rocks could displace a moon. A queue each spends nothing but its own. Evert,
+## 2026-11-23: *"Maybe we should have multiple queues for markers, like nearest X amount, then significant X
+## amount, moons x amount."*
+var budgets: Dictionary = {}
+
 ## Hot: a setter rather than a value read once, so changing it re-applies to the live pool.
 @export var font_size := 17:
 	set(value):
@@ -195,16 +205,14 @@ func refresh(camera: Camera3D, band := Rect2()) -> void:
 	for candidate in gathered:
 		marked[int(candidate["id"])] = true
 
-	# **Every place gets a marker, whatever the pool is set to.** The cap is a budget for the *details* — moons,
-	# mission targets — and the number of stars and planets in a system is content, not something a slider should be
-	# able to hide. So the limit is the pool OR the primaries, whichever is larger.
-	var primaries := 0
-	for candidate in gathered:
-		if int(candidate["priority"]) >= Priority.PRIMARY:
-			primaries += 1
-	var limit := maxi(pool_size, primaries)
-	_ensure_labels(limit)
-	var entries := _parents_before_their_moons(choose(gathered, limit))
+	# **Each kind of object has its own budget**, so a swarm of rocks cannot spend a moon's slot and forty places
+	# cannot starve the belt — see [method choose]. The pool is the sum of the budgets, plus room for a mission
+	# target, the selection and the nearest object of any kind.
+	var needed := 4
+	for rank in budgets:
+		needed += maxi(int(budgets[rank]), 0)
+	_ensure_labels(maxi(pool_size, needed))
+	var entries := _parents_before_their_moons(choose(gathered, budgets))
 	for entry in entries:
 		entry["circle"] = to_canvas(_project(entry["position"], camera, drawn), drawn, band)
 
@@ -416,13 +424,20 @@ func _context_priority(node: Node3D, _eye: Vector3) -> int:
 	return Priority.CONTEXT
 
 
-## The keyed union for one frame: one marker per object, highest priority wins, then nearest
-## first, then truncated to `limit`.
+## The keyed union for one frame, **one queue per kind of object**.
 ##
-## Keying matters — a body that is both a mission target and in the ambient context group would
-## otherwise get two labels stacked on one planet. Priority matters for the cap: capping by
+## Keying matters — a body that is both a mission target and in the ambient context group would otherwise get
+## two labels stacked on one planet. `budgets` maps a [enum Priority] to how many of that kind may be marked;
+## a rank with no entry is unlimited, and **`MISSION` and `SELECTED` are never truncated**.
+##
+## **The nearest object of any kind is always marked, whatever its queue is set to** — a rock you are about to
+## arrive at is worth a name before it earns a body, and that was Evert's own correction on 2026-11-23. It
+## cannot disturb the order: each queue is sorted by distance, so the nearest of all is the first of its own
+## queue, and giving that queue a floor of one is enough.
+##
+## The cap is per kind rather than by distance for the reason it always was: capping the *whole* list by
 ## distance would cut off precisely the off-screen objects the pointers exist for.
-static func choose(candidates: Array[Dictionary], limit: int) -> Array[Dictionary]:
+static func choose(candidates: Array[Dictionary], budgets: Dictionary) -> Array[Dictionary]:
 	var best := {}
 	for candidate in candidates:
 		var key := int(candidate["id"])
@@ -430,17 +445,41 @@ static func choose(candidates: Array[Dictionary], limit: int) -> Array[Dictionar
 		if held == null or int(candidate["priority"]) > int(held["priority"]):
 			best[key] = candidate
 
-	var entries: Array[Dictionary] = []
+	# One queue per rank, each nearest first.
+	var queues := {}
+	var nearest: Dictionary = {}
 	for key in best:
-		entries.append(best[key])
-	entries.sort_custom(
-		func(a: Dictionary, b: Dictionary) -> bool:
-			if int(a["priority"]) != int(b["priority"]):
-				return int(a["priority"]) > int(b["priority"])
-			return float(a["distance"]) < float(b["distance"])
-	)
-	if entries.size() > limit:
-		entries.resize(limit)
+		var entry: Dictionary = best[key]
+		var rank := int(entry["priority"])
+		if not queues.has(rank):
+			queues[rank] = []
+		queues[rank].append(entry)
+		if nearest.is_empty() or float(entry["distance"]) < float(nearest["distance"]):
+			nearest = entry
+	for rank in queues:
+		queues[rank].sort_custom(
+			func(a: Dictionary, b: Dictionary) -> bool:
+				return float(a["distance"]) < float(b["distance"])
+		)
+
+	# Highest rank first, so a place's label is placed before a moon's and a moon's before a rock's.
+	var ranks: Array = queues.keys()
+	ranks.sort()
+	ranks.reverse()
+
+	var entries: Array[Dictionary] = []
+	for rank in ranks:
+		var budget := int(budgets.get(rank, -1))
+		if int(rank) >= Priority.MISSION:
+			budget = -1
+		if not nearest.is_empty() and int(nearest["priority"]) == int(rank):
+			budget = -1 if budget < 0 else maxi(budget, 1)
+		var kept := 0
+		for entry in queues[rank]:
+			if budget >= 0 and kept >= budget:
+				break
+			entries.append(entry)
+			kept += 1
 	return entries
 
 

@@ -422,10 +422,13 @@ thickness is 10⁻⁸ of a pixel at every distance a ring is visible from.
 
 ### `StoichonRingView` — `Node3D`
 
-**A band, drawn**: one `MultiMesh` of point quads written once, and **two draw nodes holding it** — the half
-in front of the planet and the half behind, cut on the plane through the planet's centre at right angles to
-the eye. A planet's air is transparent with the depth test off, so one draw cannot be both in front of it
-and behind it; both draws hold every particle and each collapses the other side in its vertex stage.
+**A band, drawn**: one `MultiMesh` of point quads written once, held by **one draw node**. The band used to be
+cut in two on the plane through the planet's centre at right angles to the eye — the half in front of the
+planet and the half behind — because a planet's air is transparent with the depth test off, so one draw
+cannot be both in front of it and behind it. **That is retired**: the planet's own body hides the far half by
+depth, so the cut bought only the haze over the far limb, and it cost every ordering fault this feature had —
+ending with a classification that hid the whole front half at some camera positions. One draw, at
+`RING_PRIORITY`, after everything the planet wears.
 
 | Member | |
 |---|---|
@@ -436,7 +439,7 @@ and behind it; both draws hold every particle and each collapses the other side 
 | `bake_shadow(star_position, caster_position, caster_radius, star_radius) -> float` | **once**: the planet's shadow per particle, with `StoichonLuminance.shadow_fraction`. Returns the shaded fraction, so a caller can say what happened |
 | `spot_id(index)`, `static index_of(id)` | **one identity per spot**: `population:ring_b#12345` is the particle index, the body key and the shape seed at once |
 | `light()`, `shader_parameter(name)`, `shaded_fraction` | what the shader is told, for the tests |
-| `const FAR_PRIORITY` / `NEAR_PRIORITY` | −100 / +100 — outside the planet's whole transparent stack, see Render layers |
+| `const RING_PRIORITY` | **100** — one draw, after every layer the planet wears. The dust sheet sits at `RING_PRIORITY - 1` (99). There is no far/near pair any more |
 
 **The shader blends, it does not add.** `blend_mix` is `R33`: an additive draw cannot show a dark thing, so a
 particle in the planet's shadow would add nothing and stop existing. Each particle carries a share of
@@ -450,6 +453,35 @@ can be.
 the space between the last two. The 300,000 drawn particles are **the largest embedded objects, 100 m to
 30 km** (Evert, 2026-11-15). `ring_axis` is in the **engine's frame**, not the orbital elements' — see the
 content's own comment, and the test that derives the elevation from the loaded positions.
+
+### `StoichonBeltCloud` — `Node3D`
+
+**A belt, drawn**: one `MultiMesh` of point quads written once, shaded by **the ring's own splat shader**
+(`ring_splats.gdshader`) — a rock is a disc of its own reflected light, its radius riding in the instance's
+basis scale, its coverage the true area its disc subtends, and its phase computed per vertex. What differs
+from a band is only where the particles come from: a ring is generated whole as a sheet, a belt is a *set*
+of rocks placed once.
+
+| Member | |
+|---|---|
+| `static of(rocks, population) -> StoichonBeltCloud` | build it: one instance per rock, the node parented in the frame its rocks are placed in |
+| `update(pixel_angle, illuminance, tint, centre, star_position, camera)` | **per frame**: `pixel_scale`, `glow_linear`, `unlit_linear`, and the star as a view-space direction |
+| `instance_count()`, `multimesh()`, `draw_node()` | for the tests, and for a caller that needs the buffer |
+| `shader_parameter(name)` | what the shader is told |
+
+**One `buffer` assignment, not a million `set_instance_transform` calls.** 1.1 million rocks is 17.6 million
+floats — twelve of transform (a diagonal basis scaled by the radius, then the origin) and four of custom data
+(`.r` lit, `.g` drawn) — and the whole thing is a single upload. **`custom_aabb` is set by hand**: a
+`MultiMesh` whose buffer was assigned whole has no instance data for the engine to compute bounds from, and
+one with no bounds is culled at once.
+
+**The position is `float32` in that buffer**, which at 3.6 × 10¹¹ m quantises to **32 km** — a quarter of a
+pixel at any distance a splat is drawn from. A rock close enough to look at is a real body with a
+double-precision node instead.
+
+**The illuminance is taken at the middle of the band** (2.1 to 3.3 AU is a factor of 2.5 either side). It is
+named rather than modelled: a per-rock value would cost a third custom-data channel and a divide in the
+vertex stage for a difference no eye separates in a scatter of kilometre rocks.
 
 ### `StoichonKepler` — `RefCounted`
 
@@ -805,16 +837,18 @@ planet's node, so their distances are equal to the metre. Equal priority therefo
 
 | Draw | Priority |
 |---|---|
-| a ring's far half | **−100** (`StoichonRingView.FAR_PRIORITY`) |
-| a body's interior surface | **−90** (`StoichonBodyRenderer.INTERIOR_RENDER_PRIORITY`) |
 | the sea | **−8** (`OCEAN_RENDER_PRIORITY`) |
-| cloud decks, one per condensed species | **−index**, so 0 and down |
-| a body's air shell | **+8** (`AIR_RENDER_PRIORITY`) |
-| a ring's near half | **+100** (`StoichonRingView.NEAR_PRIORITY`) |
+| a body's interior surface | **0** (`INTERIOR_RENDER_PRIORITY`) |
+| a body's air shell | **0** (`AIR_RENDER_PRIORITY`) |
+| cloud decks, one per condensed species | **`DECK_PRIORITY_BASE − layer`**, so 0 and down |
+| a ring's dust sheet | **99** (`RING_PRIORITY - 1`) |
+| a ring's rocks, and a belt's | **100** (`StoichonRingView.RING_PRIORITY`) |
 
-The engine's whole range is **−128 … +128**; outside it a priority is *refused* and the material keeps 0,
-which is exactly the tie this table exists to prevent (measured 2026-11-03). `tests/test_rings.gd` asserts
-the table is strictly increasing and inside the range, so a tie cannot come back.
+**The air and a cloud deck can both be 0, and that tie is left standing** — Evert's instruction: the air and
+the first deck are not to be shuffled here. What the tests assert is the part the ring depends on: every
+priority is inside **−128 … +128** (a value outside it is *refused* and the material keeps 0, measured
+2026-11-03), and `RING_PRIORITY` is above every layer a planet wears. `tests/test_rings.gd` is that check; it
+deliberately does not assert the order among the planet's own layers.
 
 **The air at 0 and the first cloud deck at 0 is what that cost.** Evert, 2026-11-15: *"I still see ordering
 effects, but not always... there is more than just the atmosphere, there are cloud decks and the internal

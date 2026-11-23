@@ -26,6 +26,7 @@ func run(h, root: Node) -> void:
 	_test_the_belt_reaches_the_marker_pool(h, root)
 	_test_a_fragment_becomes_a_body(h, root)
 	_test_the_rocks_are_the_population(h)
+	_test_the_belt_slows_the_ship_by_its_own_sparseness(h)
 	_test_two_builds_give_the_same_rocks(h)
 	_test_the_index_answers_like_a_linear_scan(h)
 	_test_far_outside_the_band_there_is_nothing(h)
@@ -489,6 +490,35 @@ func _test_the_rocks_are_the_population(h) -> void:
 		var away := middle.distance_to(rocks.position_of(nearest))
 		h.check(away > 1.0e9 and away < 2.0e10,
 			"millions of km away, as the density says (%.1f M km)" % (away / 1.0e9))
+
+
+## **The belt slows the ship by its own sparseness** — the number the whole change is for.
+##
+## The unit is `nearest / 10 s`, so a real belt of a million kilometre-sized rocks puts the ship at about a
+## tenth of light speed inside it, against the system frame's own ceiling of 33 c in the void. That is what
+## makes a crossing a crossing rather than a crawl: **nine minutes for an AU**, where the invented fragments
+## held the ship for hours.
+func _test_the_belt_slows_the_ship_by_its_own_sparseness(h) -> void:
+	var belt := _belt()
+	belt.size_floor = belt.reference_size
+	var rocks := StoichonPopulationRocks.of(belt)
+	var middle := Vector3(2.7 * AU, 0.0, 0.0)
+	var nearest := rocks.nearest(middle)
+	h.check(nearest >= 0, "there is a rock in the middle of the belt")
+	if nearest < 0:
+		return
+	var away := middle.distance_to(rocks.position_of(nearest))
+
+	# The frame's own band, as the ship uses it: a floor, and the void ceiling. The unit is the neighbourhood;
+	# **full throttle crosses it in `TRAVERSE_SECONDS`**, so the speed is the unit over ten.
+	var speed := StoichonTravelScale.speed_for(1.0, away, 1.0, 1.0e11)
+	var void_speed := StoichonTravelScale.speed_for(1.0, 1.0e11, 1.0, 1.0e11)
+	h.check_near(speed, away / 10.0, "full throttle inside the belt is a tenth of the distance to the rock", 1.0)
+	h.check(speed < void_speed / 10.0,
+		"and ten times below the void's own speed (%s m/s against %s)" % [str(speed), str(void_speed)])
+	var crossing := AU / speed / 60.0
+	h.check(crossing > 1.0 and crossing < 60.0,
+		"so an AU takes minutes to cross, not hours (%.1f minutes)" % crossing)
 
 
 ## **A rock is the same rock the next time the system loads.** The whole point of the change: coming back

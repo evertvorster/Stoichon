@@ -1113,10 +1113,13 @@ have multiple queues for markers, like nearest X amount, then significant X amou
 queue, so the nearest fill it. Evert, 2026-11-12: *"when close to a body, I might be flying in between the moons, so
 I want the list of moons to be marked to be calculated from the moons that are closest to me."*
 
-**And a rock is labelled by distance, not by resolution.** A rock had to be resolving into a shape before it was
-named (2026-11-21); the belt is now invisible except for its markers, so a name is the only way to find one, and the
-rock you are about to arrive at is worth naming first. Evert, 2026-11-23: *"we should display the marker when it's
-the closest object, and not only when the asteroid gets a body."*
+**A belt's rock is labelled by distance; a band's only once it resolves.** The belt draws nothing at all — it is
+invisible except for its markers — so a name is the only way to find one, and the rock you are about to arrive at is
+worth naming first. Evert, 2026-11-23: *"we should display the marker when it's the closest object, and not only when
+the asteroid gets a body."* A **band** is drawn: from a distance you see a ring, and a rock in it that is a fraction
+of a pixel has nothing to point at — Evert, the same day: *"Saturn's rocks show on the HUD when I'm near Earth as
+well. I think once the rings are not resolveable, we don't need to see the rocks on the HUD either."* So the band's
+rocks keep the `RESOLVE_PIXELS` gate on the rock's own apparent size, and the belt's do not.
 
 ### A moon gives up its label, not its ring — but only where the two compete
 

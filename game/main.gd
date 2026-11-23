@@ -980,21 +980,39 @@ func _update_markers(camera: Camera3D) -> void:
 	# **Rocks are places' equals on the HUD and are ranked as asteroids within it** — one list, from the one
 	# registry, so a ring's spot and a belt's rock travel the same path as a moon and differ only in rank.
 	#
-	# **A rock is labelled by distance, inside its own queue's budget** — not because it earned a body. This
-	# replaces the rule that a rock had to be resolving into a shape before it was named (2026-11-21: *"Maybe we
-	# just don't label them at all unless we are starting to resolve them with actual bodies?"*). The belt is
-	# now *invisible* except for its markers, so a name is the only way a rock can be found at all, and the one
-	# you are about to arrive at is worth naming first. Evert, 2026-11-23: *"we should display the marker when it's
-	# the closest object, and not only when the asteroid gets a body."*
+	# **A belt's rock is labelled by distance, a band's only once it resolves.**
 	#
-	# The budget is what keeps this from being a swarm: `markers.rock_count` rocks at most, the nearest of them,
+	# The belt draws nothing at all — it is invisible except for its markers — so a name is the only way to find one,
+	# and the rock you are about to arrive at is worth naming first. This replaces the rule that any rock had to be
+	# resolving into a shape before it was named (2026-11-21).
+	#
+	# **A band is different: it is drawn.** From a distance you see a ring, and a rock in it that is a fraction of a
+	# pixel has nothing to point at — so the band's rocks are named only as they resolve. Evert, 2026-11-23:
+	# *"Saturn's rocks show on the HUD when I'm near Earth as well. I think once the rings are not resolveable, we don't
+	# need to see the rocks on the HUD either."*
+	#
+	# The budgets are what keep either from being a swarm: `markers.rock_count` rocks at most, the nearest of them,
 	# and `choose` guarantees the nearest object of ANY kind is marked whatever its queue is set to.
+	var pixel_angle := _pixel_angle()
 	var rock_nodes := {}
-	for body in rocks():
-		if body.node == null:
-			continue
-		context.append(body.node)
-		rock_nodes[body.node] = true
+	for manager in _fragment_bodies:
+		for body in manager.rocks():
+			if body.node == null:
+				continue
+			context.append(body.node)
+			rock_nodes[body.node] = true
+	for manager in _system.ring_bodies:
+		for body in manager.rocks():
+			if body.node == null:
+				continue
+			var distance := camera.global_position.distance_to(body.node.global_position)
+			var screen := StoichonLod.screen_radius_pixels(
+				StoichonLod.angular_radius(body.radius, distance), pixel_angle
+			)
+			if screen < StoichonIrregularBody.RESOLVE_PIXELS:
+				continue
+			context.append(body.node)
+			rock_nodes[body.node] = true
 	_markers.rocks = rock_nodes
 	_markers.context_targets = context
 	_markers.targets = _ring_marked

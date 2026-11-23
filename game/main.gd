@@ -803,6 +803,12 @@ func _place_observer_from_session() -> void:
 ## with the body its fragments orbit, because that orbit is what gives them their motion.
 func _build_fields() -> void:
 	for population in _system.content.populations:
+		# **A sheet is generated whole, so it is not a density.** A ring has every particle at build and its own
+		# manager for the spots that resolve; a field here would make up a second set of rocks inside it,
+		# and today only a zero `inclination` hides that — `volume_of` comes out 0 and the field stays
+		# empty. The one flag that says which mechanism owns a population is `particle_count`.
+		if population.particle_count > 0:
+			continue
 		var parent_id := population.parent_id
 		if parent_id.is_empty():
 			var star := _system.content.star()

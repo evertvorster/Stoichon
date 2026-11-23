@@ -12,7 +12,7 @@ extends SceneTree
 ## ## Why it bakes by VERDICT and not by body
 ##
 ## The verdict (`BANDED` / `SHREDDED` / `FEATURELESS`) is the derivation's output and the thing a rewrite must
-## not move — `SpacesimCloudModel.morphology()` has its own tests. What this probe asks is the *next* question:
+## not move — `StoichonCloudModel.morphology()` has its own tests. What this probe asks is the *next* question:
 ## given that verdict, what field does it produce? Baking per verdict answers it without a scene, a rendering
 ## device or a body's content, which is why this probe runs in seconds headless.
 ##
@@ -39,9 +39,9 @@ const SCALES := [4, 8, 16, 32]
 ## One morphology per verdict, with the `ratio` each verdict comes from. The numbers are the model's own
 ## boundary values: `BANDED` is a giant's small ratio, `SHREDDED` is Earth's, `FEATURELESS` is Venus's.
 const CASES := [
-	["BANDED", SpacesimCloudModel.Banding.BANDED, 0.045],
-	["SHREDDED", SpacesimCloudModel.Banding.SHREDDED, 0.104],
-	["FEATURELESS", SpacesimCloudModel.Banding.FEATURELESS, 0.0],
+	["BANDED", StoichonCloudModel.Banding.BANDED, 0.045],
+	["SHREDDED", StoichonCloudModel.Banding.SHREDDED, 0.104],
+	["FEATURELESS", StoichonCloudModel.Banding.FEATURELESS, 0.0],
 ]
 
 
@@ -55,9 +55,9 @@ func _init() -> void:
 	quit(0)
 
 
-func _report(name: String, morphology: SpacesimCloudModel.Morphology) -> void:
+func _report(name: String, morphology: StoichonCloudModel.Morphology) -> void:
 	var seed_value := 999
-	var image := SpacesimCloudField.bake(seed_value, morphology, WIDTH, HEIGHT)
+	var image := StoichonCloudField.bake(seed_value, morphology, WIDTH, HEIGHT)
 	if image == null:
 		print("%-11s NO BAKE" % name)
 		return
@@ -68,19 +68,19 @@ func _report(name: String, morphology: SpacesimCloudModel.Morphology) -> void:
 			values[row * WIDTH + column] = image.get_pixel(column, row).r
 	# **Half the sphere cloudy**, which is the middle of what a coverage says: the point of the number is the
 	# ranking between verdicts and the shape beside it, not any one body's authored fraction.
-	var threshold := SpacesimCloudMaps.threshold_for(image, 0.5)
+	var threshold := StoichonCloudMaps.threshold_for(image, 0.5)
 	var covered := 0
 	for value in values:
 		if value >= threshold:
 			covered += 1
-	var quantiles := SpacesimSurfaceDistribution.quantiles_of(image)
+	var quantiles := StoichonSurfaceDistribution.quantiles_of(image)
 	print("%-11s %6.3f  %.3f  %.3f  %.3f  %.3f  %8.5f %7.3f  %7.3f" % [
 		name,
 		float(covered) / float(values.size()),
-		SpacesimSurfaceDistribution.value_at(quantiles, 0.1),
-		SpacesimSurfaceDistribution.value_at(quantiles, 0.5),
-		SpacesimSurfaceDistribution.value_at(quantiles, 0.9),
-		SpacesimSurfaceDistribution.value_at(quantiles, 1.0),
+		StoichonSurfaceDistribution.value_at(quantiles, 0.1),
+		StoichonSurfaceDistribution.value_at(quantiles, 0.5),
+		StoichonSurfaceDistribution.value_at(quantiles, 0.9),
+		StoichonSurfaceDistribution.value_at(quantiles, 1.0),
 		_variogram(values, 16),
 		_variogram_slope(values),
 		_anisotropy(values),
@@ -142,13 +142,13 @@ func _anisotropy(values: PackedFloat32Array) -> float:
 	return along / across
 
 
-func _morphology(banding: int, ratio: float) -> SpacesimCloudModel.Morphology:
-	var morphology := SpacesimCloudModel.Morphology.new()
+func _morphology(banding: int, ratio: float) -> StoichonCloudModel.Morphology:
+	var morphology := StoichonCloudModel.Morphology.new()
 	morphology.banding = banding
 	morphology.ratio = ratio
 	# The scale the field sizes its features in, and the cells per hemisphere: a giant's are fine and many, a
 	# shredded body's are fewer and coarser. Derived numbers in the game; held fixed here so the *verdict* is
 	# the only thing varying between runs.
 	morphology.eddy_angular_scale = 0.06
-	morphology.cells = 8.0 if banding == SpacesimCloudModel.Banding.BANDED else 3.0
+	morphology.cells = 8.0 if banding == StoichonCloudModel.Banding.BANDED else 3.0
 	return morphology

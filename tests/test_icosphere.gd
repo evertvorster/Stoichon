@@ -13,16 +13,16 @@ func run(h, root: Node) -> void:
 
 	var meshes := []
 	for level in 6:
-		meshes.append(SpacesimIcosphere.mesh_at(level))
+		meshes.append(StoichonIcosphere.mesh_at(level))
 
 	# --- built once, and the same object every time ------------------------------------------------
 	# A level change has to be a pointer assignment. `SphereMesh` regenerates on a property change,
 	# which is what would make adaptive detail cost a rebuild per body per crossing.
-	h.check(SpacesimIcosphere.mesh_at(3) == meshes[3],
+	h.check(StoichonIcosphere.mesh_at(3) == meshes[3],
 		"asking for a level twice returns the SAME mesh, so a level change is a pointer assignment")
 	h.check(meshes[5] != null and meshes[0] != meshes[5], "and two levels are two meshes")
-	h.check(SpacesimIcosphere.built_levels() >= 6, "six levels are built")
-	h.check(SpacesimIcosphere.mesh_at(99) == SpacesimIcosphere.mesh_at(SpacesimLod.MAX_LEVEL),
+	h.check(StoichonIcosphere.built_levels() >= 6, "six levels are built")
+	h.check(StoichonIcosphere.mesh_at(99) == StoichonIcosphere.mesh_at(StoichonLod.MAX_LEVEL),
 		"and a level past the last is clamped to the headroom level rather than built unbounded")
 
 	# --- the counts, against the law, and against Euler --------------------------------------------
@@ -39,7 +39,7 @@ func run(h, root: Node) -> void:
 		var faces := indices.size() / 3
 		vertex_counts.append(points.size())
 
-		if faces != SpacesimLod.triangles_at(level):
+		if faces != StoichonLod.triangles_at(level):
 			counts_match = false
 
 		for point in points:
@@ -76,7 +76,7 @@ func run(h, root: Node) -> void:
 
 	var wanted_counts := []
 	for level in 6:
-		wanted_counts.append(SpacesimLod.triangles_at(level))
+		wanted_counts.append(StoichonLod.triangles_at(level))
 	h.check(counts_match, "every level has exactly the law's triangle count: %s" % [wanted_counts])
 	h.check(vertex_counts == [12, 42, 162, 642, 2562, 10242],
 		"and Euler's `V = F/2 + 2` vertex counts, so no vertex is duplicated: %s" % [vertex_counts])
@@ -115,8 +115,8 @@ func run(h, root: Node) -> void:
 	var ratios := []
 	var monotone := true
 	for level in 5:
-		var fine := SpacesimIcosphere.relative_sagitta(level + 1)
-		var coarse := SpacesimIcosphere.relative_sagitta(level)
+		var fine := StoichonIcosphere.relative_sagitta(level + 1)
+		var coarse := StoichonIcosphere.relative_sagitta(level)
 		if fine <= 0.0 or coarse <= fine:
 			monotone = false
 		ratios.append(coarse / fine if fine > 0.0 else 0.0)
@@ -134,8 +134,8 @@ func run(h, root: Node) -> void:
 	# `c` is this product. It converges as the levels refine (5.68 at level 2, 5.833 at level 5), so the
 	# fine levels are what it is read from, and the check is against the mesh rather than against the
 	# number, so the two cannot drift.
-	var product := SpacesimIcosphere.relative_sagitta(6) * SpacesimLod.triangles_at(6)
-	h.check_near(product, SpacesimLod.TRIANGLES_PER_SCREEN_RADIUS,
+	var product := StoichonIcosphere.relative_sagitta(6) * StoichonLod.triangles_at(6)
+	h.check_near(product, StoichonLod.TRIANGLES_PER_SCREEN_RADIUS,
 		"the law's constant is the geometry's own: sagitta x triangles = %.4f" % product, 0.01)
 
 	_test_the_line_mesh(h)
@@ -147,8 +147,8 @@ func run(h, root: Node) -> void:
 ## unshaded material to ignore.
 func _test_the_line_mesh(h) -> void:
 	for level in [1, 3]:
-		var triangles := SpacesimIcosphere.mesh_at(level)
-		var lines := SpacesimIcosphere.lines_at(level)
+		var triangles := StoichonIcosphere.mesh_at(level)
+		var lines := StoichonIcosphere.lines_at(level)
 		h.check(lines != null, "level %d has a line mesh" % level)
 		if lines == null:
 			continue
@@ -174,7 +174,7 @@ func _test_the_line_mesh(h) -> void:
 			if not real.has(_edge_key(segments[i], segments[i + 1])):
 				missing += 1
 		h.check(missing == 0, "and every segment is a real edge of that level (%d unknown)" % missing)
-		h.check(SpacesimIcosphere.lines_at(level) == lines,
+		h.check(StoichonIcosphere.lines_at(level) == lines,
 			"a level's line mesh is built once, like its triangles")
 
 

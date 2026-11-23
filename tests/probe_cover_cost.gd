@@ -1,7 +1,7 @@
 extends SceneTree
 ## **What it costs to cover the topmost layer, not just the ground.**
 ##
-## The walk's cap is now the furthest any layer drawn on the body can be seen (`SpacesimPatches.cover_angle`), because
+## The walk's cap is now the furthest any layer drawn on the body can be seen (`StoichonPatches.cover_angle`), because
 ## every layer wears the same array. That makes the ground and the sea build out past their own horizon whenever a
 ## deck stands above them — hidden geometry, so the question is only how much.
 ##
@@ -28,18 +28,18 @@ func _init() -> void:
 	for altitude in [2.0, 10.0, 100.0, 1000.0, 10000.0, 100000.0]:
 		var distance: float = RADIUS + altitude
 		var direction := Vector3.UP
-		var ground: float = SpacesimPatches.cover_angle(distance, RADIUS, RADIUS)
-		var deck: float = SpacesimPatches.cover_angle(distance, RADIUS, RADIUS + DECK_HEIGHT)
-		var basin: float = SpacesimPatches.cover_angle(distance, RADIUS, RADIUS - BASIN_DEPTH)
+		var ground: float = StoichonPatches.cover_angle(distance, RADIUS, RADIUS)
+		var deck: float = StoichonPatches.cover_angle(distance, RADIUS, RADIUS + DECK_HEIGHT)
+		var basin: float = StoichonPatches.cover_angle(distance, RADIUS, RADIUS - BASIN_DEPTH)
 		var cover: float = maxf(maxf(ground, deck), basin)
-		var before: Array = SpacesimPatches.select(
+		var before: Array = StoichonPatches.select(
 			distance, direction, RADIUS, PIXEL, EPSILON, ground
 		)
-		var after: Array = SpacesimPatches.select(
+		var after: Array = StoichonPatches.select(
 			distance, direction, RADIUS, PIXEL, EPSILON, cover
 		)
-		var before_triangles := SpacesimPatches.triangle_count(before)
-		var after_triangles := SpacesimPatches.triangle_count(after)
+		var before_triangles := StoichonPatches.triangle_count(before)
+		var after_triangles := StoichonPatches.triangle_count(after)
 		print("%9.0f m %9.1f km %9.1f km %8d %8d %9d %9d %7.2fx" % [
 			altitude, ground * RADIUS / 1000.0, cover * RADIUS / 1000.0,
 			before.size(), after.size(), before_triangles, after_triangles,

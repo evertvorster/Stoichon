@@ -1,11 +1,11 @@
 extends RefCounted
 ## The player, and the two screens built on the shared chrome.
 
-const Player := preload("res://addons/spacesim/player/player.gd")
-const PlayerPanel := preload("res://addons/spacesim/player/player_panel.gd")
-const SettingsPanel := preload("res://addons/spacesim/settings/settings_panel.gd")
-const Session := preload("res://addons/spacesim/save/session.gd")
-const Repo := preload("res://addons/spacesim/save/world_repo.gd")
+const Player := preload("res://addons/stoichon/player/player.gd")
+const PlayerPanel := preload("res://addons/stoichon/player/player_panel.gd")
+const SettingsPanel := preload("res://addons/stoichon/settings/settings_panel.gd")
+const Session := preload("res://addons/stoichon/save/session.gd")
+const Repo := preload("res://addons/stoichon/save/world_repo.gd")
 const Fixture := preload("res://tests/settings_fixture.gd")
 const Ui := preload("res://tests/ui_fixture.gd")
 
@@ -13,7 +13,7 @@ const SYSTEM_PATH := "res://systems/playground.tres"
 
 ## The personal-data screen hosts saving, so building it needs a session and a system. Neither
 ## touches anything here: the screen only reads their names, so no repository is disturbed.
-const TEST_ROOT := "/tmp/spacesim-player-test"
+const TEST_ROOT := "/tmp/stoichon-player-test"
 
 var _fixture := Fixture.new()
 
@@ -132,8 +132,8 @@ func _test_player_screen_shows_the_player(h, root: Node) -> void:
 
 
 ## A built playground, for the screen to read names out of.
-static func _system(root: Node) -> SpacesimSystemScene:
-	var system := SpacesimSystemScene.from_file(SYSTEM_PATH)
+static func _system(root: Node) -> StoichonSystemScene:
+	var system := StoichonSystemScene.from_file(SYSTEM_PATH)
 	system.build(root)
 	return system
 

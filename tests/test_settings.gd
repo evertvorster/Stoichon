@@ -1,8 +1,8 @@
 extends RefCounted
 ## Settings: declared defaults in code, one sparse file for what differs.
 
-const Settings := preload("res://addons/spacesim/settings/settings.gd")
-const Xdg := preload("res://addons/spacesim/settings/xdg.gd")
+const Settings := preload("res://addons/stoichon/settings/settings.gd")
+const Xdg := preload("res://addons/stoichon/settings/xdg.gd")
 
 const Fixture := preload("res://tests/settings_fixture.gd")
 
@@ -193,10 +193,10 @@ func _test_xdg_fallbacks(h) -> void:
 	OS.set_environment("XDG_CONFIG_HOME", "relative/path")
 	h.check(Xdg.config_home() == home.path_join(".config"), "a relative value is ignored, not used")
 
-	OS.set_environment("XDG_CONFIG_HOME", "/tmp/spacesim-xdg-test")
-	h.check(Xdg.config_home() == "/tmp/spacesim-xdg-test", "an absolute value is used")
+	OS.set_environment("XDG_CONFIG_HOME", "/tmp/stoichon-xdg-test")
+	h.check(Xdg.config_home() == "/tmp/stoichon-xdg-test", "an absolute value is used")
 	h.check(
-		Xdg.settings_path() == "/tmp/spacesim-xdg-test/stoichon/settings.cfg",
+		Xdg.settings_path() == "/tmp/stoichon-xdg-test/stoichon/settings.cfg",
 		"and the settings path is built from it"
 	)
 

@@ -19,7 +19,7 @@ extends SceneTree
 ## **No `Callable` indirection on purpose.** For functions at the microsecond scale the wrapper costs
 ## more than the thing being measured, so each loop is written out.
 ##
-## **It cannot name `SpacesimSettings`.** A `--script` script is compiled *before* the autoloads are
+## **It cannot name `StoichonSettings`.** A `--script` script is compiled *before* the autoloads are
 ## registered, so the identifier does not exist at compile time — the same reason `--check-only`
 ## reports it as "Identifier not found" and exits 0. The autoload is fetched from the tree instead.
 ##
@@ -146,9 +146,9 @@ func _run() -> void:
 		calls = int(OS.get_environment("COST_CALLS"))
 
 	# Fetched, not named: see the note in the header.
-	var settings: Node = get_root().get_node_or_null("SpacesimSettings")
+	var settings: Node = get_root().get_node_or_null("StoichonSettings")
 	if settings == null:
-		print("COST: no SpacesimSettings autoload")
+		print("COST: no StoichonSettings autoload")
 		return
 
 	var rows: Array[Array] = [] # [label, microseconds per call, calls]
@@ -163,12 +163,12 @@ func _run() -> void:
 	var gv1 := Time.get_ticks_usec()
 	for _i in calls:
 		settings.get_value("mouse.sensitivity")
-	rows.append(["SpacesimSettings.get_value  (hot key)", _per_call(gv1, calls), calls])
+	rows.append(["StoichonSettings.get_value  (hot key)", _per_call(gv1, calls), calls])
 
 	var gv2 := Time.get_ticks_usec()
 	for _i in calls:
 		settings.get_value("sky.star_depth")
-	rows.append(["SpacesimSettings.get_value  (sky key)", _per_call(gv2, calls), calls])
+	rows.append(["StoichonSettings.get_value  (sky key)", _per_call(gv2, calls), calls])
 
 	var hud := Time.get_ticks_usec()
 	for _i in calls:
@@ -218,7 +218,7 @@ func _run() -> void:
 		main._system.update_lod(camera)
 	rows.append(["  of which: update_lod", _per_call(piece, decomposition_calls), decomposition_calls])
 
-	# `exposure.update_to` used to be timed here. It is gone: the adaptation is `SpacesimExposurePass`'s
+	# `exposure.update_to` used to be timed here. It is gone: the adaptation is `StoichonExposurePass`'s
 	# now, on the GPU, so there is no CPU-side exposure call left in the frame to measure.
 
 	piece = Time.get_ticks_usec()

@@ -1,5 +1,5 @@
 extends SceneTree
-## Measure the ambient's scale — phase 0 of [[SpaceSim/Lighting Plan]].
+## Measure the ambient's scale — phase 0 of [[Stoichon/Lighting Plan]].
 ##
 ##     xvfb-run -a godot-double-mono --path . --script res://tests/probe_ambient.gd
 ##
@@ -14,7 +14,7 @@ extends SceneTree
 ##
 ## `Environment.ambient_light_color` and `ambient_light_energy` are, per the class reference,
 ## **"only effective if `ambient_light_sky_contribution` is lower than 1.0 (exclusive)"** — and that
-## property **defaults to 1.0**. `SpacesimExposure.configure()` sets source, colour and energy and
+## property **defaults to 1.0**. `StoichonExposure.configure()` sets source, colour and energy and
 ## **never sets `ambient_light_sky_contribution`**, so the evidence says the colour-ambient path is
 ## inert and the scene is lit by the sky's radiance cubemap instead. That matters because
 ## `exposure.gd`'s own comment records the cubemap route was **tried and rejected** — *"the ambient
@@ -256,8 +256,8 @@ func _apply(case: Array) -> void:
 		env.sky = _sky
 	if sky_kind == "project":
 		# Exactly the game's environment, then the two things this case is about.
-		SpacesimExposure.configure(env)
-		SpacesimExposure.set_ambient_illuminance(env, energy * SpacesimExposure.REFERENCE_LUX)
+		StoichonExposure.configure(env)
+		StoichonExposure.set_ambient_illuminance(env, energy * StoichonExposure.REFERENCE_LUX)
 	env.tonemap_mode = tonemap
 	env.tonemap_white = white
 	env.tonemap_agx_white = white

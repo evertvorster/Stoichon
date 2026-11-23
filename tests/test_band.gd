@@ -6,8 +6,8 @@ extends RefCounted
 ## size and scale it was handed. **No pixel of the picture is claimed** — whether it looks right is a
 ## flight, and this suite cannot see a frame.
 
-const Band := preload("res://addons/spacesim/ui/band.gd")
-const Group := preload("res://addons/spacesim/ui/group.gd")
+const Band := preload("res://addons/stoichon/ui/band.gd")
+const Group := preload("res://addons/stoichon/ui/group.gd")
 
 
 func run(h, root: Node) -> void:

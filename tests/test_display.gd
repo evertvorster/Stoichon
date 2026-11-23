@@ -5,9 +5,9 @@ extends RefCounted
 ## name means, which screen a stored number resolves to now, and how far the 3D is scaled. What a
 ## real monitor then does with it is not something this suite can see, and is not claimed.
 
-const Display := preload("res://addons/spacesim/settings/display.gd")
-const Settings := preload("res://addons/spacesim/settings/settings.gd")
-const SettingsPanel := preload("res://addons/spacesim/settings/settings_panel.gd")
+const Display := preload("res://addons/stoichon/settings/display.gd")
+const Settings := preload("res://addons/stoichon/settings/settings.gd")
+const SettingsPanel := preload("res://addons/stoichon/settings/settings_panel.gd")
 
 const Fixture := preload("res://tests/settings_fixture.gd")
 

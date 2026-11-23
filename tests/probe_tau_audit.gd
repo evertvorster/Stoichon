@@ -6,7 +6,7 @@ extends Node
 ## Before 2026-11-03 a deck had TWO optical depths and no law relating them: it DREW with the depth its map's
 ## mean thickness implied (`−ln(1 − mean exceedance)`) and SHADOWED with the depth its content stated
 ## (`−ln(1 − opacity)`) — 3.07x apart on Earth and 6.81x on Neptune, and the other way round on Titan. They
-## are one number now (`SpacesimSceneBody.Deck.tau`), so this prints the single value and the three things it
+## are one number now (`StoichonSceneBody.Deck.tau`), so this prints the single value and the three things it
 ## drives: how opaque the deck is at a full column, at its mean column, and the gain that fits it back to the
 ## layer's calibrated albedo.
 ##
@@ -17,11 +17,11 @@ const SOL_PATH := "res://systems/sol.tres"
 
 
 func _ready() -> void:
-	var sol: SpacesimSolarSystem = load(SOL_PATH)
-	var scene := SpacesimSystemScene.from_content(sol)
+	var sol: StoichonSolarSystem = load(SOL_PATH)
+	var scene := StoichonSystemScene.from_content(sol)
 	scene.build(self)
-	var was_on: bool = SpacesimSettings.get_value("render.cloud_decks")
-	SpacesimSettings.set_value("render.cloud_decks", true)
+	var was_on: bool = StoichonSettings.get_value("render.cloud_decks")
+	StoichonSettings.set_value("render.cloud_decks", true)
 	# **The maps are baked through the call the frame walk makes**, not through `update_lod` — a camera far
 	# enough out gives every body a LOD that asks for no deck, so nothing bakes and every number below is a
 	# default. Same arguments as `_update_decks`: three radii, close enough that the floor map answers
@@ -68,17 +68,17 @@ func _ready() -> void:
 
 ## **The cache must be closed before the tree goes away, and the order matters.** A `WorkerThreadPool` task
 ## still in flight takes the process down with it at teardown, and a local `RenderingDevice` left alive until
-## process exit segfaults — both are written up on `SpacesimCloudMaps.close()`, and both were reproduced by
+## process exit segfaults — both are written up on `StoichonCloudMaps.close()`, and both were reproduced by
 ## this probe the moment it started baking: one run exited 139, the next sat until its timeout. A probe that
 ## never bakes (like `probe_cloud_audit`) never meets either.
-func _teardown(scene: SpacesimSystemScene) -> void:
-	SpacesimSettings.set_value("render.cloud_decks", true)
+func _teardown(scene: StoichonSystemScene) -> void:
+	StoichonSettings.set_value("render.cloud_decks", true)
 	scene._cloud_maps.close()
 	scene.container.free()
 	get_tree().quit()
 
 
-func _deck_count(scene: SpacesimSystemScene) -> int:
+func _deck_count(scene: StoichonSystemScene) -> int:
 	var count := 0
 	for body in scene.bodies:
 		count += body.decks.size()
@@ -87,14 +87,14 @@ func _deck_count(scene: SpacesimSystemScene) -> int:
 
 ## The map's mean thickness where there IS cloud, measured the way the bake measures it.
 func _mean_thickness(
-	scene: SpacesimSystemScene, body: SpacesimSceneBody, deck: SpacesimSceneBody.Deck
+	scene: StoichonSystemScene, body: StoichonSceneBody, deck: StoichonSceneBody.Deck
 ) -> float:
 	var texture := scene._cloud_maps.map(
 		body.id, deck.index, body.radius, deck.coverage, body.radius * 3.0, deck.morphology, deck.tau
 	)
 	if texture == null:
 		return 0.0
-	var measured := SpacesimCloudMaps.measure(texture.get_image(), deck.coverage, deck.tau)
+	var measured := StoichonCloudMaps.measure(texture.get_image(), deck.coverage, deck.tau)
 	return float(measured["exceedance"])
 
 

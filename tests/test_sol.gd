@@ -7,14 +7,14 @@ extends RefCounted
 ## systems/sol.tres for the provenance.
 
 const SOL_PATH := "res://systems/sol.tres"
-const MATERIALS_PATH := "res://addons/spacesim/system/content/materials.tres"
+const MATERIALS_PATH := "res://addons/stoichon/system/content/materials.tres"
 
 const AU := 1.495978707e11
 
 
 func run(h, root: Node) -> void:
 	print("  Sol")
-	var sol: SpacesimSolarSystem = load(SOL_PATH)
+	var sol: StoichonSolarSystem = load(SOL_PATH)
 	h.check(sol != null, "the Sol system file loads")
 	if sol == null:
 		return
@@ -33,21 +33,21 @@ func run(h, root: Node) -> void:
 ## **A body's own heat has to move its temperature, and must not move any other body's.** The insolation
 ## alone is recomputed here rather than by unsetting the field, because the loaded content is shared and a
 ## test that mutates it leaks into every suite that runs after it.
-func _test_internal_heat(h, sol: SpacesimSolarSystem) -> void:
-	var materials := SpacesimMaterialTable.engine_table()
+func _test_internal_heat(h, sol: StoichonSolarSystem) -> void:
+	var materials := StoichonMaterialTable.engine_table()
 	var star_luminosity := 0.0
 	for body in sol.bodies:
-		if body.kind == SpacesimSystemBody.Kind.STAR:
-			star_luminosity = SpacesimStarModel.luminosity(body)
+		if body.kind == StoichonSystemBody.Kind.STAR:
+			star_luminosity = StoichonStarModel.luminosity(body)
 	for name in ["jupiter", "earth"]:
 		var content := sol.body_by_id("planet:%s" % name)
 		if content == null or content.orbit == null:
 			continue
 		var distance := content.orbit.semi_major_axis
-		var albedo := SpacesimSurfaceModel.bond_albedo(content, materials)
+		var albedo := StoichonSurfaceModel.bond_albedo(content, materials)
 		var absorbed := (1.0 - albedo) * star_luminosity / (4.0 * PI * distance * distance * 4.0)
-		var insolation_only := pow(absorbed / SpacesimAtmosphereModel.STEFAN_BOLTZMANN, 0.25)
-		var derived := SpacesimAtmosphereModel.equilibrium_temperature(
+		var insolation_only := pow(absorbed / StoichonAtmosphereModel.STEFAN_BOLTZMANN, 0.25)
+		var derived := StoichonAtmosphereModel.equilibrium_temperature(
 			content, materials, star_luminosity, distance
 		)
 		if content.internal_heat_flux > 0.0:
@@ -59,7 +59,7 @@ func _test_internal_heat(h, sol: SpacesimSolarSystem) -> void:
 				"and %s, with no internal heat, is unchanged (%.1f K)" % [name, derived])
 
 
-func _test_shape(h, sol: SpacesimSolarSystem) -> void:
+func _test_shape(h, sol: StoichonSolarSystem) -> void:
 	h.check(sol.system_name() == "Sol", "named after its star: '%s'" % sol.system_name())
 	h.check(sol.epoch == "2000-01-01T12:00:00", "at the J2000 epoch")
 	h.check(
@@ -70,7 +70,7 @@ func _test_shape(h, sol: SpacesimSolarSystem) -> void:
 
 	var star := sol.star()
 	h.check(star != null and star.id == "star:sol", "the primary is Sol")
-	h.check(star != null and star.kind == SpacesimSystemBody.Kind.STAR, "and it is a star")
+	h.check(star != null and star.kind == StoichonSystemBody.Kind.STAR, "and it is a star")
 	h.check(star != null and not star.orbits(), "and does not orbit anything")
 
 	# The dataset at whole: fractions sum, layer boundaries ascend, every body that is not the
@@ -89,7 +89,7 @@ func _test_shape(h, sol: SpacesimSolarSystem) -> void:
 	)
 
 
-func _test_calibration_values(h, sol: SpacesimSolarSystem) -> void:
+func _test_calibration_values(h, sol: StoichonSolarSystem) -> void:
 	var star := sol.star()
 	h.check_near(star.radius, 6.957e8, "Sol's radius is 695,700 km", 1.0e3)
 	h.check_near(star.mass, 1.9884e30, "its authored mass is 1.9884e30 kg", 1.0e25)
@@ -132,7 +132,7 @@ func _test_calibration_values(h, sol: SpacesimSolarSystem) -> void:
 		h.check(not giant.landable, "and %s is not landable" % giant.display_name)
 
 
-func _test_framing_spans_the_system(h, sol: SpacesimSolarSystem) -> void:
+func _test_framing_spans_the_system(h, sol: StoichonSolarSystem) -> void:
 	# Bands and thresholds must agree, and the band has to reach the furthest thing in the system:
 	# the playground's 1e11 m cap would not have reached Saturn, let alone Neptune.
 	var neptune := sol.body_by_id("planet:neptune")
@@ -148,8 +148,8 @@ func _test_framing_spans_the_system(h, sol: SpacesimSolarSystem) -> void:
 
 ## Every species a composition names must exist in the table, or the derivation will silently
 ## treat a body as made of nothing.
-func _test_species_are_known(h, sol: SpacesimSolarSystem) -> void:
-	var materials: SpacesimMaterialTable = load(MATERIALS_PATH)
+func _test_species_are_known(h, sol: StoichonSolarSystem) -> void:
+	var materials: StoichonMaterialTable = load(MATERIALS_PATH)
 	h.check(materials != null, "the engine material table loads")
 	if materials == null:
 		return
@@ -179,35 +179,35 @@ func _collect(names: PackedStringArray, fractions: Dictionary, body_id: String, 
 
 ## The two-body parameter for whatever `body` orbits: a planet's mass for a moon, the star's for a
 ## planet. Using the star for a moon would be a quiet way to be wrong everywhere.
-func _mu_for(sol: SpacesimSolarSystem, body: SpacesimSystemBody) -> float:
+func _mu_for(sol: StoichonSolarSystem, body: StoichonSystemBody) -> float:
 	var parent := sol.body_by_id(body.parent_id)
 	if parent == null:
 		parent = sol.star()
-	return SpacesimKepler.mu_of((parent.mass if parent != null else 0.0) + body.mass)
+	return StoichonKepler.mu_of((parent.mass if parent != null else 0.0) + body.mass)
 
 
 ## The formulas against the real data. This is what having an authored Sol buys: a period and a
 ## distance that come from physics can be checked against a number that came from a measurement.
-func _test_orbits_from_real_data(h, sol: SpacesimSolarSystem) -> void:
+func _test_orbits_from_real_data(h, sol: StoichonSolarSystem) -> void:
 	var star := sol.star()
-	var mu := SpacesimKepler.mu_of(star.mass)
-	var epoch := SpacesimWorldTime.clock_at_epoch(sol.epoch)
+	var mu := StoichonKepler.mu_of(star.mass)
+	var epoch := StoichonWorldTime.clock_at_epoch(sol.epoch)
 	h.check_near(epoch, 63113947200.0, "J2000 is 63,113,947,200 seconds after year zero", 1.0)
 
 	# The period is an independent check: it comes from the star's authored mass and the planet's
 	# semi-major axis, not from any of the orbit's angles.
 	var earth := sol.body_by_id("planet:earth")
-	var year_days := SpacesimKepler.period(earth.orbit, mu) / 86400.0
+	var year_days := StoichonKepler.period(earth.orbit, mu) / 86400.0
 	h.check_near(year_days, 365.256, "the solved year is 365.256 days (%.4f)" % year_days, 0.02)
 
 	# Where a body's own mass is known it belongs in the parameter — Jupiter moves itself.
 	var jupiter := sol.body_by_id("planet:jupiter")
-	var jupiter_mu := SpacesimKepler.mu_of(star.mass + jupiter.mass)
-	var jupiter_days := SpacesimKepler.period(jupiter.orbit, jupiter_mu) / 86400.0
+	var jupiter_mu := StoichonKepler.mu_of(star.mass + jupiter.mass)
+	var jupiter_days := StoichonKepler.period(jupiter.orbit, jupiter_mu) / 86400.0
 	h.check_near(jupiter_days, 4332.59, "and Jupiter's is 4,332.6 days (%.2f)" % jupiter_days, 0.5)
 
 	var mars := sol.body_by_id("planet:mars")
-	var mars_days := SpacesimKepler.period(mars.orbit, mu) / 86400.0
+	var mars_days := StoichonKepler.period(mars.orbit, mu) / 86400.0
 	h.check_near(mars_days, 686.98, "and Mars's is 687.0 days (%.3f)" % mars_days, 0.5)
 
 	# Every orbiting body must stay between the perihelion and aphelion its own elements imply —
@@ -217,25 +217,25 @@ func _test_orbits_from_real_data(h, sol: SpacesimSolarSystem) -> void:
 		if body.orbit == null:
 			continue
 		var body_mu := _mu_for(sol, body)
-		var orbit_period := SpacesimKepler.period(body.orbit, body_mu)
+		var orbit_period := StoichonKepler.period(body.orbit, body_mu)
 		var perihelion := body.orbit.semi_major_axis * (1.0 - body.orbit.eccentricity)
 		var aphelion := body.orbit.semi_major_axis * (1.0 + body.orbit.eccentricity)
 		var worst := 0.0
 		for step in 12:
 			var when := epoch + orbit_period * float(step) / 12.0
-			var r := SpacesimKepler.position_at(body.orbit, body_mu, when, epoch).length()
+			var r := StoichonKepler.position_at(body.orbit, body_mu, when, epoch).length()
 			worst = maxf(worst, maxf(perihelion - r, r - aphelion))
 		h.check(worst <= perihelion * 0.001,
 			"%s stays between its perihelion and aphelion all the way round" % body.display_name)
 
 	# Earth was a day and a half from perihelion at J2000, so its distance there is a number, not a
 	# range: a(1-e) = 0.98329 au.
-	var earth_r := SpacesimKepler.position_at(earth.orbit, mu, epoch, epoch).length()
+	var earth_r := StoichonKepler.position_at(earth.orbit, mu, epoch, epoch).length()
 	h.check_near(earth_r / AU, 0.9833, "Earth is near perihelion at J2000 (%.5f au)" % (earth_r / AU), 0.001)
 
 	# And the inclination is real: the planets are not all in one plane.
 	var mercury := sol.body_by_id("planet:mercury")
-	var mercury_pos := SpacesimKepler.position_at(mercury.orbit, mu, epoch, epoch)
+	var mercury_pos := StoichonKepler.position_at(mercury.orbit, mu, epoch, epoch)
 	h.check(absf(mercury_pos.y) > 1.0e9, "Mercury is out of the ecliptic by 7 degrees")
 
 
@@ -245,8 +245,8 @@ func _test_orbits_from_real_data(h, sol: SpacesimSolarSystem) -> void:
 ## **Only the bodies that have nothing else get an orbital frame.** Evert, 2026-11-14: *"units that already
 ## had atmospheres ... does not need this; it's only for small things in orbit."* A planet has its atmosphere
 ## and surface frames and the crawl at its surface; a rock has none of that and needs the neighbourhood.
-func _test_orbital_frames(h, sol: SpacesimSolarSystem, root: Node) -> void:
-	var scene := SpacesimSystemScene.from_content(sol)
+func _test_orbital_frames(h, sol: StoichonSolarSystem, root: Node) -> void:
+	var scene := StoichonSystemScene.from_content(sol)
 	if scene == null or scene.build(root) == null:
 		return
 	var earth := scene.body_by_id("planet:earth")
@@ -264,7 +264,7 @@ func _test_orbital_frames(h, sol: SpacesimSolarSystem, root: Node) -> void:
 			"and its ceiling is the exit threshold, sized by the body", 1.0e-3)
 
 
-func _test_moons(h, sol: SpacesimSolarSystem) -> void:
+func _test_moons(h, sol: StoichonSolarSystem) -> void:
 	var expected := {
 		"moon:luna": [27.284, "Luna"],
 		"moon:io": [1.7693, "Io"],
@@ -305,14 +305,14 @@ func _test_moons(h, sol: SpacesimSolarSystem) -> void:
 		h.check(moon != null, "%s is present" % label)
 		if moon == null:
 			continue
-		h.check(moon.kind == SpacesimSystemBody.Kind.MOON, "and is a moon")
+		h.check(moon.kind == StoichonSystemBody.Kind.MOON, "and is a moon")
 		var parent := sol.body_by_id(moon.parent_id)
-		h.check(parent != null and parent.kind == SpacesimSystemBody.Kind.PLANET,
+		h.check(parent != null and parent.kind == StoichonSystemBody.Kind.PLANET,
 			"orbiting a planet (%s)" % (parent.display_name if parent != null else "?"))
 		if parent == null:
 			continue
-		var mu := SpacesimKepler.mu_of(parent.mass + moon.mass)
-		var days := SpacesimKepler.period(moon.orbit, mu) / 86400.0
+		var mu := StoichonKepler.mu_of(parent.mass + moon.mass)
+		var days := StoichonKepler.period(moon.orbit, mu) / 86400.0
 		# **The tolerance is relative past 20 days**, because the published pair itself only agrees to about 0.02 %:
 		# Iapetus's measured a and period are consistent with each other only to that much, so an absolute 0.02 days
 		# asks the solver to be more accurate than the data it is checked against.
@@ -333,8 +333,8 @@ func _test_moons(h, sol: SpacesimSolarSystem) -> void:
 
 ## The wiring: the scene takes the content and places the bodies from it, rather than from a file
 ## of literal positions.
-func _test_the_scene_places_them(h, sol: SpacesimSolarSystem, root: Node) -> void:
-	var scene := SpacesimSystemScene.from_content(sol)
+func _test_the_scene_places_them(h, sol: StoichonSolarSystem, root: Node) -> void:
+	var scene := StoichonSystemScene.from_content(sol)
 	h.check(scene != null, "a scene wraps the content")
 	if scene == null:
 		return
@@ -388,7 +388,7 @@ func _test_the_scene_places_them(h, sol: SpacesimSolarSystem, root: Node) -> voi
 
 	var jupiter := scene.body_by_id("planet:jupiter")
 	var spread := 0.0
-	var jupiter_moons: Array[SpacesimSceneBody] = []
+	var jupiter_moons: Array[StoichonSceneBody] = []
 	for body in scene.bodies:
 		if body.parent_id == "planet:jupiter" and body.node != null:
 			jupiter_moons.append(body)
@@ -416,7 +416,7 @@ func _test_the_scene_places_them(h, sol: SpacesimSolarSystem, root: Node) -> voi
 ##
 ## So: the vertex COUNT is the sweep's grid, the vertices ARE the generator's, nothing planet-shaped was created
 ## beside them, and the eye moving does not replace the mesh.
-func _test_the_rocks(h, scene: SpacesimSystemScene, root: Node) -> void:
+func _test_the_rocks(h, scene: StoichonSystemScene, root: Node) -> void:
 	var phobos := scene.body_by_id("moon:phobos")
 	var earth := scene.body_by_id("planet:earth")
 	h.check(phobos != null, "Phobos built")
@@ -427,15 +427,15 @@ func _test_the_rocks(h, scene: SpacesimSystemScene, root: Node) -> void:
 	# **The boundary is DERIVED per material, and the inventory is what falsifies it.** Evert, 2026-11-12: *"Lets add
 	# the round moons as well."* One constant could not serve both: Mimas is 198 km of ice and is round, Amalthea is
 	# 83 km of rock and is a lump. Ice (2 MPa) rounds at 130 km against rock's 384, and both facts come out right.
-	var materials := SpacesimMaterialTable.engine_table()
+	var materials := StoichonMaterialTable.engine_table()
 	var mimas := scene.body_by_id("moon:mimas")
 	var amalthea := scene.body_by_id("moon:amalthea")
 	h.check(mimas != null and not mimas.irregular,
 		"Mimas, 198 km of ice, is round — ice rounds at %.0f km"
-			% (SpacesimIrregularBody.rounding_radius(mimas.content, materials) / 1000.0))
+			% (StoichonIrregularBody.rounding_radius(mimas.content, materials) / 1000.0))
 	h.check(amalthea != null and amalthea.irregular,
 		"while Amalthea, 83 km of rock, is still a lump — rock rounds at %.0f km"
-			% (SpacesimIrregularBody.rounding_radius(amalthea.content, materials) / 1000.0))
+			% (StoichonIrregularBody.rounding_radius(amalthea.content, materials) / 1000.0))
 	h.check(earth != null and not earth.irregular, "while Earth, which gravity did round, keeps the planet path")
 
 	# **Placed at load, NOT extracted at load.** Evert, 2026-11-12: *"We should only be building them when we get
@@ -468,8 +468,8 @@ func _test_the_rocks(h, scene: SpacesimSystemScene, root: Node) -> void:
 
 	var arrays: Array = (phobos.mesh.mesh as ArrayMesh).surface_get_arrays(0)
 	var vertices: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-	var generated: Array = SpacesimBlobShape.mesh(
-		hash("moon:phobos"), phobos.radius, SpacesimIrregularBody.RESOLUTION, [], phobos.irregularity
+	var generated: Array = StoichonBlobShape.mesh(
+		hash("moon:phobos"), phobos.radius, StoichonIrregularBody.RESOLUTION, [], phobos.irregularity
 	).surface_get_arrays(0)
 	h.check(vertices.size() > 500 and vertices.size() == (generated[Mesh.ARRAY_VERTEX] as PackedVector3Array).size(),
 		"its mesh comes from the field's extraction, not from an icosphere (%d vertices)" % vertices.size())
@@ -533,9 +533,9 @@ func _test_the_rocks(h, scene: SpacesimSystemScene, root: Node) -> void:
 	# moons would tend to look more round from a distance."* Both shades of "not a sphere" — the off-centre balls and
 	# the fractal relief — scale with the same number, so a body near its own rounding radius is a slightly lumpy
 	# sphere and one far below it is a rock. Which also means a misclassified body costs relief, not a wrong shape.
-	var rocky := SpacesimBlobShape.arrays(hash("moon:phobos"), 40000.0, 48, [], 0.9)
-	var rounding := SpacesimBlobShape.arrays(hash("moon:phobos"), 40000.0, 48, [], 0.15)
-	var sphere := SpacesimBlobShape.arrays(hash("moon:phobos"), 40000.0, 48, [], 0.0)
+	var rocky := StoichonBlobShape.arrays(hash("moon:phobos"), 40000.0, 48, [], 0.9)
+	var rounding := StoichonBlobShape.arrays(hash("moon:phobos"), 40000.0, 48, [], 0.15)
+	var sphere := StoichonBlobShape.arrays(hash("moon:phobos"), 40000.0, 48, [], 0.0)
 	h.check(_lumpiness(rocky) > _lumpiness(rounding) * 1.8,
 		"the same body at a lower irregularity is rounder (%.2f against %.2f)"
 			% [_lumpiness(rocky), _lumpiness(rounding)])
@@ -600,21 +600,21 @@ func _test_the_rocks(h, scene: SpacesimSystemScene, root: Node) -> void:
 	# came out and is untouched everywhere else. This is the property mining will be built on, so it is asserted
 	# before there is a pickaxe rather than after.
 	var seed_value := hash("moon:phobos")
-	var before := SpacesimBlobShape.radius_at(
-		seed_value, phobos.radius, Vector3.RIGHT, SpacesimIrregularBody.RESOLUTION
+	var before := StoichonBlobShape.radius_at(
+		seed_value, phobos.radius, Vector3.RIGHT, StoichonIrregularBody.RESOLUTION
 	)
-	var behind := SpacesimBlobShape.radius_at(
-		seed_value, phobos.radius, Vector3.LEFT, SpacesimIrregularBody.RESOLUTION
+	var behind := StoichonBlobShape.radius_at(
+		seed_value, phobos.radius, Vector3.LEFT, StoichonIrregularBody.RESOLUTION
 	)
 	# **At the surface, not out in space.** A removal is a ball, so one placed beyond the body grazes it and removes
 	# almost nothing — which is what the first version of this asserted, and it reported 4.6 km to 4.4 km.
 	var at_surface := Vector3(before / phobos.radius, 0.0, 0.0)
 	var removals := [[at_surface, 0.25]]
-	var carved := SpacesimBlobShape.radius_at(
-		seed_value, phobos.radius, Vector3.RIGHT, SpacesimIrregularBody.RESOLUTION, removals
+	var carved := StoichonBlobShape.radius_at(
+		seed_value, phobos.radius, Vector3.RIGHT, StoichonIrregularBody.RESOLUTION, removals
 	)
-	var still_there := SpacesimBlobShape.radius_at(
-		seed_value, phobos.radius, Vector3.LEFT, SpacesimIrregularBody.RESOLUTION, removals
+	var still_there := StoichonBlobShape.radius_at(
+		seed_value, phobos.radius, Vector3.LEFT, StoichonIrregularBody.RESOLUTION, removals
 	)
 	h.check(carved < before * 0.85 and carved > 0.0,
 		"a chunk taken out of a body takes its surface in (%.1f km to %.1f km)"

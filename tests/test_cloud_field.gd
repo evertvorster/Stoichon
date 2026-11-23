@@ -18,18 +18,18 @@ const TEST_HEIGHT := 128
 
 func run(h, root: Node) -> void:
 	print("  cloud field")
-	var sol: SpacesimSolarSystem = load(SOL_PATH)
+	var sol: StoichonSolarSystem = load(SOL_PATH)
 	h.check(sol != null, "Sol loads")
 	if sol == null:
 		return
-	var scene := SpacesimSystemScene.from_content(sol)
+	var scene := StoichonSystemScene.from_content(sol)
 	if scene == null:
 		h.check(false, "a scene wraps it")
 		return
 	scene.build(root)
 
-	var materials := SpacesimMaterialTable.engine_table()
-	var luminosity := SpacesimStarModel.luminosity(scene.star().content)
+	var materials := StoichonMaterialTable.engine_table()
+	var luminosity := StoichonStarModel.luminosity(scene.star().content)
 
 	var jupiter := _morphology(scene, "planet:jupiter", materials, luminosity)
 	var earth := _morphology(scene, "planet:earth", materials, luminosity)
@@ -51,50 +51,50 @@ func run(h, root: Node) -> void:
 	scene.container.free()
 
 
-func _morphology(scene: SpacesimSystemScene, id: String, materials: SpacesimMaterialTable, luminosity: float) -> SpacesimCloudModel.Morphology:
+func _morphology(scene: StoichonSystemScene, id: String, materials: StoichonMaterialTable, luminosity: float) -> StoichonCloudModel.Morphology:
 	var body := scene.body_by_id(id)
-	return SpacesimCloudModel.morphology(
+	return StoichonCloudModel.morphology(
 		body.content, materials, luminosity, body.position.distance_to(scene.star().position)
 	)
 
 
 ## The mixing strength follows the model's *verdict*, which is the point of having a verdict at all.
 func _test_the_mixing_is_the_verdict(h) -> void:
-	h.check(SpacesimCloudField.mixing(SpacesimCloudModel.Banding.BANDED)
-			< SpacesimCloudField.mixing(SpacesimCloudModel.Banding.SHREDDED),
+	h.check(StoichonCloudField.mixing(StoichonCloudModel.Banding.BANDED)
+			< StoichonCloudField.mixing(StoichonCloudModel.Banding.SHREDDED),
 		"a shredded body mixes its bands harder than a banded one")
-	h.check_near(SpacesimCloudField.mixing(SpacesimCloudModel.Banding.FEATURELESS), 0.0,
+	h.check_near(StoichonCloudField.mixing(StoichonCloudModel.Banding.FEATURELESS), 0.0,
 		"and a featureless body mixes not at all", 1.0e-12)
-	h.check_near(SpacesimCloudField.mixing(SpacesimCloudModel.Banding.UNKNOWN), 0.0,
+	h.check_near(StoichonCloudField.mixing(StoichonCloudModel.Banding.UNKNOWN), 0.0,
 		"as does one nothing is known about — a default is not a licence to invent weather", 1.0e-12)
 
 
 ## **The same world regains the same weather.** The seed is a function of the body's id, so this is the
 ## property `Cosmos and Discovery` needs of everything generated, and the reason a save can be short.
-func _test_determinism(h, earth: SpacesimCloudModel.Morphology) -> void:
-	var first := SpacesimCloudField.bake(SpacesimCloudField.seed_for("planet:earth", 0), earth,
+func _test_determinism(h, earth: StoichonCloudModel.Morphology) -> void:
+	var first := StoichonCloudField.bake(StoichonCloudField.seed_for("planet:earth", 0), earth,
 		TEST_WIDTH, TEST_HEIGHT)
-	var again := SpacesimCloudField.bake(SpacesimCloudField.seed_for("planet:earth", 0), earth,
+	var again := StoichonCloudField.bake(StoichonCloudField.seed_for("planet:earth", 0), earth,
 		TEST_WIDTH, TEST_HEIGHT)
 	h.check(first.get_data() == again.get_data(), "the same seed bakes the same bytes")
 
-	var other := SpacesimCloudField.bake(SpacesimCloudField.seed_for("planet:earth", 1), earth,
+	var other := StoichonCloudField.bake(StoichonCloudField.seed_for("planet:earth", 1), earth,
 		TEST_WIDTH, TEST_HEIGHT)
 	h.check(first.get_data() != other.get_data(), "and a different layer is different weather")
 
-	var elsewhere := SpacesimCloudField.bake(SpacesimCloudField.seed_for("planet:mars", 0), earth,
+	var elsewhere := StoichonCloudField.bake(StoichonCloudField.seed_for("planet:mars", 0), earth,
 		TEST_WIDTH, TEST_HEIGHT)
 	h.check(first.get_data() != elsewhere.get_data(), "and so is the same layer on another body")
 
 
 ## **A featureless body never builds a generator.** Evert's requirement, as a measurement rather than a
 ## claim in a comment: two different seeds, the same bytes, because no noise was ever drawn.
-func _test_a_featureless_body_costs_nothing(h, venus: SpacesimCloudModel.Morphology) -> void:
-	h.check(venus.banding == SpacesimCloudModel.Banding.FEATURELESS, "Venus is featureless")
-	h.check_near(SpacesimCloudField.mixing(venus.banding), 0.0, "so nothing mixes", 1.0e-12)
+func _test_a_featureless_body_costs_nothing(h, venus: StoichonCloudModel.Morphology) -> void:
+	h.check(venus.banding == StoichonCloudModel.Banding.FEATURELESS, "Venus is featureless")
+	h.check_near(StoichonCloudField.mixing(venus.banding), 0.0, "so nothing mixes", 1.0e-12)
 
-	var one := SpacesimCloudField.bake(11, venus, 64, 32)
-	var two := SpacesimCloudField.bake(999999, venus, 64, 32)
+	var one := StoichonCloudField.bake(11, venus, 64, 32)
+	var two := StoichonCloudField.bake(999999, venus, 64, 32)
 	h.check(one.get_data() == two.get_data(),
 		"and two different seeds bake identical bytes — the noise was never generated")
 	var spread := _spread(one.get_data())
@@ -102,9 +102,9 @@ func _test_a_featureless_body_costs_nothing(h, venus: SpacesimCloudModel.Morphol
 		"which makes it a flat sheet: the whole map is one value (%d levels of spread)" % spread)
 
 	# And the same for a body whose verdict is unknown: a uniform field, not invented weather.
-	var unknown := SpacesimCloudModel.Morphology.new()
-	h.check(unknown.banding == SpacesimCloudModel.Banding.UNKNOWN, "an unmeasured body is UNKNOWN")
-	var guessed := SpacesimCloudField.bake(7, unknown, 64, 32)
+	var unknown := StoichonCloudModel.Morphology.new()
+	h.check(unknown.banding == StoichonCloudModel.Banding.UNKNOWN, "an unmeasured body is UNKNOWN")
+	var guessed := StoichonCloudField.bake(7, unknown, 64, 32)
 	h.check(_spread(guessed.get_data()) == 0,
 		"and it gets a flat field rather than a default worth drawing")
 
@@ -114,9 +114,9 @@ func _test_a_featureless_body_costs_nothing(h, venus: SpacesimCloudModel.Morphol
 ##
 ## Jupiter's bands should dominate its weather; Earth's should not. That is the whole visual difference
 ## between the two, and it comes from the derived ratio rather than from anything tuned.
-func _test_the_bands_are_bands(h, jupiter: SpacesimCloudModel.Morphology, earth: SpacesimCloudModel.Morphology) -> void:
-	var jupiter_map := SpacesimCloudField.bake(1, jupiter, TEST_WIDTH, TEST_HEIGHT)
-	var earth_map := SpacesimCloudField.bake(1, earth, TEST_WIDTH, TEST_HEIGHT)
+func _test_the_bands_are_bands(h, jupiter: StoichonCloudModel.Morphology, earth: StoichonCloudModel.Morphology) -> void:
+	var jupiter_map := StoichonCloudField.bake(1, jupiter, TEST_WIDTH, TEST_HEIGHT)
+	var earth_map := StoichonCloudField.bake(1, earth, TEST_WIDTH, TEST_HEIGHT)
 	var jupiter_ratio := _across_rows(jupiter_map) / maxf(_within_rows(jupiter_map), 1.0)
 	var earth_ratio := _across_rows(earth_map) / maxf(_within_rows(earth_map), 1.0)
 
@@ -150,10 +150,10 @@ func _test_the_bands_are_bands(h, jupiter: SpacesimCloudModel.Morphology, earth:
 ## seam has to look like is *every other column boundary* — the wrap pair is one column step apart, the
 ## same as the interior pairs — so the comparison is between two distributions of the same quantity.
 func _test_it_is_continuous_where_the_seam_is(
-	h, morphology: SpacesimCloudModel.Morphology, body_id: String
+	h, morphology: StoichonCloudModel.Morphology, body_id: String
 ) -> void:
-	var map := SpacesimCloudField.bake(
-		SpacesimCloudField.seed_for(body_id, 0), morphology, TEST_WIDTH, TEST_HEIGHT
+	var map := StoichonCloudField.bake(
+		StoichonCloudField.seed_for(body_id, 0), morphology, TEST_WIDTH, TEST_HEIGHT
 	)
 	var data := map.get_data()
 	var width := map.get_width()
@@ -198,7 +198,7 @@ func _test_it_is_continuous_where_the_seam_is(
 	# interior step and still read as a line. So: approach the same direction from either side of the wrap,
 	# and compare that step with the step the field takes over the SAME angular distance anywhere else at
 	# that latitude. If the field closes, the two are the same order.
-	var closure := SpacesimCloudField.plan(SpacesimCloudField.seed_for(body_id, 0), morphology)
+	var closure := StoichonCloudField.plan(StoichonCloudField.seed_for(body_id, 0), morphology)
 	var worst_ratio := 0.0
 	var worst_latitude := 0.0
 	for degrees in range(-70, 71, 10):
@@ -237,13 +237,13 @@ func _test_it_is_continuous_where_the_seam_is(
 		var latitude := deg_to_rad(float(degrees))
 		for index in 24:
 			var lon := -PI + TAU * float(index) / 24.0
-			var here := SpacesimCloudField.meander_offset(
-				_direction(latitude, lon), morphology.ratio, closure.phase, SpacesimCloudField.MEANDER,
+			var here := StoichonCloudField.meander_offset(
+				_direction(latitude, lon), morphology.ratio, closure.phase, StoichonCloudField.MEANDER,
 				morphology.cells
 			)
-			var there := SpacesimCloudField.meander_offset(
+			var there := StoichonCloudField.meander_offset(
 				_direction(latitude + delta_latitude, lon), morphology.ratio, closure.phase,
-				SpacesimCloudField.MEANDER, morphology.cells
+				StoichonCloudField.MEANDER, morphology.cells
 			)
 			var jump := absf(there - here) / band_width
 			if jump > offset_worst:
@@ -259,7 +259,7 @@ func _test_it_is_continuous_where_the_seam_is(
 	# Sampling a cap around it must stay finite, in range, and continuous with the pole itself.
 	# **Through `plan()`, because that is what the bake reads** — the pole has to be right in the shipped
 	# field, not in a simplified copy of it that no longer exists.
-	var plan := SpacesimCloudField.plan(SpacesimCloudField.seed_for(body_id, 0), morphology)
+	var plan := StoichonCloudField.plan(StoichonCloudField.seed_for(body_id, 0), morphology)
 	var pole := _field_at(Vector3(0.0, 1.0, 0.0), plan)
 	var bad := 0
 	var worst := 0.0
@@ -283,10 +283,10 @@ func _direction(latitude: float, longitude: float) -> Vector3:
 
 
 ## One direction through the real field, with the plan the bake would have used.
-func _field_at(direction: Vector3, plan: SpacesimCloudField.Plan) -> float:
+func _field_at(direction: Vector3, plan: StoichonCloudField.Plan) -> float:
 	if plan.uniform:
 		return 1.0
-	return SpacesimCloudField.intensity_at(
+	return StoichonCloudField.intensity_at(
 		direction, plan.mix, plan.cells, plan.ratio, plan.feature,
 		plan.noise, plan.stack, plan.phase, plan.fine
 	)
@@ -294,14 +294,14 @@ func _field_at(direction: Vector3, plan: SpacesimCloudField.Plan) -> float:
 
 ## Every value in range, and the field's mean is the band profile's mean — the eddy term is written so the
 ## overall level does not move with the mixing strength, and clamping is the only thing that can shift it.
-func _test_the_values_are_sane(h, jupiter: SpacesimCloudModel.Morphology, earth: SpacesimCloudModel.Morphology, venus: SpacesimCloudModel.Morphology) -> void:
+func _test_the_values_are_sane(h, jupiter: StoichonCloudModel.Morphology, earth: StoichonCloudModel.Morphology, venus: StoichonCloudModel.Morphology) -> void:
 	_sane(h, "Jupiter", jupiter)
 	_sane(h, "Earth", earth)
 	_sane(h, "Venus", venus)
 
 
-func _sane(h, name: String, morphology: SpacesimCloudModel.Morphology) -> void:
-	var data := SpacesimCloudField.bake(5, morphology, 128, 64).get_data()
+func _sane(h, name: String, morphology: StoichonCloudModel.Morphology) -> void:
+	var data := StoichonCloudField.bake(5, morphology, 128, 64).get_data()
 	var low := 255
 	var high := 0
 	var total := 0
@@ -317,12 +317,12 @@ func _sane(h, name: String, morphology: SpacesimCloudModel.Morphology) -> void:
 
 
 ## The bake's cost, reported rather than asserted — it is what sizes the real one.
-func _test_what_a_bake_costs(h, earth: SpacesimCloudModel.Morphology) -> void:
-	var seed := SpacesimCloudField.seed_for("planet:earth", 0)
+func _test_what_a_bake_costs(h, earth: StoichonCloudModel.Morphology) -> void:
+	var seed := StoichonCloudField.seed_for("planet:earth", 0)
 	var per_pixel := 0.0
 	for size in [[128, 64], [256, 128], [512, 256]]:
 		var started := Time.get_ticks_usec()
-		SpacesimCloudField.bake(seed, earth, size[0], size[1])
+		StoichonCloudField.bake(seed, earth, size[0], size[1])
 		var elapsed := Time.get_ticks_usec() - started
 		var pixels: int = size[0] * size[1]
 		per_pixel = float(elapsed) / float(pixels)

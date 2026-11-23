@@ -13,16 +13,16 @@ func _init() -> void:
 		image.set_data(width, height, false, Image.FORMAT_L8, data)
 		# The OLD shape: three full passes plus a subsampled one.
 		var t := Time.get_ticks_usec()
-		var threshold := SpacesimCloudMaps.threshold_for(image, 0.5)
-		var exceed := SpacesimCloudMaps.mean_exceedance(image, threshold)
-		var opacity := SpacesimCloudMaps.mean_opacity(
+		var threshold := StoichonCloudMaps.threshold_for(image, 0.5)
+		var exceed := StoichonCloudMaps.mean_exceedance(image, threshold)
+		var opacity := StoichonCloudMaps.mean_opacity(
 			image, threshold, 1000.0
 		)
-		var quantiles := SpacesimSurfaceDistribution.quantiles_of(image)
+		var quantiles := StoichonSurfaceDistribution.quantiles_of(image)
 		var old_us := Time.get_ticks_usec() - t
 		# The NEW shape: one subsampled histogram, four numbers out of it.
 		t = Time.get_ticks_usec()
-		var measured := SpacesimCloudMaps.measure(image, 0.5, 1000.0)
+		var measured := StoichonCloudMaps.measure(image, 0.5, 1000.0)
 		var new_us := Time.get_ticks_usec() - t
 		print("BAKE %4dx%-4d %8d texels   old %7.1f ms   one histogram %6.1f ms   (threshold %.3f/%.3f  exceed %.3f/%.3f  opacity %.3f/%.3f)" % [
 			width, height, width * height, old_us / 1000.0, new_us / 1000.0,

@@ -29,13 +29,13 @@ func run(h, _root: Node) -> void:
 	print("  facet size")
 	_test_the_angle_is_the_knob(h)
 
-	var pixel := SpacesimLod.pixel_angle(FOV, HEIGHT)
+	var pixel := StoichonLod.pixel_angle(FOV, HEIGHT)
 	# The constant, in pixels at this screen — about 27 at 1080p and 70° of field.
-	var facet_px := SpacesimPatches.FACET_ANGLE / pixel
+	var facet_px := StoichonPatches.FACET_ANGLE / pixel
 	# **The root face's edge on the unit sphere**, which every level halves — the walk's own geometry, so the test
 	# measures the mesh the walk actually selects rather than a formula beside it.
-	var root_edge := SpacesimIcosphere.VERTICES[SpacesimIcosphere.FACES[0][0]].normalized().distance_to(
-		SpacesimIcosphere.VERTICES[SpacesimIcosphere.FACES[0][1]].normalized()
+	var root_edge := StoichonIcosphere.VERTICES[StoichonIcosphere.FACES[0][0]].normalized().distance_to(
+		StoichonIcosphere.VERTICES[StoichonIcosphere.FACES[0][1]].normalized()
 	)
 
 	h.check_near(facet_px, 26.9,
@@ -43,13 +43,13 @@ func run(h, _root: Node) -> void:
 
 	# --- on, close in: the finest facet is about N pixels ----------------------------------
 	var near := RADIUS + 1000.0
-	var near_chunks := SpacesimPatches.select(near, Vector3.UP, RADIUS, pixel, EPSILON)
+	var near_chunks := StoichonPatches.select(near, Vector3.UP, RADIUS, pixel, EPSILON)
 	var near_px := _finest_pixels(near_chunks, root_edge, 1000.0, pixel)
 	# **The count is what a judge needs** — the walk has no budget any more, so this is the whole answer for this eye.
 	# It was 88 chunks at this viewpoint under the curvature law alone, which permitted facets ~17,700 px across.
 	h.check(near_chunks.size() > 1000,
 		"at 1 km the apparent-size limit subdivides hard (%d chunks, %d triangles)"
-			% [near_chunks.size(), near_chunks.size() * SpacesimPatches.CHUNK_TRIANGLES])
+			% [near_chunks.size(), near_chunks.size() * StoichonPatches.CHUNK_TRIANGLES])
 	h.check(
 		near_px <= FACET_ANGLE_PX * 2.0,
 		"and the finest facet subtends about %d pixels, not thousands (%.1f px)" % [int(FACET_ANGLE_PX), near_px]
@@ -57,7 +57,7 @@ func run(h, _root: Node) -> void:
 
 	# --- on, far out: still about N pixels, which is the whole point ------------------------
 	var far := RADIUS + 100000.0
-	var far_chunks := SpacesimPatches.select(far, Vector3.UP, RADIUS, pixel, EPSILON)
+	var far_chunks := StoichonPatches.select(far, Vector3.UP, RADIUS, pixel, EPSILON)
 	var far_px := _finest_pixels(far_chunks, root_edge, 100000.0, pixel)
 	h.check(
 		far_px <= FACET_ANGLE_PX * 2.0,
@@ -74,8 +74,8 @@ func run(h, _root: Node) -> void:
 	# silhouette instead of coarsening it to a handful of triangles.
 	# **From far enough out the sagitta is the binding limit** — the crossover is `8·ε·R / A` metres, about 1.6 Gm for
 	# these numbers — so the walk past it is the curvature law alone, which is what a distant body's silhouette needs.
-	var angular := SpacesimPatches.FACET_ANGLE * 1.0e9 / RADIUS
-	var sagitta := SpacesimPatches.finest_edge_angle(RADIUS + 1.0e9, pixel, EPSILON, RADIUS)
+	var angular := StoichonPatches.FACET_ANGLE * 1.0e9 / RADIUS
+	var sagitta := StoichonPatches.finest_edge_angle(RADIUS + 1.0e9, pixel, EPSILON, RADIUS)
 	h.check(sagitta < angular,
 		"from 1 Gm the sagitta limit is the smaller one (%s against %s)"
 			% [str(sagitta), str(angular)])
@@ -84,24 +84,24 @@ func run(h, _root: Node) -> void:
 	# **`MIN_FACET_METRES` is a distance, derived per body from its radius**, so the ceiling is a metre the eye can see
 	# rather than a level number — Evert, 2026-10-28: *"lets make the minimum size for a triangle 1m on the sides."*
 	var low := RADIUS + 50.0
-	var low_chunks := SpacesimPatches.select(low, Vector3.UP, RADIUS, pixel, EPSILON)
+	var low_chunks := StoichonPatches.select(low, Vector3.UP, RADIUS, pixel, EPSILON)
 	var deepest_low := 0
 	for chunk in low_chunks:
 		deepest_low = maxi(deepest_low, int(chunk[2]))
 	var finest_metres := (
 		RADIUS * root_edge / pow(2.0, float(deepest_low))
-		/ float(1 << SpacesimPatches.CHUNK_SUBDIVISIONS)
+		/ float(1 << StoichonPatches.CHUNK_SUBDIVISIONS)
 	)
-	h.check(finest_metres >= SpacesimPatches.MIN_FACET_METRES,
+	h.check(finest_metres >= StoichonPatches.MIN_FACET_METRES,
 		"no triangle is smaller than the metre floor (%.2f m at depth %d)" % [finest_metres, deepest_low])
-	h.check(finest_metres < SpacesimPatches.MIN_FACET_METRES * 2.0,
+	h.check(finest_metres < StoichonPatches.MIN_FACET_METRES * 2.0,
 		"and the floor is where the tree stops, not two levels short (%.2f m)" % finest_metres)
-	h.check(deepest_low == SpacesimPatches.depth_ceiling_for(RADIUS),
+	h.check(deepest_low == StoichonPatches.depth_ceiling_for(RADIUS),
 		"which is the ceiling the body's own radius gives (%d)" % deepest_low)
 	# **A smaller body gets its own ceiling**, because the floor is a distance: the Moon stops shallower than Earth.
-	h.check(SpacesimPatches.depth_ceiling_for(1.7374e6) < deepest_low,
+	h.check(StoichonPatches.depth_ceiling_for(1.7374e6) < deepest_low,
 		"a moon stops at a shallower level than a planet (%d against %d)"
-			% [SpacesimPatches.depth_ceiling_for(1.7374e6), deepest_low])
+			% [StoichonPatches.depth_ceiling_for(1.7374e6), deepest_low])
 
 	# --- the law itself: a constant projected size where the screen term binds --------------
 	# **Above the altitude where the floor binds**, which for 1.6 m triangles and 2 degrees is about 46 m — below that
@@ -109,7 +109,7 @@ func run(h, _root: Node) -> void:
 	var constant := true
 	var first := 0.0
 	for altitude in [100.0, 1000.0, 10000.0, 100000.0]:
-		var angle := SpacesimPatches.finest_edge_angle(RADIUS + altitude, pixel, EPSILON, RADIUS)
+		var angle := StoichonPatches.finest_edge_angle(RADIUS + altitude, pixel, EPSILON, RADIUS)
 		var projected: float = RADIUS * angle / (altitude * pixel)
 		if first == 0.0:
 			first = projected
@@ -120,7 +120,7 @@ func run(h, _root: Node) -> void:
 			% first)
 	# **And below the floor's altitude the facets grow, which is the floor doing its job**: at 10 m the finest
 	# triangle is the same 1.6 m, so it subtends many more pixels rather than the tree growing finer.
-	var at_ten := SpacesimPatches.finest_edge_angle(RADIUS + 10.0, pixel, EPSILON, RADIUS)
+	var at_ten := StoichonPatches.finest_edge_angle(RADIUS + 10.0, pixel, EPSILON, RADIUS)
 	var ten_metres: float = RADIUS * at_ten / (10.0 * pixel)
 	h.check(ten_metres > first * 4.0,
 		"and below the floor's altitude the facets grow with the screen instead (%.0f px at 10 m, %.1f above)"
@@ -137,7 +137,7 @@ func _finest_pixels(chunks: Array, root_edge: float, ground_distance: float, pix
 	var deepest := 0
 	for chunk in chunks:
 		deepest = maxi(deepest, int(chunk[2]))
-	var edge := root_edge / pow(2.0, float(deepest)) / float(1 << SpacesimPatches.CHUNK_SUBDIVISIONS)
+	var edge := root_edge / pow(2.0, float(deepest)) / float(1 << StoichonPatches.CHUNK_SUBDIVISIONS)
 	return RADIUS * edge / (ground_distance * pixel)
 
 
@@ -146,14 +146,14 @@ func _finest_pixels(chunks: Array, root_edge: float, ground_distance: float, pix
 ## than no knob, so this walks the SAME viewpoint at three angles and asserts the count rises as the angle falls.
 func _test_the_angle_is_the_knob(h) -> void:
 	var distance: float = RADIUS + 1.0e4
-	var pixel := SpacesimLod.pixel_angle(FOV, HEIGHT)
-	var coarse: Array = SpacesimPatches.select(
+	var pixel := StoichonLod.pixel_angle(FOV, HEIGHT)
+	var coarse: Array = StoichonPatches.select(
 		distance, Vector3.UP, RADIUS, pixel, EPSILON, -1.0, deg_to_rad(8.0)
 	)
-	var def: Array = SpacesimPatches.select(
+	var def: Array = StoichonPatches.select(
 		distance, Vector3.UP, RADIUS, pixel, EPSILON, -1.0, deg_to_rad(2.0)
 	)
-	var fine: Array = SpacesimPatches.select(
+	var fine: Array = StoichonPatches.select(
 		distance, Vector3.UP, RADIUS, pixel, EPSILON, -1.0, deg_to_rad(0.5)
 	)
 	h.check(coarse.size() < def.size() and def.size() < fine.size(),
@@ -161,7 +161,7 @@ func _test_the_angle_is_the_knob(h) -> void:
 			% [coarse.size(), def.size(), fine.size()])
 	# **And the gate sees it**, which is the half that fails silently: the walk would be right and the ground would
 	# never rebuild if `walk_is_due` ignored the angle.
-	h.check(SpacesimPatches.walk_is_due(
+	h.check(StoichonPatches.walk_is_due(
 		distance, Vector3.UP, distance, Vector3.UP, pixel, EPSILON, RADIUS, EPSILON,
 		-1.0, -1.0, deg_to_rad(2.0), deg_to_rad(0.5)
 	), "and a change to the angle alone opens the rebuild gate, with the eye quite still")

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""build_star_catalogue.py — reduce the HYG catalogue into SpaceSim's compact star asset.
+"""build_star_catalogue.py — reduce the HYG catalogue into Stoichon's compact star asset.
 
-    python3 tools/build_star_catalogue.py --fetch --out addons/spacesim/sky/hyg_v44.stars
+    python3 tools/build_star_catalogue.py --fetch --out addons/stoichon/sky/hyg_v44.stars
     python3 tools/build_star_catalogue.py --csv /tmp/hyg_v44.csv --out ...
     python3 tools/build_star_catalogue.py --csv ... --report     # calibration numbers only
 
@@ -270,7 +270,7 @@ def report(stars, path, size):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Reduce HYG into SpaceSim's star asset.")
+    ap = argparse.ArgumentParser(description="Reduce HYG into Stoichon's star asset.")
     ap.add_argument("--csv", help="an already-downloaded hyg_v44.csv (or .csv.gz)")
     ap.add_argument("--fetch", action="store_true", help="download the source (verified)")
     ap.add_argument("--gz", default="/tmp/hyg_v44.csv.gz", help="where --fetch puts the download")

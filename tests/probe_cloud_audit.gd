@@ -14,13 +14,13 @@ const SOL_PATH := "res://systems/sol.tres"
 
 
 func _ready() -> void:
-	var sol: SpacesimSolarSystem = load(SOL_PATH)
-	var scene := SpacesimSystemScene.from_content(sol)
+	var sol: StoichonSolarSystem = load(SOL_PATH)
+	var scene := StoichonSystemScene.from_content(sol)
 	scene.build(self)
-	var materials := SpacesimMaterialTable.engine_table()
-	var luminosity := SpacesimStarModel.luminosity(scene.star().content)
+	var materials := StoichonMaterialTable.engine_table()
+	var luminosity := StoichonStarModel.luminosity(scene.star().content)
 
-	print("SpaceSim condensation levels")
+	print("Stoichon condensation levels")
 	print("%-14s %-14s %8s %8s %9s %9s  %s" % [
 		"body", "species", "x", "T_cond", "height km", "p (bar)", "regime"
 	])
@@ -30,18 +30,18 @@ func _ready() -> void:
 		var body := scene.body_by_id(content.id)
 		if body == null:
 			continue
-		var gravity := SpacesimAtmosphereModel.surface_gravity(content)
-		var equilibrium := SpacesimAtmosphereModel.equilibrium_temperature(
+		var gravity := StoichonAtmosphereModel.surface_gravity(content)
+		var equilibrium := StoichonAtmosphereModel.equilibrium_temperature(
 			content, materials, luminosity, body.position.distance_to(scene.star().position)
 		)
-		for level in SpacesimAtmosphereModel.condensation_levels(
+		for level in StoichonAtmosphereModel.condensation_levels(
 				content.atmosphere, materials, gravity, equilibrium, content):
-			var condensation: SpacesimAtmosphereModel.Condensation = level
+			var condensation: StoichonAtmosphereModel.Condensation = level
 			var fraction: float = content.atmosphere.species.get(condensation.species, 0.0)
 			print("%-14s %-14s %8.4f %8.1f %9.1f %9.3f  %s" % [
 				content.id.replace("planet:", "").replace("moon:", "m."),
 				condensation.species, fraction,
-				SpacesimAtmosphereModel.condensation_temperature_at(
+				StoichonAtmosphereModel.condensation_temperature_at(
 					materials.by_name(condensation.species), fraction,
 					content.atmosphere.surface_pressure
 				),
@@ -77,9 +77,9 @@ func _ready() -> void:
 
 func _regime_name(regime: int) -> String:
 	match regime:
-		SpacesimAtmosphereModel.Condensation.Regime.LEVEL:
+		StoichonAtmosphereModel.Condensation.Regime.LEVEL:
 			return "LEVEL"
-		SpacesimAtmosphereModel.Condensation.Regime.DEEP:
+		StoichonAtmosphereModel.Condensation.Regime.DEEP:
 			return "DEEP (below what we model)"
 		_:
 			return "NONE (never condenses)"

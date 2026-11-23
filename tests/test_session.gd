@@ -4,24 +4,24 @@ extends RefCounted
 ## Runs against a real git repository in a temp directory, like the save suite — the point of the
 ## session is what it writes to git and what it reads back, so a mock would test nothing.
 
-const Session := preload("res://addons/spacesim/save/session.gd")
-const Repo := preload("res://addons/spacesim/save/world_repo.gd")
-const Player := preload("res://addons/spacesim/player/player.gd")
-const PlayerPanel := preload("res://addons/spacesim/player/player_panel.gd")
-const Dialog := preload("res://addons/spacesim/ui/dialog.gd")
-const Location := preload("res://addons/spacesim/coordinate/location.gd")
+const Session := preload("res://addons/stoichon/save/session.gd")
+const Repo := preload("res://addons/stoichon/save/world_repo.gd")
+const Player := preload("res://addons/stoichon/player/player.gd")
+const PlayerPanel := preload("res://addons/stoichon/player/player_panel.gd")
+const Dialog := preload("res://addons/stoichon/ui/dialog.gd")
+const Location := preload("res://addons/stoichon/coordinate/location.gd")
 const PlayerShip := preload("res://game/player_ship.gd")
 const Ui := preload("res://tests/ui_fixture.gd")
 
 const SYSTEM_PATH := "res://systems/playground.tres"
-const TEST_ROOT := "/tmp/spacesim-session-test"
+const TEST_ROOT := "/tmp/stoichon-session-test"
 
 
 func run(h, root: Node) -> void:
 	print("  session")
 	_clean()
 
-	var system := SpacesimSystemScene.from_file(SYSTEM_PATH)
+	var system := StoichonSystemScene.from_file(SYSTEM_PATH)
 	system.build(root)
 	var ship := PlayerShip.create()
 	PlayerShip.place(system, ship)
@@ -42,7 +42,7 @@ func run(h, root: Node) -> void:
 	_clean()
 
 
-func _test_first_run(h, system: SpacesimSystemScene) -> void:
+func _test_first_run(h, system: StoichonSystemScene) -> void:
 	var session := _session()
 	h.check(not session.repo.exists(), "there is no repository to begin with")
 	h.check(session.start(system)["ok"], "starting brings one up")
@@ -53,7 +53,7 @@ func _test_first_run(h, system: SpacesimSystemScene) -> void:
 	h.check(session.player.display_name() == Player.DEFAULT_NAME, "and a player at their defaults")
 
 
-func _test_starting_again(h, system: SpacesimSystemScene) -> void:
+func _test_starting_again(h, system: StoichonSystemScene) -> void:
 	var session := _session()
 	h.check(session.start(system)["ok"], "starting again")
 	h.check(session.message == "the last save", "picks up the last save rather than starting over")
@@ -61,7 +61,7 @@ func _test_starting_again(h, system: SpacesimSystemScene) -> void:
 	h.check(session.repo.histories().size() == 2, "and did not make another history")
 
 
-func _test_saving(h, system: SpacesimSystemScene) -> void:
+func _test_saving(h, system: StoichonSystemScene) -> void:
 	var session := _session()
 	session.player.attributes["Credits"] = 500
 	session.player.location = Location.new("planet:terra/surface", Vector3(10.0, 0.0, 20.0))
@@ -72,7 +72,7 @@ func _test_saving(h, system: SpacesimSystemScene) -> void:
 	h.check(session.label(system).contains("landed on Terra"), "a label says where you were: %s" % session.label(system))
 
 
-func _test_the_do_over(h, system: SpacesimSystemScene) -> void:
+func _test_the_do_over(h, system: StoichonSystemScene) -> void:
 	var session := _session()
 	session.player.attributes["Credits"] = 999
 	session.save(system)
@@ -115,7 +115,7 @@ func _test_the_do_over(h, system: SpacesimSystemScene) -> void:
 	)
 
 
-func _test_deleting_a_save(h, system: SpacesimSystemScene) -> void:
+func _test_deleting_a_save(h, system: StoichonSystemScene) -> void:
 	var session := _session()
 	var revision_count := session.repo.saves().size()
 	var newest: String = session.saves()[0]["hash"]
@@ -139,7 +139,7 @@ func _test_deleting_a_save(h, system: SpacesimSystemScene) -> void:
 	)
 
 
-func _test_the_clock_moves_on(h, system: SpacesimSystemScene) -> void:
+func _test_the_clock_moves_on(h, system: StoichonSystemScene) -> void:
 	var session := _session()
 	var player_data := session.player.to_dictionary()
 
@@ -160,7 +160,7 @@ func _test_the_clock_moves_on(h, system: SpacesimSystemScene) -> void:
 
 ## **Two clocks, both written, both read back** — Evert, 2026-11-08. They tick together today, and the save
 ## has to be able to tell them apart the moment they stop doing so.
-func _test_both_clocks(h, system: SpacesimSystemScene) -> void:
+func _test_both_clocks(h, system: StoichonSystemScene) -> void:
 	var session := _session()
 	var started := session.world_time
 
@@ -207,7 +207,7 @@ func _test_both_clocks(h, system: SpacesimSystemScene) -> void:
 
 ## The clock advance and the two-clock save, which need a session and nothing else.
 
-func _test_putting_the_ship_back(h, system: SpacesimSystemScene, ship: Node3D) -> void:
+func _test_putting_the_ship_back(h, system: StoichonSystemScene, ship: Node3D) -> void:
 	var away := Location.new("planet:terra/surface", Vector3(5.0, 0.5, 8.0))
 	h.check(system.place_observer(away), "the ship can be put back where it was")
 	h.check(
@@ -242,7 +242,7 @@ func _test_putting_the_ship_back(h, system: SpacesimSystemScene, ship: Node3D) -
 ## What the personal-data screen is now: what the player is and what they carry, and two buttons that
 ## lead elsewhere. **The browser of histories and saves is not here** — it is the Saved Games screen,
 ## behind a button, and the check that it is gone is that its sections cannot be found.
-func _test_the_player_screen(h, root: Node, system: SpacesimSystemScene) -> void:
+func _test_the_player_screen(h, root: Node, system: StoichonSystemScene) -> void:
 	var layer := CanvasLayer.new()
 	root.add_child(layer)
 	var session := _session()
@@ -302,7 +302,7 @@ func _test_the_player_screen(h, root: Node, system: SpacesimSystemScene) -> void
 
 ## The rule the screen is built on: **names are the only thing a person types**, and the word on the
 ## button says what commits it.
-func _test_editing_a_name(h, root: Node, system: SpacesimSystemScene) -> void:
+func _test_editing_a_name(h, root: Node, system: StoichonSystemScene) -> void:
 	var layer := CanvasLayer.new()
 	root.add_child(layer)
 	var session := _session()
@@ -369,7 +369,7 @@ func _test_the_dialog(h, root: Node) -> void:
 	layer.free()
 
 
-func _session() -> SpacesimSession:
+func _session() -> StoichonSession:
 	return Session.new(Repo.new(TEST_ROOT))
 
 

@@ -30,7 +30,7 @@ extends Node
 ## transport; smaller is a body that redistributes, and Earth's annual profile sits near 0.25.
 
 const SOL_PATH := "res://systems/sol.tres"
-const OUT_DIR := "/tmp/spacesim-clouds/gate"
+const OUT_DIR := "/tmp/stoichon-clouds/gate"
 const WIDTH := 1024
 const HEIGHT := 512
 
@@ -40,22 +40,22 @@ const GATE_WIDTH := 2.0
 
 func _ready() -> void:
 	DirAccess.make_dir_recursive_absolute(OUT_DIR)
-	var sol: SpacesimSolarSystem = load(SOL_PATH)
+	var sol: StoichonSolarSystem = load(SOL_PATH)
 	if sol == null:
 		print("PROBE: %s did not load" % SOL_PATH)
 		get_tree().quit(1)
 		return
-	var scene := SpacesimSystemScene.from_content(sol)
+	var scene := StoichonSystemScene.from_content(sol)
 	if scene == null:
 		print("PROBE: the scene did not wrap the system")
 		get_tree().quit(1)
 		return
 	scene.build(self)
 
-	var materials := SpacesimMaterialTable.engine_table()
-	var luminosity := SpacesimStarModel.luminosity(scene.star().content)
+	var materials := StoichonMaterialTable.engine_table()
+	var luminosity := StoichonStarModel.luminosity(scene.star().content)
 
-	print("SpaceSim supersaturation gate probe")
+	print("Stoichon supersaturation gate probe")
 	print("q sweeps the pole-to-equator gradient; A the cell's temperature anomaly in kelvin")
 	print("")
 
@@ -71,17 +71,17 @@ func _ready() -> void:
 
 
 func _report(
-	body: SpacesimSceneBody, materials: SpacesimMaterialTable, luminosity: float, star_position: Vector3
+	body: StoichonSceneBody, materials: StoichonMaterialTable, luminosity: float, star_position: Vector3
 ) -> void:
 	var content := body.content
-	var morphology := SpacesimCloudModel.morphology(
+	var morphology := StoichonCloudModel.morphology(
 		content, materials, luminosity, body.position.distance_to(star_position)
 	)
-	var gravity := SpacesimAtmosphereModel.surface_gravity(content)
-	var equilibrium := SpacesimAtmosphereModel.equilibrium_temperature(
+	var gravity := StoichonAtmosphereModel.surface_gravity(content)
+	var equilibrium := StoichonAtmosphereModel.equilibrium_temperature(
 		content, materials, luminosity, body.position.distance_to(star_position)
 	)
-	var levels := SpacesimCloudModel.layers(content.atmosphere, materials, gravity, equilibrium)
+	var levels := StoichonCloudModel.layers(content.atmosphere, materials, gravity, equilibrium)
 
 	print("%s  %s, cells %.2f, %d level(s)" % [
 		body.id, _banding_name(morphology.banding), morphology.cells, levels.size()
@@ -92,18 +92,18 @@ func _report(
 		return
 
 	# **The level seen from outside**, which is the first in `layers()`'s highest-first order.
-	var level: SpacesimAtmosphereModel.Condensation = levels[0]
+	var level: StoichonAtmosphereModel.Condensation = levels[0]
 	var species := materials.by_name(level.species)
 	if species == null:
 		print("  %s has no species row" % level.species)
 		print("")
 		return
 	var condensing := species.condensation_temperature
-	var surface_temperature := SpacesimAtmosphereModel.surface_temperature(
+	var surface_temperature := StoichonAtmosphereModel.surface_temperature(
 		content.atmosphere, materials, gravity, equilibrium
 	)
-	var lapse := SpacesimAtmosphereModel.lapse_rate(content.atmosphere, materials, gravity)
-	var tropopause := SpacesimAtmosphereModel.tropopause_temperature(equilibrium)
+	var lapse := StoichonAtmosphereModel.lapse_rate(content.atmosphere, materials, gravity)
+	var tropopause := StoichonAtmosphereModel.tropopause_temperature(equilibrium)
 
 	print("  %s at %.0f m; T_cond %.1f K, T_surface %.1f K, lapse %.5f K/m, tropopause %.1f K" % [
 		level.species, level.height, condensing, surface_temperature, lapse, tropopause
@@ -139,7 +139,7 @@ func _report(
 	var favouring := PackedFloat32Array()
 	for row in HEIGHT:
 		var latitude := PI * 0.5 - (float(row) + 0.5) / float(HEIGHT) * PI
-		favouring.append(SpacesimCloudModel.condensation_favouring(latitude, morphology.cells))
+		favouring.append(StoichonCloudModel.condensation_favouring(latitude, morphology.cells))
 	print("  condensation_favouring alone: %.0f rises, min %.3f max %.3f" % [
 		_rises_in(favouring), _lowest(favouring), _highest(favouring)
 	])
@@ -158,11 +158,11 @@ func _gate_profile(
 		var cos_latitude := maxf(cos(latitude), 0.0)
 		# The pole-to-equator gradient, normalised to the model's own surface temperature.
 		var surface := surface_temperature * pow(cos_latitude, q) / mean_cos_q
-		var at_level := SpacesimAtmosphereModel.temperature_at(
+		var at_level := StoichonAtmosphereModel.temperature_at(
 			height, surface, lapse, tropopause
 		)
 		# **Vertical motion as a temperature anomaly at the level**, not as a coverage factor.
-		var favouring := SpacesimCloudModel.condensation_favouring(latitude, cells)
+		var favouring := StoichonCloudModel.condensation_favouring(latitude, cells)
 		at_level -= amplitude * (2.0 * favouring - 1.0)
 		var margin := condensing - at_level
 		profile.append(smoothstep(-GATE_WIDTH, GATE_WIDTH, margin))
@@ -219,11 +219,11 @@ func _highest(profile: PackedFloat32Array) -> float:
 
 func _banding_name(banding: int) -> String:
 	match banding:
-		SpacesimCloudModel.Banding.BANDED:
+		StoichonCloudModel.Banding.BANDED:
 			return "BANDED"
-		SpacesimCloudModel.Banding.SHREDDED:
+		StoichonCloudModel.Banding.SHREDDED:
 			return "SHREDDED"
-		SpacesimCloudModel.Banding.FEATURELESS:
+		StoichonCloudModel.Banding.FEATURELESS:
 			return "FEATURELESS"
 		_:
 			return "UNKNOWN"

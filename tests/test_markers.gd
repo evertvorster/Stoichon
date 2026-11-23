@@ -1,8 +1,8 @@
 extends RefCounted
 ## Navigation markers: the set for one frame, and the geometry that draws it.
 
-const Markers := preload("res://addons/spacesim/navigation/markers.gd")
-const Overlay := preload("res://addons/spacesim/navigation/overlay.gd")
+const Markers := preload("res://addons/stoichon/navigation/markers.gd")
+const Overlay := preload("res://addons/stoichon/navigation/overlay.gd")
 
 
 ## **A marker target is a position and a name, not a node** — bodies and fragments arrive the same way.
@@ -282,7 +282,7 @@ func _test_a_moon_gives_up_its_label_only_when_crowded(h, root: Node) -> void:
 	var other := Node3D.new()
 	container.add_child(other)
 
-	var body := SpacesimSceneBody.new()
+	var body := StoichonSceneBody.new()
 	body.node = planet
 	markers.orbits[moon] = body
 
@@ -398,10 +398,10 @@ func _test_a_projection_in_a_subviewport_is_converted(h) -> void:
 
 
 func _test_distance_format(h) -> void:
-	h.check(SpacesimMarkers.format_distance(1.5e9) == "1.50 Gm", "gigametres")
-	h.check(SpacesimMarkers.format_distance(2500.0) == "2.5 km", "kilometres")
-	h.check(SpacesimMarkers.format_distance(12.0) == "12 m", "metres")
-	h.check(SpacesimMarkers.format_distance(INF) == "--", "and nothing at all reads as dashes")
+	h.check(StoichonMarkers.format_distance(1.5e9) == "1.50 Gm", "gigametres")
+	h.check(StoichonMarkers.format_distance(2500.0) == "2.5 km", "kilometres")
+	h.check(StoichonMarkers.format_distance(12.0) == "12 m", "metres")
+	h.check(StoichonMarkers.format_distance(INF) == "--", "and nothing at all reads as dashes")
 
 
 ## **A place is marked however far away it is.**
@@ -424,7 +424,7 @@ func _test_a_place_has_no_range_limit(h, root: Node) -> void:
 		moon.position = Vector3(float(index) * 1.0e6, 0.0, 0.0)
 		container.add_child(moon)
 		nearby.append(moon)
-		var parent := SpacesimSceneBody.new()
+		var parent := StoichonSceneBody.new()
 		parent.node = star
 		markers.orbits[moon] = parent
 
@@ -458,7 +458,7 @@ func _test_the_nearest_moons_are_marked(h, root: Node) -> void:
 	var planet := Node3D.new()
 	planet.position = Vector3(5000.0, 0.0, 0.0)
 	container.add_child(planet)
-	var body := SpacesimSceneBody.new()
+	var body := StoichonSceneBody.new()
 	body.node = planet
 
 	markers.context_targets = [planet]

@@ -14,7 +14,7 @@ const STEPS := 24
 
 
 func _init() -> void:
-	SpacesimPatches.clear_cache()
+	StoichonPatches.clear_cache()
 	var eye := Vector3.UP * (RADIUS + 10.0)
 	var clears := 0
 	var previous := 0
@@ -22,12 +22,12 @@ func _init() -> void:
 	for step in STEPS:
 		# Walk 200 m along the ground each step: the same thing a slow flight does to the selection.
 		eye = (Vector3.UP * (RADIUS + 10.0) + Vector3.RIGHT * STEP_METRES * step).normalized() * (RADIUS + 10.0)
-		var chunks := SpacesimPatches.select(eye, eye.normalized(), RADIUS, PIXEL, EPSILON)
-		var before := SpacesimPatches.cached_chunks()
+		var chunks := StoichonPatches.select(eye, eye.normalized(), RADIUS, PIXEL, EPSILON)
+		var before := StoichonPatches.cached_chunks()
 		var started := Time.get_ticks_usec()
-		SpacesimPatches.arrays_of(chunks, RADIUS, eye.normalized() * RADIUS)
+		StoichonPatches.arrays_of(chunks, RADIUS, eye.normalized() * RADIUS)
 		var elapsed := Time.get_ticks_usec() - started
-		var after := SpacesimPatches.cached_chunks()
+		var after := StoichonPatches.cached_chunks()
 		if after < before:
 			clears += 1
 		print("%4d  %6d  %6d  %7.1f  %+6d%s" % [
@@ -36,6 +36,6 @@ func _init() -> void:
 		])
 		previous = after
 	print("cleared %d times in %d steps of %.0f m (limit %d)" % [
-		clears, STEPS, STEP_METRES, SpacesimPatches.CHUNK_CACHE_LIMIT
+		clears, STEPS, STEP_METRES, StoichonPatches.CHUNK_CACHE_LIMIT
 	])
 	quit(0)

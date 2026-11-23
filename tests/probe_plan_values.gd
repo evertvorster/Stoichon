@@ -1,6 +1,6 @@
 extends SceneTree
 func _init() -> void:
-	var p := SpacesimSurfaceField.plan("planet:earth", 6.371e6)
+	var p := StoichonSurfaceField.plan("planet:earth", 6.371e6)
 	print("plan: seed %d  ridge_frequency %.3f  ridge_octaves %d  ridge_strength %.3f" % [
 		p.seed, p.ridge_frequency, p.ridge_octaves, p.ridge_strength])
 	print("      gain %.4f  lacunarity %.2f  belt_width %.4f  plate_phase %.3f  amplitude %.1f m" % [

@@ -1,4 +1,4 @@
-# SpaceSim — agent notes
+# Stoichon — agent notes
 
 Supplement to `~/.pi/agent/AGENTS.md`, which applies here in full. **This file is short on purpose**: the
 maps it points at are the documentation, and a second copy of them is how both go stale.
@@ -7,13 +7,13 @@ maps it points at are the documentation, and a second copy of them is how both g
 
 | | |
 |---|---|
-| `~/.pi/agent/skills/spacesim/SKILL.md` | **the process map** — the two trees, the toolchain, the working rhythm, which skills to load and when, the traps. Load it whenever work here starts. |
-| `~/Insync/evorster@gmail.com/Google Drive/Notes/Projects/Programming/SpaceSim/Where to read.md` | **the subject map** — one row per subsystem: the document that governs it, the code it lives in, the tests that hold it. Open it before touching a subsystem you have not touched this session. |
+| `~/.pi/agent/skills/stoichon/SKILL.md` | **the process map** — the two trees, the toolchain, the working rhythm, which skills to load and when, the traps. Load it whenever work here starts. |
+| `~/Insync/evorster@gmail.com/Google Drive/Notes/Projects/Programming/Stoichon/Where to read.md` | **the subject map** — one row per subsystem: the document that governs it, the code it lives in, the tests that hold it. Open it before touching a subsystem you have not touched this session. |
 | `docs/API.md` | what the engine exposes, as it is implemented. **Updated in the same commit as an interface change.** |
 
 ## The rules that bite here
 
-- **SpaceSim is the engine; Cladogenesis is one story on it.** Capabilities live in `addons/spacesim/`, game
+- **Stoichon is the engine; Cladogenesis is one story on it.** Capabilities live in `addons/stoichon/`, game
   code in `game/`, content in `systems/*.tres`. A system file must not require an engine change.
 - **Derive, don't author.** A body's mass, air, temperature, albedo and terrain all come out of what it is
   made of. A constant that is neither derived nor measured is marked `A GUESS:` with what would settle it;

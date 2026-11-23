@@ -15,8 +15,8 @@ const STEP := 1.0   ## metres of ground a frame
 
 
 func _ready() -> void:
-	var sol: SpacesimSolarSystem = load(SOL_PATH)
-	var scene := SpacesimSystemScene.from_content(sol)
+	var sol: StoichonSolarSystem = load(SOL_PATH)
+	var scene := StoichonSystemScene.from_content(sol)
 	scene.build(self)
 	var earth := scene.body_by_id("planet:earth")
 

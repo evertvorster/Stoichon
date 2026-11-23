@@ -19,7 +19,7 @@ const OCEAN := 0.71
 
 
 func _init() -> void:
-	var cache := SpacesimSurfaceDistribution.new()
+	var cache := StoichonSurfaceDistribution.new()
 	var entry := cache.prepare("planet:earth", RADIUS)
 	if not entry.error.is_empty():
 		print("no table: %s" % entry.error)
@@ -46,6 +46,6 @@ func _init() -> void:
 		below += 1.0
 		deficit += (sea - entry.value_at(share)) / float(steps)
 	print("    mean deficit below sea level  %+.4f field units = %.0f m" % [deficit, deficit * relief])
-	# **The device must be freed**, or the process segfaults at exit — the trap `SpacesimSurfaceGpu` documents.
+	# **The device must be freed**, or the process segfaults at exit — the trap `StoichonSurfaceGpu` documents.
 	cache.close()
 	quit(0)

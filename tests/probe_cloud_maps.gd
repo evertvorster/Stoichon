@@ -37,7 +37,7 @@ var _thread_note := "not attempted"
 
 func _initialize() -> void:
 	print("=== 1. where one map stops being enough ===")
-	var pixel_angle := SpacesimLod.pixel_angle(FOV, RENDER_HEIGHT)
+	var pixel_angle := StoichonLod.pixel_angle(FOV, RENDER_HEIGHT)
 	# **GDScript's `%` has no `%e` and no `%g`** — both are runtime errors rather than formatting
 	# surprises, and they sail through `--check-only`. Scale the number instead.
 	print("pixel angle at %.0fp / %.0f deg: %.3f mrad" % [RENDER_HEIGHT, FOV, pixel_angle * 1000.0])
@@ -93,17 +93,17 @@ func _initialize() -> void:
 		])
 	# The main-thread baseline for comparison: the largest icosphere the project builds.
 	var started := Time.get_ticks_usec()
-	var ico := SpacesimIcosphere.mesh_at(SpacesimLod.MAX_LEVEL)
+	var ico := StoichonIcosphere.mesh_at(StoichonLod.MAX_LEVEL)
 	var elapsed := Time.get_ticks_usec() - started
 	print("baseline: icosphere level %d on the main thread, %d surface(s), %.2f ms" % [
-		SpacesimLod.MAX_LEVEL, ico.get_surface_count(), elapsed / 1000.0
+		StoichonLod.MAX_LEVEL, ico.get_surface_count(), elapsed / 1000.0
 	])
 	print("")
 	print("(4. the device's texture ceiling is reported from the first frame, where the")
 	print("RenderingDevice exists.)")
 
 
-## Builds a subdivided grid off the main thread. Deliberately not `SpacesimIcosphere.mesh_at()`, whose
+## Builds a subdivided grid off the main thread. Deliberately not `StoichonIcosphere.mesh_at()`, whose
 ## level cache is shared static state and would be a hazard rather than a test.
 func _build_off_thread() -> void:
 	var side := 64

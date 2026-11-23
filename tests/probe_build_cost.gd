@@ -17,22 +17,22 @@ const RUNS := 3
 
 func _init() -> void:
 	for altitude in [1000.0, 10.0]:
-		var chunks := SpacesimPatches.select(
+		var chunks := StoichonPatches.select(
 			RADIUS + altitude, Vector3.UP, RADIUS, PIXEL, EPSILON
 		)
 		var origin := Vector3.UP * RADIUS
-		var triangles := SpacesimPatches.triangle_count(chunks)
+		var triangles := StoichonPatches.triangle_count(chunks)
 		# Warm the chunk cache: a cold build is a different (and much bigger) number, reported separately.
-		SpacesimPatches.arrays_of(chunks, RADIUS, origin)
+		StoichonPatches.arrays_of(chunks, RADIUS, origin)
 
-		var flat: Array = SpacesimPatches.arrays_of(chunks, RADIUS, origin)
-		var lines: Array = SpacesimPatches.lines_of(chunks, RADIUS, origin)
+		var flat: Array = StoichonPatches.arrays_of(chunks, RADIUS, origin)
+		var lines: Array = StoichonPatches.lines_of(chunks, RADIUS, origin)
 		var flat_vertices: int = (flat[0] as PackedVector3Array).size()
 		var line_vertices: int = (lines[0] as PackedVector3Array).size()
-		var flat_us := _time(func(): return SpacesimPatches.arrays_of(chunks, RADIUS, origin))
-		var lines_us := _time(func(): return SpacesimPatches.lines_of(chunks, RADIUS, origin))
-		var flat_mesh := _time(func(): return SpacesimPatches.mesh_from(flat))
-		var line_mesh := _time(func(): return SpacesimPatches.lines_mesh_from(lines))
+		var flat_us := _time(func(): return StoichonPatches.arrays_of(chunks, RADIUS, origin))
+		var lines_us := _time(func(): return StoichonPatches.lines_of(chunks, RADIUS, origin))
+		var flat_mesh := _time(func(): return StoichonPatches.mesh_from(flat))
+		var line_mesh := _time(func(): return StoichonPatches.lines_mesh_from(lines))
 
 		print("%.0f m  %d chunks  %d tri" % [altitude, chunks.size(), triangles])
 		print("  flat   arrays_of         %7.1f ms  %8d verts" % [flat_us, flat_vertices])

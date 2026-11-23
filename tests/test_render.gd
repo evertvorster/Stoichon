@@ -15,12 +15,12 @@ const SOL_PATH := "res://systems/sol.tres"
 
 func run(h, root: Node) -> void:
 	print("  render layers")
-	var sol: SpacesimSolarSystem = load(SOL_PATH)
+	var sol: StoichonSolarSystem = load(SOL_PATH)
 	h.check(sol != null, "Sol loads")
 	if sol == null:
 		return
 
-	var scene := SpacesimSystemScene.from_content(sol)
+	var scene := StoichonSystemScene.from_content(sol)
 	h.check(scene != null, "a scene wraps it")
 	if scene == null:
 		return
@@ -52,7 +52,7 @@ func run(h, root: Node) -> void:
 
 ## **F6: the detail ladder exists only where there is a sphere to put it on.**
 ##
-## The predicate is [[SpaceSim/Levels of Detail|Levels of Detail]] §4's table — *does this body draw a reference
+## The predicate is [[Stoichon/Levels of Detail|Levels of Detail]] §4's table — *does this body draw a reference
 ## sphere?* — and the content already encodes it: a gas giant's datum is a reference **pressure**, so it carries no
 ## `surface` register, and a star's photosphere is its disc, drawn by the star's own shader. Both used to be handed
 ## the full eight-rung ladder, which meant noise evaluated on every pixel of a body whose visible face is a deck.
@@ -75,8 +75,8 @@ func run(h, root: Node) -> void:
 ## What must hold: the shader calls `surface_height` with a footprint (so the octave count is the pixel's), every
 ## `field_*` uniform it declares is published (`null` from an unpublished name throws once per body), and no height
 ## raster is sampled at all.
-func _test_the_ground_is_the_field(h, earth: SpacesimSceneBody) -> void:
-	var code := FileAccess.get_file_as_string("res://addons/spacesim/render/body_surface.gdshader")
+func _test_the_ground_is_the_field(h, earth: StoichonSceneBody) -> void:
+	var code := FileAccess.get_file_as_string("res://addons/stoichon/render/body_surface.gdshader")
 	h.check(code.contains("surface_height(up, plan, footprint_angle)"),
 		"the height is the field, evaluated at the resolution the pixel can resolve")
 	# **The plan lives in its OWN include, beside the field** — the ocean evaluates the same field to find the
@@ -86,7 +86,7 @@ func _test_the_ground_is_the_field(h, earth: SpacesimSceneBody) -> void:
 	# non-opaque uniform outside a block there. With the uniforms inside it, both kernels stopped compiling and the
 	# heights came back empty — so the surface published untranslated and said nothing, from 2026-11-01 to 2026-11-02.
 	var plan_file := FileAccess.get_file_as_string(
-		"res://addons/spacesim/system/model/surface_plan.gdshaderinc"
+		"res://addons/stoichon/system/model/surface_plan.gdshaderinc"
 	)
 	h.check(plan_file.contains("SurfacePlan surface_plan()"),
 		"from the plan the host publishes, one place — `surface_plan.gdshaderinc`")
@@ -96,7 +96,7 @@ func _test_the_ground_is_the_field(h, earth: SpacesimSceneBody) -> void:
 	# compute assembly. A check rather than a note, because the failure was invisible in the draw path.
 	var declares_uniform := false
 	for line in FileAccess.get_file_as_string(
-		"res://addons/spacesim/system/model/surface_field.gdshaderinc"
+		"res://addons/stoichon/system/model/surface_field.gdshaderinc"
 	).split("\n"):
 		if line.strip_edges().begins_with("uniform "):
 			declares_uniform = true
@@ -140,7 +140,7 @@ func _test_the_ground_is_the_field(h, earth: SpacesimSceneBody) -> void:
 	# stationary, and just adjusting the camera angle, there is a line that sweeps through the images that seems to
 	# invert the shadow direction"* — seen on Luna, where the ground is grey and the shading is all there is.
 	var field_source := FileAccess.get_file_as_string(
-		"res://addons/spacesim/system/model/surface_field.gdshaderinc"
+		"res://addons/stoichon/system/model/surface_field.gdshaderinc"
 	)
 	h.check(field_source.contains("weight += amplitude * fade"),
 		"the band-limited sum's divisor tapers with each octave's fade, so the height cannot step")
@@ -195,7 +195,7 @@ func _test_the_ground_is_the_field(h, earth: SpacesimSceneBody) -> void:
 ## background, so wiring a sky quietly changes how every body is lit. Here that is deliberate
 ## (Evert, 2026-10-14: *"The sky should be the ambient light source"*), which is why it is asserted
 ## rather than left to whoever notices the night side looking different.
-func _test_the_background_is_the_real_sky(h, scene: SpacesimSystemScene) -> void:
+func _test_the_background_is_the_real_sky(h, scene: StoichonSystemScene) -> void:
 	var environment := scene.environment
 	h.check(environment != null, "the scene built an environment")
 	if environment == null:
@@ -222,7 +222,7 @@ func _test_the_background_is_the_real_sky(h, scene: SpacesimSystemScene) -> void
 	# **The stars are not this shader's business any more.** They were a per-pixel cell search here, and a cell
 	# search makes the pixel the unit: a star near a cell boundary is visited by some of the pixels that should
 	# carry it and not others, which reads as stars dimming and a few vanishing as the camera turns. They are
-	# drawn as objects now — one quad each, in `SpacesimCelestialDome` — and what is checked here is that this
+	# drawn as objects now — one quad each, in `StoichonCelestialDome` — and what is checked here is that this
 	# shader has let go of them, because half a star field left behind is worse than none.
 	h.check(not code.contains("u_stars") and not code.contains("MAX_PER_CELL"),
 		"and carries no star field: the catalogue is drawn as objects, not evaluated per pixel")
@@ -247,22 +247,22 @@ func _test_the_background_is_the_real_sky(h, scene: SpacesimSystemScene) -> void
 ## Three points of the Lambert phase function are fixed rather than fitted, and the fourth is the
 ## regression: the clamped cosine it replaced returned **exactly zero** for every body past the half
 ## moon, so a crescent filling the frame contributed nothing anywhere its brightness was asked for. The
-## exposure's own sum over the view is gone — `SpacesimExposurePass` meters the frame — and
-## `SpacesimLuminance.disc_luminance`, which colours the point of light, is what still asks.
+## exposure's own sum over the view is gone — `StoichonExposurePass` meters the frame — and
+## `StoichonLuminance.disc_luminance`, which colours the point of light, is what still asks.
 func _test_the_phase_term_is_a_disc_average(h) -> void:
-	h.check_near(SpacesimSurfaceModel.lambert_phase(0.0), 1.0,
+	h.check_near(StoichonSurfaceModel.lambert_phase(0.0), 1.0,
 		"a fully lit disc reflects all of it", 1.0e-6)
-	h.check_near(SpacesimSurfaceModel.lambert_phase(PI * 0.5), 1.0 / PI,
+	h.check_near(StoichonSurfaceModel.lambert_phase(PI * 0.5), 1.0 / PI,
 		"a half moon is 1/pi of a full one", 1.0e-6)
-	h.check_near(SpacesimSurfaceModel.lambert_phase(PI), 0.0, "and a new one none", 1.0e-6)
-	var crescent := SpacesimSurfaceModel.lambert_phase(deg_to_rad(122.0))
+	h.check_near(StoichonSurfaceModel.lambert_phase(PI), 0.0, "and a new one none", 1.0e-6)
+	var crescent := StoichonSurfaceModel.lambert_phase(deg_to_rad(122.0))
 	h.check(crescent > 0.09 and crescent < 0.11,
 		"while a crescent is a tenth of the disc and not zero (%.3f at 122 degrees)" % crescent)
 
 ## A star emits; it does not reflect. Drawn with the ordinary surface material it was lit by its own
 ## light — which travels from the star toward the observer, so its near face was back-lit and came out
 ## black — and it could not bloom, because nothing about it was above the glow threshold.
-func _test_the_star_is_a_source(h, scene: SpacesimSystemScene) -> void:
+func _test_the_star_is_a_source(h, scene: StoichonSystemScene) -> void:
 	var sun := scene.body_by_id("star:sol")
 	var material: ShaderMaterial = sun.mesh.material_override
 	h.check(material != null and material.shader != null, "the star has a material of its own")
@@ -276,7 +276,7 @@ func _test_the_star_is_a_source(h, scene: SpacesimSystemScene) -> void:
 		"with the Sun's colour: warm white (%.3f, %.3f, %.3f)" % [color.r, color.g, color.b])
 
 
-func _test_surface_is_derived(h, earth: SpacesimSceneBody, luna: SpacesimSceneBody) -> void:
+func _test_surface_is_derived(h, earth: StoichonSceneBody, luna: StoichonSceneBody) -> void:
 	var material: ShaderMaterial = earth.mesh.material_override
 	h.check(material != null and material.shader != null, "the surface carries a shader material")
 	if material == null:
@@ -290,7 +290,7 @@ func _test_surface_is_derived(h, earth: SpacesimSceneBody, luna: SpacesimSceneBo
 		"the flat mode's colour is the body's derived albedo, not a constant")
 	h.check(material.get_shader_parameter("planet_radius") == earth.radius,
 		"the shader is told the body's radius, which is what turns the field's gradient into a slope")
-	var plan := SpacesimSurfaceField.plan(earth.content.id, earth.radius)
+	var plan := StoichonSurfaceField.plan(earth.content.id, earth.radius)
 	h.check(not is_nan(plan.amplitude) and plan.amplitude > 0.0,
 		"and the plan still derives the relief amplitude (%.0f m), which is what the geometry will translate by"
 			% plan.amplitude) 
@@ -326,7 +326,7 @@ func _test_surface_is_derived(h, earth: SpacesimSceneBody, luna: SpacesimSceneBo
 	# left in, Earth's 71 % of water would be a hole showing the far side, and nothing headless would report it.
 	# **Checked against the source**, because a `discard` is a shader fact no material can show.
 	var surface_source := FileAccess.get_file_as_string(
-		"res://addons/spacesim/render/body_surface.gdshader"
+		"res://addons/stoichon/render/body_surface.gdshader"
 	)
 	h.check(not surface_source.contains("discard"),
 		"with no sea layer, the ground is drawn everywhere — there is no cull left in it")
@@ -355,12 +355,12 @@ func _test_surface_is_derived(h, earth: SpacesimSceneBody, luna: SpacesimSceneBo
 ## the material table is wrong, this goes red by naming the number.
 func _test_the_sky_is_derived(
 	h,
-	scene: SpacesimSystemScene,
-	sol: SpacesimSolarSystem,
-	earth: SpacesimSceneBody,
-	luna: SpacesimSceneBody
+	scene: StoichonSystemScene,
+	sol: StoichonSolarSystem,
+	earth: StoichonSceneBody,
+	luna: StoichonSceneBody
 ) -> void:
-	var materials := SpacesimMaterialTable.engine_table()
+	var materials := StoichonMaterialTable.engine_table()
 
 	# **The air's height is derived, and nothing draws it.** The shell that used to be built at this radius
 	# is gone; what survives is the arithmetic, because the camera's far plane reads it and it is a fact
@@ -371,9 +371,9 @@ func _test_the_sky_is_derived(
 		return
 	# Earth's ten scale heights come to ~84 km, *under* the frame's 100 km floor, so the floor wins --
 	# which is the rule that stops the air being shorter than the atmosphere the game puts you in.
-	h.check(SpacesimAtmosphereModel.shell_reach(
+	h.check(StoichonAtmosphereModel.shell_reach(
 		earth.content.atmosphere, materials, 288.15,
-		SpacesimAtmosphereModel.surface_gravity(earth.content)) < sol.framing.atmosphere_altitude,
+		StoichonAtmosphereModel.surface_gravity(earth.content)) < sol.framing.atmosphere_altitude,
 		"Earth's derived reach is under the frame's floor, so the floor is what is used (%.0f km)"
 			% (earth.sky_top / 1000.0))
 	h.check_near(earth.sky_top, sol.framing.atmosphere_altitude,
@@ -385,15 +385,15 @@ func _test_the_sky_is_derived(
 	# **Earth's air is the only one carrying a measured absorber today — ozone** — and the check on it is
 	# the effect rather than the value: a 300 DU ozone column absorbs about 2.6% of 550 nm light, which is
 	# a published figure, so landing on it is what says the cross-section and the column are both right.
-	var absorption := SpacesimAtmosphereModel.absorption_coefficient(
+	var absorption := StoichonAtmosphereModel.absorption_coefficient(
 		earth.content.atmosphere, materials, 288.15
 	)
-	var albedo := SpacesimAtmosphereModel.single_scatter_albedo(
+	var albedo := StoichonAtmosphereModel.single_scatter_albedo(
 		earth.content.atmosphere, materials, 288.15
 	)
-	var air_height := SpacesimAtmosphereModel.scale_height(
+	var air_height := StoichonAtmosphereModel.scale_height(
 		earth.content.atmosphere, materials, 288.15,
-		SpacesimAtmosphereModel.surface_gravity(earth.content)
+		StoichonAtmosphereModel.surface_gravity(earth.content)
 	)
 	h.check(absorption.length_squared() > 0.0,
 		"Earth's air absorbs visible light, because the ozone species carries measured cross-sections")
@@ -410,7 +410,7 @@ func _test_the_sky_is_derived(
 		"and the albedo follows it — green loses most of what it removes, blue almost nothing")
 
 	# The mix, at a temperature we can check by hand. Earth's air is 78% nitrogen, 21% oxygen.
-	var reference := SpacesimAtmosphereModel.rayleigh_coefficient(
+	var reference := StoichonAtmosphereModel.rayleigh_coefficient(
 		earth.content.atmosphere, materials, 288.15
 	)
 	# A coefficient is per **channel**, so a Vector3's components are red, green and blue.
@@ -429,24 +429,24 @@ func _test_the_sky_is_derived(
 	h.check(reference.length_squared() > 0.0, "and the air scatters at all")
 
 	# Scale height: kT/(m-bar g), against the model doc's ~8.5 km for Earth.
-	var gravity := SpacesimAtmosphereModel.surface_gravity(earth.content)
+	var gravity := StoichonAtmosphereModel.surface_gravity(earth.content)
 	h.check_near(gravity, 9.81, "Earth's surface gravity from its authored mass", 0.05)
-	var height := SpacesimAtmosphereModel.scale_height(
+	var height := StoichonAtmosphereModel.scale_height(
 		earth.content.atmosphere, materials, 288.15, gravity
 	)
 	h.check(absf(height / 8500.0 - 1.0) < 0.1,
 		"and a scale height of %.0f m against the model's 8.5 km" % height)
 
 	# The temperature the coefficients are actually evaluated at, and the greenhouse-sized gap in it.
-	var luminosity := SpacesimStarModel.luminosity(scene.star().content)
+	var luminosity := StoichonStarModel.luminosity(scene.star().content)
 	var sun := scene.star()
-	var earth_teq := SpacesimAtmosphereModel.equilibrium_temperature(
+	var earth_teq := StoichonAtmosphereModel.equilibrium_temperature(
 		earth.content, materials, luminosity, earth.position.distance_to(sun.position)
 	)
 	h.check(absf(earth_teq - 255.0) < 10.0,
 		"Earth's equilibrium temperature is %.0f K against the published 255 K" % earth_teq)
 	var venus := scene.body_by_id("planet:venus")
-	var venus_teq := SpacesimAtmosphereModel.equilibrium_temperature(
+	var venus_teq := StoichonAtmosphereModel.equilibrium_temperature(
 		venus.content, materials, luminosity, venus.position.distance_to(sun.position)
 	)
 	h.check(absf(venus_teq - 229.0) < 10.0,
@@ -482,7 +482,7 @@ func _test_the_sky_is_derived(
 	for body in scene.bodies:
 		if body.content == null or body.content.atmosphere == null:
 			continue
-		if SpacesimAtmosphereModel.coverage(body.content.atmosphere, materials) < 1.0:
+		if StoichonAtmosphereModel.coverage(body.content.atmosphere, materials) < 1.0:
 			uncovered.append(body.name)
 	h.check(uncovered == ["Earth", "Jupiter", "Saturn"],
 		"and the air short of a cross-section is water vapour and ammonia: %s" % [uncovered])
@@ -493,9 +493,9 @@ func _test_the_sky_is_derived(
 ## no liquid to land on, because hydrogen is supercritical above 33 K at 13 bar and every giant's 1-bar
 ## level is far above that. The radius is already the 1-bar radius, so the shell sits above it.
 func _test_the_air_heights_are_derived(
-	h, scene: SpacesimSystemScene, sol: SpacesimSolarSystem
+	h, scene: StoichonSystemScene, sol: StoichonSolarSystem
 ) -> void:
-	var materials := SpacesimMaterialTable.engine_table()
+	var materials := StoichonMaterialTable.engine_table()
 	var top := sol.framing.atmosphere_altitude
 	# Ten scale heights of the *measured* 1-bar temperature. Equilibrium temperature would be ~101 K
 	# for Jupiter against a measured 165, because a giant radiates more than it receives -- so the
@@ -523,7 +523,7 @@ func _test_the_air_heights_are_derived(
 				% [body.sky_top / 1000.0, top / 1000.0])
 		# Every species but Earth's water vapour: **hydrogen was the gap for the giants**, and it is
 		# why Titan stopped being listed as short too.
-		var covered := SpacesimAtmosphereModel.coverage(body.content.atmosphere, materials)
+		var covered := StoichonAtmosphereModel.coverage(body.content.atmosphere, materials)
 		h.check(absf(covered - float(entry["covered"])) < 1.0e-3,
 			"%s: %.3f of its air has a cross-section" % [entry["id"], covered])
 	# Hydrogen is the reason those are covered at all, and it is checked against helium: the two
@@ -544,10 +544,10 @@ func _test_the_air_heights_are_derived(
 ## that the *shape* of the air comes out right from composition and gravity alone, which is a real test
 ## rather than a fitted number: Earth's dry adiabatic lapse rate is a textbook 9.8 K/km and the model
 ## derives it from the mix's heat capacity, and Earth's cloud base lands where cloud bases are.
-func _test_the_temperature_profile(h, scene: SpacesimSystemScene, sol: SpacesimSolarSystem) -> void:
-	var materials := SpacesimMaterialTable.engine_table()
+func _test_the_temperature_profile(h, scene: StoichonSystemScene, sol: StoichonSolarSystem) -> void:
+	var materials := StoichonMaterialTable.engine_table()
 	var star := scene.star()
-	var luminosity := SpacesimStarModel.luminosity(star.content)
+	var luminosity := StoichonStarModel.luminosity(star.content)
 
 	for entry in [
 		{"id": "planet:earth", "lapse": 9.8, "capacity": 1005.0},
@@ -556,11 +556,11 @@ func _test_the_temperature_profile(h, scene: SpacesimSystemScene, sol: SpacesimS
 	]:
 		var body := scene.body_by_id(String(entry["id"]))
 		var air := body.content.atmosphere
-		var capacity := SpacesimAtmosphereModel.heat_capacity(air, materials)
+		var capacity := StoichonAtmosphereModel.heat_capacity(air, materials)
 		h.check(absf(capacity / float(entry["capacity"]) - 1.0) < 0.06,
 			"%s: c_p of the mix is %.0f J/(kg K), mass-weighted" % [entry["id"], capacity])
-		var lapse := SpacesimAtmosphereModel.lapse_rate(
-			air, materials, SpacesimAtmosphereModel.surface_gravity(body.content)
+		var lapse := StoichonAtmosphereModel.lapse_rate(
+			air, materials, StoichonAtmosphereModel.surface_gravity(body.content)
 		)
 		h.check(absf(lapse * 1000.0 - float(entry["lapse"])) < 0.6,
 			"and g/c_p gives %.2f K/km against the textbook %.1f" % [lapse * 1000.0, entry["lapse"]])
@@ -570,21 +570,21 @@ func _test_the_temperature_profile(h, scene: SpacesimSystemScene, sol: SpacesimS
 	# temperature should be a real cloud base, 1-2 km. (The *tropopause* is 4 km low, because the
 	# adiabat is dry -- named in the model and in the plan, and it is what moist convection fixes.)
 	var earth := scene.body_by_id("planet:earth")
-	var materials_earth := SpacesimMaterialTable.engine_table()
+	var materials_earth := StoichonMaterialTable.engine_table()
 	# **The tropopause is the SKIN temperature of the effective (equilibrium) temperature**, not of the
 	# surface: `tropopause_temperature()` takes the equilibrium, and passing it the greenhouse-adjusted
 	# surface instead put the ceiling 28 K too warm. It is the pairing `condensation_levels` uses, so this
 	# is now the same convention in both places rather than two.
-	var equilibrium := SpacesimAtmosphereModel.equilibrium_temperature(
+	var equilibrium := StoichonAtmosphereModel.equilibrium_temperature(
 		earth.content, materials_earth,
-		SpacesimStarModel.luminosity(star.content), earth.position.distance_to(star.position))
-	var temperature := SpacesimAtmosphereModel.surface_temperature(
+		StoichonStarModel.luminosity(star.content), earth.position.distance_to(star.position))
+	var temperature := StoichonAtmosphereModel.surface_temperature(
 		earth.content.atmosphere, materials_earth,
-		SpacesimAtmosphereModel.surface_gravity(earth.content), equilibrium)
-	var tropopause := SpacesimAtmosphereModel.tropopause_temperature(equilibrium)
-	var lapse := SpacesimAtmosphereModel.lapse_rate(
+		StoichonAtmosphereModel.surface_gravity(earth.content), equilibrium)
+	var tropopause := StoichonAtmosphereModel.tropopause_temperature(equilibrium)
+	var lapse := StoichonAtmosphereModel.lapse_rate(
 		earth.content.atmosphere, materials_earth,
-		SpacesimAtmosphereModel.surface_gravity(earth.content))
+		StoichonAtmosphereModel.surface_gravity(earth.content))
 	h.check(absf(tropopause / equilibrium - 0.8409) < 1.0e-4,
 		"the tropopause is the grey skin temperature, %.1f K for an effective %.1f"
 			% [tropopause, equilibrium])
@@ -592,12 +592,12 @@ func _test_the_temperature_profile(h, scene: SpacesimSystemScene, sol: SpacesimS
 	# surface was 256.5 K — below freezing — so water "condensed" 1.7 km *below ground*. It is now
 	# above freezing and the base is where cloud bases are. **The base comes from the derivation rather
 	# than being worked out here**: it was `(T - T_cond) / lapse` inline until
-	# `SpacesimAtmosphereModel.condensation_levels` existed, and that is the one home for it now.
+	# `StoichonAtmosphereModel.condensation_levels` existed, and that is the one home for it now.
 	var water := materials_earth.by_name("water_vapour")
 	var base := 0.0
-	for level in SpacesimAtmosphereModel.condensation_levels(
+	for level in StoichonAtmosphereModel.condensation_levels(
 			earth.content.atmosphere, materials_earth,
-			SpacesimAtmosphereModel.surface_gravity(earth.content), equilibrium, earth.content):
+			StoichonAtmosphereModel.surface_gravity(earth.content), equilibrium, earth.content):
 		if level.species == "water_vapour":
 			base = level.height / 1000.0
 	# **The number to compare against is the condensation temperature at Earth's own water VAPOUR
@@ -606,7 +606,7 @@ func _test_the_temperature_profile(h, scene: SpacesimSystemScene, sol: SpacesimS
 	# asserting that Earth's surface is hot enough to boil. What the check means is that the surface is
 	# warmer than where water condenses, which is what puts the cloud base above the ground.
 	var water_fraction: float = earth.content.atmosphere.species.get("water_vapour", 0.0)
-	var dew_point := SpacesimAtmosphereModel.condensation_temperature_at(
+	var dew_point := StoichonAtmosphereModel.condensation_temperature_at(
 		water, water_fraction, earth.content.atmosphere.surface_pressure
 	)
 	h.check(temperature > dew_point,
@@ -615,10 +615,10 @@ func _test_the_temperature_profile(h, scene: SpacesimSystemScene, sol: SpacesimS
 	h.check(base > 0.5 and base < 3.0,
 		"so water condenses %.1f km up -- a real cloud base, where there was none before" % base)
 	var surface := temperature
-	h.check(SpacesimAtmosphereModel.temperature_at(50.0e3, surface, lapse, tropopause)
+	h.check(StoichonAtmosphereModel.temperature_at(50.0e3, surface, lapse, tropopause)
 			== tropopause,
 		"above the tropopause the profile is flat, not still falling")
-	h.check(SpacesimAtmosphereModel.temperature_at(0.0, surface, lapse, tropopause) == surface,
+	h.check(StoichonAtmosphereModel.temperature_at(0.0, surface, lapse, tropopause) == surface,
 		"and at the surface it is the surface temperature")
 
 
@@ -628,10 +628,10 @@ func _test_the_temperature_profile(h, scene: SpacesimSystemScene, sol: SpacesimS
 ## temperature, and the point of the table below is that the *other* two bodies come out right with
 ## nothing tuned for them — Mars and Triton are untouched checks, and Triton is transparent to a
 ## rounding error, which is what an airless body should be.
-func _test_the_greenhouse(h, scene: SpacesimSystemScene) -> void:
-	var materials := SpacesimMaterialTable.engine_table()
+func _test_the_greenhouse(h, scene: StoichonSystemScene) -> void:
+	var materials := StoichonMaterialTable.engine_table()
 	var star := scene.star()
-	var luminosity := SpacesimStarModel.luminosity(star.content)
+	var luminosity := StoichonStarModel.luminosity(star.content)
 
 	for entry in [
 		{"id": "planet:earth", "tau": 0.857, "surface": 288.0, "measured": 288.0},
@@ -643,7 +643,7 @@ func _test_the_greenhouse(h, scene: SpacesimSystemScene) -> void:
 	]:
 		var body := scene.body_by_id(String(entry["id"]))
 		var air := body.content.atmosphere
-		var gravity := SpacesimAtmosphereModel.surface_gravity(body.content)
+		var gravity := StoichonAtmosphereModel.surface_gravity(body.content)
 		# **At the mean orbital distance**, because the measured figure being compared against is a
 		# mean. The model itself is given the body's *actual* position by the scene, so the derived
 		# temperature moves with the orbit — which is a season, and it is checked a little lower down.
@@ -656,12 +656,12 @@ func _test_the_greenhouse(h, scene: SpacesimSystemScene) -> void:
 			mean = parent.content.orbit.semi_major_axis
 		if mean <= 0.0:
 			mean = body.position.distance_to(star.position)
-		var equilibrium := SpacesimAtmosphereModel.equilibrium_temperature(
+		var equilibrium := StoichonAtmosphereModel.equilibrium_temperature(
 			body.content, materials, luminosity, mean)
-		var depth := SpacesimAtmosphereModel.greenhouse_optical_depth(air, materials, gravity)
+		var depth := StoichonAtmosphereModel.greenhouse_optical_depth(air, materials, gravity)
 		h.check(absf(depth - float(entry["tau"])) < 0.5,
 			"%s: the column's infrared optical depth is %.3f" % [entry["id"], depth])
-		var surface := SpacesimAtmosphereModel.surface_temperature(air, materials, gravity, equilibrium)
+		var surface := StoichonAtmosphereModel.surface_temperature(air, materials, gravity, equilibrium)
 		h.check(absf(surface - float(entry["measured"])) < 4.0,
 			"its surface comes out %.1f K against a measured %.0f, from %.1f K of insolation alone"
 				% [surface, entry["measured"], equilibrium])
@@ -670,16 +670,16 @@ func _test_the_greenhouse(h, scene: SpacesimSystemScene) -> void:
 	# is warmer nearer its star — Earth by a couple of kelvin, Mars by about twelve. Nothing models this;
 	# it falls out of evaluating the orbit at the current time, which is what §4 asks for.
 	var earth := scene.body_by_id("planet:earth")
-	var earth_mean := SpacesimAtmosphereModel.equilibrium_temperature(
+	var earth_mean := StoichonAtmosphereModel.equilibrium_temperature(
 		earth.content, materials, luminosity, earth.content.orbit.semi_major_axis)
-	var near := SpacesimAtmosphereModel.equilibrium_temperature(
+	var near := StoichonAtmosphereModel.equilibrium_temperature(
 		earth.content, materials, luminosity, earth.content.orbit.semi_major_axis * (1.0 - 0.0167))
-	var far := SpacesimAtmosphereModel.equilibrium_temperature(
+	var far := StoichonAtmosphereModel.equilibrium_temperature(
 		earth.content, materials, luminosity, earth.content.orbit.semi_major_axis * (1.0 + 0.0167))
 	h.check(far < near and near - far > 3.0,
 		"Earth swings %.1f K between perihelion and aphelion" % (near - far))
 	# And the planet's own temperature follows the orbit rather than the mean.
-	var here := SpacesimAtmosphereModel.equilibrium_temperature(
+	var here := StoichonAtmosphereModel.equilibrium_temperature(
 		earth.content, materials, luminosity, earth.position.distance_to(star.position))
 	h.check(absf(here - earth_mean) > 0.5,
 		"and at the epoch it sits at %.1f K, %.1f K from its own mean" % [here, here - earth_mean])
@@ -714,32 +714,32 @@ func _test_the_greenhouse(h, scene: SpacesimSystemScene) -> void:
 ## a pressure level, turning a height into one is a single-exponential approximation, and it holds for a
 ## couple of scale heights and no further. Earth's 0.84 bar against a real ~0.9 is inside that; Venus's
 ## 3.5 against a real ~0.7–1 is not, and the check below says so rather than pretending otherwise.
-func _test_the_condensation_levels(h, scene: SpacesimSystemScene, sol: SpacesimSolarSystem) -> void:
-	var materials := SpacesimMaterialTable.engine_table()
+func _test_the_condensation_levels(h, scene: StoichonSystemScene, sol: StoichonSolarSystem) -> void:
+	var materials := StoichonMaterialTable.engine_table()
 	var star_body := scene.star()
-	var luminosity := SpacesimStarModel.luminosity(star_body.content)
+	var luminosity := StoichonStarModel.luminosity(star_body.content)
 
 	# --- Earth: the cloud base, against a real one -----------------------------------------------------
 	var earth := scene.body_by_id("planet:earth")
-	var earth_levels := SpacesimAtmosphereModel.condensation_levels(
+	var earth_levels := StoichonAtmosphereModel.condensation_levels(
 		earth.content.atmosphere, materials,
-		SpacesimAtmosphereModel.surface_gravity(earth.content),
-		SpacesimAtmosphereModel.equilibrium_temperature(
+		StoichonAtmosphereModel.surface_gravity(earth.content),
+		StoichonAtmosphereModel.equilibrium_temperature(
 			earth.content, materials, luminosity,
 			earth.position.distance_to(star_body.position)
 		)
 	)
-	var base: SpacesimAtmosphereModel.Condensation = null
+	var base: StoichonAtmosphereModel.Condensation = null
 	var never := 0
 	for level in earth_levels:
 		if level.species == "water_vapour":
 			base = level
-		elif level.regime == SpacesimAtmosphereModel.Condensation.Regime.NONE:
+		elif level.regime == StoichonAtmosphereModel.Condensation.Regime.NONE:
 			never += 1
 	h.check(base != null, "Earth's water finds a level")
 	if base == null:
 		return
-	h.check(base.regime == SpacesimAtmosphereModel.Condensation.Regime.LEVEL,
+	h.check(base.regime == StoichonAtmosphereModel.Condensation.Regime.LEVEL,
 		"and it is a deck rather than a fog")
 	h.check(base.height > 1000.0 and base.height < 2000.0,
 		"at %.0f m, against real cumulus bases of 1-2 km" % base.height)
@@ -753,17 +753,17 @@ func _test_the_condensation_levels(h, scene: SpacesimSystemScene, sol: SpacesimS
 
 	# --- Venus: the right level from the wrong molecule ------------------------------------------------
 	var venus := scene.body_by_id("planet:venus")
-	var venus_levels := SpacesimAtmosphereModel.condensation_levels(
+	var venus_levels := StoichonAtmosphereModel.condensation_levels(
 		venus.content.atmosphere, materials,
-		SpacesimAtmosphereModel.surface_gravity(venus.content),
-		SpacesimAtmosphereModel.equilibrium_temperature(
+		StoichonAtmosphereModel.surface_gravity(venus.content),
+		StoichonAtmosphereModel.equilibrium_temperature(
 			venus.content, materials, luminosity,
 			venus.position.distance_to(star_body.position)
 		)
 	)
-	var deck: SpacesimAtmosphereModel.Condensation = null
+	var deck: StoichonAtmosphereModel.Condensation = null
 	for level in venus_levels:
-		if level.regime == SpacesimAtmosphereModel.Condensation.Regime.LEVEL:
+		if level.regime == StoichonAtmosphereModel.Condensation.Regime.LEVEL:
 			deck = level
 	h.check(deck != null, "Venus finds one too")
 	if deck != null:
@@ -780,10 +780,10 @@ func _test_the_condensation_levels(h, scene: SpacesimSystemScene, sol: SpacesimS
 	# not a bug: its 1.2 bar methane deck exists because methane is UNDERSATURATED there, and saturation
 	# is not modelled.
 	var uranus := scene.body_by_id("planet:uranus")
-	var uranus_levels := SpacesimAtmosphereModel.condensation_levels(
+	var uranus_levels := StoichonAtmosphereModel.condensation_levels(
 		uranus.content.atmosphere, materials,
-		SpacesimAtmosphereModel.surface_gravity(uranus.content),
-		SpacesimAtmosphereModel.equilibrium_temperature(
+		StoichonAtmosphereModel.surface_gravity(uranus.content),
+		StoichonAtmosphereModel.equilibrium_temperature(
 			uranus.content, materials, luminosity,
 			uranus.position.distance_to(star_body.position)
 		)
@@ -792,12 +792,12 @@ func _test_the_condensation_levels(h, scene: SpacesimSystemScene, sol: SpacesimS
 	# against a 76 K base, so the level sits just *below* the reference pressure — which is where the real
 	# one is, at about 1.2 bar. The old `FOG` answer could only say "condensed everywhere", because the
 	# profile refused to go below its own datum; now it can say where.
-	var methane_level: SpacesimAtmosphereModel.Condensation = null
+	var methane_level: StoichonAtmosphereModel.Condensation = null
 	for level in uranus_levels:
 		if level.species == "methane":
 			methane_level = level
 	h.check(methane_level != null
-			and methane_level.regime == SpacesimAtmosphereModel.Condensation.Regime.LEVEL,
+			and methane_level.regime == StoichonAtmosphereModel.Condensation.Regime.LEVEL,
 		"an ice giant's methane is a deck just below the reference, not a fog")
 	# Less than one scale height under the datum: Uranus's is 27 km, so ~20 km is 0.74 of one, which is
 	# about 2.1 bar. **The real methane deck is near 1.2 bar** — so the model gets the level, the sign and
@@ -815,7 +815,7 @@ func _test_the_condensation_levels(h, scene: SpacesimSystemScene, sol: SpacesimS
 ## returns `body.mesh` and nothing else — an earlier version of this test asserted "no deck shell"
 ## against that helper, so the decks came back and the test stayed green, which is worse than not having
 ## it.
-func _test_hiding_a_body_hides_everything_it_draws(h, scene: SpacesimSystemScene) -> void:
+func _test_hiding_a_body_hides_everything_it_draws(h, scene: StoichonSystemScene) -> void:
 	var owned := 0
 	var orphaned: Array[String] = []
 	for node in scene.container.find_children("*", "MeshInstance3D", true, false):
@@ -853,8 +853,8 @@ func _test_hiding_a_body_hides_everything_it_draws(h, scene: SpacesimSystemScene
 ##
 ## The numbers below are the ones that matter: the sunset flown at 15-18 Mm sits comfortably inside the band,
 ## and the 6.95 Gm view that showed the halo sits far outside it.
-func _test_the_air_is_drawn_only_where_its_ring_resolves(h, scene: SpacesimSystemScene) -> void:
-	var pixel := SpacesimLod.pixel_angle(70.0, 1080.0)
+func _test_the_air_is_drawn_only_where_its_ring_resolves(h, scene: StoichonSystemScene) -> void:
+	var pixel := StoichonLod.pixel_angle(70.0, 1080.0)
 	h.check(pixel > 0.0, "the projection's own pixel angle is available (%.6f rad)" % pixel)
 	var earth := scene.body_by_id("planet:earth")
 	var jupiter := scene.body_by_id("planet:jupiter")
@@ -865,35 +865,35 @@ func _test_the_air_is_drawn_only_where_its_ring_resolves(h, scene: SpacesimSyste
 	var jupiter_depth: float = jupiter.sky_top
 
 	# The flown sunset: a ring of several pixels, so the air is drawn at full strength.
-	var sunset := SpacesimLod.air_ring_pixels(earth_depth, 1.6e7, pixel)
-	h.check(sunset > SpacesimLod.AIR_RING_FADE.y,
+	var sunset := StoichonLod.air_ring_pixels(earth_depth, 1.6e7, pixel)
+	h.check(sunset > StoichonLod.AIR_RING_FADE.y,
 		"Earth's ring at 16 Mm is %.1f px, inside the band — the sunset stays" % sunset)
 
 	# The reported failure: a fraction of a pixel, so the air is not drawn at all.
-	var far := SpacesimLod.air_ring_pixels(jupiter_depth, 6.95e9, pixel)
-	h.check(far < SpacesimLod.AIR_RING_FADE.x,
+	var far := StoichonLod.air_ring_pixels(jupiter_depth, 6.95e9, pixel)
+	h.check(far < StoichonLod.AIR_RING_FADE.x,
 		"Jupiter's ring at 6.95 Gm is %.2f px, below the band — the halo cannot be drawn" % far)
 
 	# And the old gate's reach, for the record: where the atmosphere's *disc* was 4 px.
 	var old_gate := 6.95e9
-	var old_disc := SpacesimLod.screen_radius_pixels(
-		SpacesimLod.angular_radius(jupiter.radius + jupiter_depth, old_gate), pixel
+	var old_disc := StoichonLod.screen_radius_pixels(
+		StoichonLod.angular_radius(jupiter.radius + jupiter_depth, old_gate), pixel
 	)
-	h.check(old_disc > SpacesimLod.POINT_TIER_SCREEN_RADIUS,
+	h.check(old_disc > StoichonLod.POINT_TIER_SCREEN_RADIUS,
 		"the old gate admitted that view, because the disc was %.1f px" % old_disc)
 
 	# The crossover, so the band cannot drift silently: 2 px of ring on Earth is 44,000 km, not 1.25 Gm.
-	var crossover := earth_depth / (SpacesimLod.AIR_RING_FADE.x * pixel)
+	var crossover := earth_depth / (StoichonLod.AIR_RING_FADE.x * pixel)
 	h.check(crossover > 3.0e7 and crossover < 7.0e7,
 		"Earth's air fades in at about %.0f km, not at a million" % (crossover / 1000.0))
-	h.check(SpacesimLod.air_ring_pixels(0.0, 1.0e7, pixel) == 0.0,
+	h.check(StoichonLod.air_ring_pixels(0.0, 1.0e7, pixel) == 0.0,
 		"an airless body has no ring, so its air is never drawn")
-	h.check(SpacesimLod.air_ring_pixels(earth_depth, 0.0, pixel) == 0.0,
+	h.check(StoichonLod.air_ring_pixels(earth_depth, 0.0, pixel) == 0.0,
 		"and a degenerate distance is zero rather than a division")
 	# **The call site, because a law nobody calls is decoration.** Read as source: the gate lives with the shells,
 	# which the scene owns — `main.gd` no longer knows the air exists (`air_shell.gdshader` is worn by the body).
-	h.check(FileAccess.get_file_as_string("res://addons/spacesim/system/system_scene.gd").contains(
-		"SpacesimLod.air_ring_pixels("),
+	h.check(FileAccess.get_file_as_string("res://addons/stoichon/system/system_scene.gd").contains(
+		"StoichonLod.air_ring_pixels("),
 		"and the shell's gate is what uses it, so the air is not gated on a disc's size")
 
 
@@ -907,8 +907,8 @@ func _test_the_air_is_drawn_only_where_its_ring_resolves(h, scene: SpacesimSyste
 ## what had been painting terrain on a ball that is really the top of an atmosphere.
 func _test_a_body_without_a_surface_has_no_field(h, scene) -> void:
 	# Typed explicitly: `body_by_id` returns a Variant, so `:=` here is the `INFERENCE_ON_VARIANT` error.
-	var jupiter: SpacesimSceneBody = scene.body_by_id("planet:jupiter")
-	var earth: SpacesimSceneBody = scene.body_by_id("planet:earth")
+	var jupiter: StoichonSceneBody = scene.body_by_id("planet:jupiter")
+	var earth: StoichonSceneBody = scene.body_by_id("planet:earth")
 	h.check(jupiter != null and earth != null, "both a giant and a surfaced body are in the scene")
 	if jupiter == null or earth == null:
 		return
@@ -929,7 +929,7 @@ func _test_a_body_without_a_surface_has_no_field(h, scene) -> void:
 	# **And no sea.** Evert, 2026-11-02: *"If a planet does not have a surface, it should not have an ocean either,
 	# right?"* — right, and `_liquid_material` says so by refusing a body with no surface content. Asserted because
 	# a waterline on a gas giant is the kind of thing that is invisible in the model and obvious on screen.
-	var saturn: SpacesimSceneBody = scene.body_by_id("planet:saturn")
+	var saturn: StoichonSceneBody = scene.body_by_id("planet:saturn")
 	h.check(saturn != null, "Saturn is in the scene")
 	if saturn == null:
 		return
@@ -975,17 +975,17 @@ func _test_a_body_without_a_surface_has_no_field(h, scene) -> void:
 ##      ground, 1.2 deg at 1.4 km, 1.8 deg at 3 km. That is what keeps a cloud lit after the ground beneath it
 ##      has gone dark, from geometry rather than from a knob.
 ##
-## **The law lives in `SpacesimAtmosphereModel` and the shader transcribes it**, the arrangement
-## `SpacesimCloudBand` has: a closed form in a shader cannot be run headlessly, so the arithmetic is the
+## **The law lives in `StoichonAtmosphereModel` and the shader transcribes it**, the arrangement
+## `StoichonCloudBand` has: a closed form in a shader cannot be run headlessly, so the arithmetic is the
 ## model's and a source check pins the shape the shader carries.
-func _test_the_air_takes_its_share_of_the_starlight(h, scene: SpacesimSystemScene) -> void:
+func _test_the_air_takes_its_share_of_the_starlight(h, scene: StoichonSystemScene) -> void:
 	var earth_radius := 6.371e6
 	var scale_height := 8.5e3
 	# (1) The air mass: 1 overhead, sqrt(pi*R/2H) ≈ 34 at the horizon, monotone between, and it beats the
 	# secant it replaced everywhere above the horizon.
-	var overhead := SpacesimAtmosphereModel.air_mass(1.0, scale_height, earth_radius)
+	var overhead := StoichonAtmosphereModel.air_mass(1.0, scale_height, earth_radius)
 	h.check_near(overhead, 1.0, "the air mass overhead is 1 (%.4f)" % overhead, 5.0e-3)
-	var horizon := SpacesimAtmosphereModel.air_mass(0.0, scale_height, earth_radius)
+	var horizon := StoichonAtmosphereModel.air_mass(0.0, scale_height, earth_radius)
 	h.check_near(horizon, sqrt(PI * earth_radius / (2.0 * scale_height)),
 		"and at the horizon it is sqrt(pi*R/2H), the spherical answer rather than an infinity (%.1f)"
 			% horizon, 1.0e-6)
@@ -995,12 +995,12 @@ func _test_the_air_takes_its_share_of_the_starlight(h, scene: SpacesimSystemScen
 	var monotone := true
 	for i in 21:
 		var mu := float(i) / 20.0
-		var got := SpacesimAtmosphereModel.air_mass(mu, scale_height, earth_radius)
+		var got := StoichonAtmosphereModel.air_mass(mu, scale_height, earth_radius)
 		if got > last + 1.0e-9:
 			monotone = false
 		last = got
 	h.check(monotone, "and it decreases all the way from the zenith to the horizon")
-	h.check(SpacesimAtmosphereModel.air_mass(0.5, scale_height, earth_radius) < 2.05,
+	h.check(StoichonAtmosphereModel.air_mass(0.5, scale_height, earth_radius) < 2.05,
 		"and at 60 degrees of zenith it is still the secant, near 2.0")
 
 	# (2) Per channel. Earth's own derived coefficients, so this is the air the game actually draws.
@@ -1013,7 +1013,7 @@ func _test_the_air_takes_its_share_of_the_starlight(h, scene: SpacesimSystemScen
 	var mie := float(earth.air["mie"])
 	var rayleigh_height := float(earth.air["rayleigh_scale_height"])
 	var mie_height := float(earth.air["mie_scale_height"])
-	var no_air := SpacesimAtmosphereModel.sun_transmittance(
+	var no_air := StoichonAtmosphereModel.sun_transmittance(
 		Vector3.ZERO, 0.0, Vector3.ZERO, 0.0, 0.0, 1.0, 0.0, earth_radius
 	)
 	h.check(no_air.is_equal_approx(Vector3.ONE),
@@ -1024,10 +1024,10 @@ func _test_the_air_takes_its_share_of_the_starlight(h, scene: SpacesimSystemScen
 	# side bloomed white with its chunks showing through. Tested at 0 and *not only overhead*, because overhead
 	# is the one elevation where the broken form still returned a finite number.
 	for mu in [0.0, 0.5, 1.0]:
-		h.check(not is_nan(SpacesimAtmosphereModel.air_mass(mu, 0.0, earth_radius))
-			and is_finite(SpacesimAtmosphereModel.air_mass(mu, 0.0, earth_radius)),
+		h.check(not is_nan(StoichonAtmosphereModel.air_mass(mu, 0.0, earth_radius))
+			and is_finite(StoichonAtmosphereModel.air_mass(mu, 0.0, earth_radius)),
 			"the air mass of an airless body is finite at mu = %.1f" % mu)
-	var no_air_horizon := SpacesimAtmosphereModel.sun_transmittance(
+	var no_air_horizon := StoichonAtmosphereModel.sun_transmittance(
 		Vector3.ZERO, 0.0, Vector3.ZERO, 0.0, 0.0, 0.0, 0.0, earth_radius
 	)
 	h.check(not is_nan(no_air_horizon.x) and is_finite(no_air_horizon.x),
@@ -1037,17 +1037,17 @@ func _test_the_air_takes_its_share_of_the_starlight(h, scene: SpacesimSystemScen
 	var luna := scene.body_by_id("moon:luna")
 	if luna != null:
 		h.check(luna.air.is_empty(), "Luna has no air dictionary at all")
-		var luna_t := SpacesimAtmosphereModel.sun_transmittance(
+		var luna_t := StoichonAtmosphereModel.sun_transmittance(
 			Vector3.ZERO, 0.0, Vector3.ZERO, 0.0, 0.0, 0.0, 0.0, 1737400.0
 		)
 		h.check(luna_t.is_equal_approx(Vector3.ONE) and not is_nan(luna_t.x),
 			"and her night side is drawn in the star's own light, not in a NaN")
-	var overhead_t := SpacesimAtmosphereModel.sun_transmittance(
+	var overhead_t := StoichonAtmosphereModel.sun_transmittance(
 		rayleigh, rayleigh_height, absorption, mie, mie_height, 1.0, 0.0, earth_radius
 	)
 	h.check(overhead_t.x > 0.85 and overhead_t.x > overhead_t.z,
 		"overhead, the red survives best (%.3f red, %.3f blue)" % [overhead_t.x, overhead_t.z])
-	var horizon_t := SpacesimAtmosphereModel.sun_transmittance(
+	var horizon_t := StoichonAtmosphereModel.sun_transmittance(
 		rayleigh, rayleigh_height, absorption, mie, mie_height, 0.0, 0.0, earth_radius
 	)
 	h.check(horizon_t.z < 0.05 * horizon_t.x,
@@ -1062,19 +1062,19 @@ func _test_the_air_takes_its_share_of_the_starlight(h, scene: SpacesimSystemScen
 		"a sunset's red is dim but present, not white and not black (%.3f)" % horizon_t.x)
 
 	# (3) The dip. A tangent clears the ground for a point above it.
-	h.check_near(SpacesimAtmosphereModel.horizon_dip(0.0, earth_radius), 0.0,
+	h.check_near(StoichonAtmosphereModel.horizon_dip(0.0, earth_radius), 0.0,
 		"the ground's own horizon is the vertical one", 1.0e-9)
-	var deck_dip := SpacesimAtmosphereModel.horizon_dip(1436.0, earth_radius)
+	var deck_dip := StoichonAtmosphereModel.horizon_dip(1436.0, earth_radius)
 	h.check_near(rad_to_deg(asin(deck_dip)), 1.2,
 		"a deck at 1.4 km sees 1.2 degrees past the ground's horizon (%.2f deg)"
 			% rad_to_deg(asin(deck_dip)), 0.1)
 	# **The consequence, and the reason it is worth a check**: a cloud one degree above its OWN horizon is
 	# still lit where the ground beside it is dark, and what it is lit by is orange.
-	var cloud_t := SpacesimAtmosphereModel.sun_transmittance(
+	var cloud_t := StoichonAtmosphereModel.sun_transmittance(
 		rayleigh, rayleigh_height, absorption, mie, mie_height,
 		-sin(deg_to_rad(0.2)), 1436.0, earth_radius
 	)
-	var ground_t := SpacesimAtmosphereModel.sun_transmittance(
+	var ground_t := StoichonAtmosphereModel.sun_transmittance(
 		rayleigh, rayleigh_height, absorption, mie, mie_height,
 		-sin(deg_to_rad(0.2)), 0.0, earth_radius
 	)
@@ -1085,7 +1085,7 @@ func _test_the_air_takes_its_share_of_the_starlight(h, scene: SpacesimSystemScen
 	# The shader carries the same law, and the same shape is what makes it a transcription rather than a
 	# second opinion. Checked as source, because a shader cannot be run here at all.
 	var code := FileAccess.get_file_as_string(
-		"res://addons/spacesim/render/star_transmission.gdshaderinc"
+		"res://addons/stoichon/render/star_transmission.gdshaderinc"
 	)
 	h.check(code.contains("star_air_mass(") and code.contains("2.0 * scale_height / (PI *"),
 		"the shader's air mass is the round/spherical form, not the secant")
@@ -1094,11 +1094,11 @@ func _test_the_air_takes_its_share_of_the_starlight(h, scene: SpacesimSystemScen
 	h.check(code.contains("star_air_transmittance(") and code.contains("vec3(air_mie) * mie_path"),
 		"and its transmittance is per channel, with Mie through its own column")
 	h.check(FileAccess.get_file_as_string(
-		"res://addons/spacesim/render/body_surface.gdshader"
+		"res://addons/stoichon/render/body_surface.gdshader"
 	).contains("star_air_transmittance(up, body_sun, air_altitude, planet_radius)"),
 		"which the ground applies to the light it reflects")
 	h.check(FileAccess.get_file_as_string(
-		"res://addons/spacesim/render/body_deck.gdshader"
+		"res://addons/stoichon/render/body_deck.gdshader"
 	).contains("star_air_transmittance(p, body_sun, air_altitude, planet_radius)"),
 		"and so does a cloud — the limb spots were a cloud drawn in top-of-atmosphere sunlight")
 
@@ -1106,7 +1106,7 @@ func _test_the_air_takes_its_share_of_the_starlight(h, scene: SpacesimSystemScen
 	# `AO`, which the engine applies to the whole light contribution, and only its hue stays on `ALBEDO`. Scaling
 	# the albedo alone left the sun's path across the water blazing at top-of-atmosphere brightness while the sea
 	# around it went almost black — a specular lobe is built from the light, not from the reflectance.
-	for path in ["res://addons/spacesim/render/body_surface.gdshader"]:
+	for path in ["res://addons/stoichon/render/body_surface.gdshader"]:
 		var spec := FileAccess.get_file_as_string(path)
 		var named := String(path).get_file()
 		h.check(spec.contains("float air_brightness = dot(air_through"),
@@ -1119,7 +1119,7 @@ func _test_the_air_takes_its_share_of_the_starlight(h, scene: SpacesimSystemScen
 		h.check(spec.contains("SPECULAR *= deck_specular_share("),
 			"%s dims a specular highlight by the deck's beam transmittance, not its diffuse one" % named)
 	h.check(FileAccess.get_file_as_string(
-		"res://addons/spacesim/render/deck_shadow.gdshaderinc"
+		"res://addons/stoichon/render/deck_shadow.gdshaderinc"
 	).contains("return exp(-x) * (1.0 + x);"),
 		"the share is exp(-x)*(1+x): the ratio of a beam's to a diffuse transmittance, and never above 1")
 
@@ -1142,8 +1142,8 @@ func _test_the_air_takes_its_share_of_the_starlight(h, scene: SpacesimSystemScen
 ## the deck's own per-frame function, after its `decks.is_empty()` early return, so an airless body kept the
 ## uniform's default `Vector3.UP` — a northern sun on every terminator in the system, and nothing would have said
 ## so.
-func _test_the_star_occludes_itself(h, scene: SpacesimSystemScene, root: Node) -> void:
-	for path in ["res://addons/spacesim/render/body_surface.gdshader"]:
+func _test_the_star_occludes_itself(h, scene: StoichonSystemScene, root: Node) -> void:
+	for path in ["res://addons/stoichon/render/body_surface.gdshader"]:
 		var shader: Shader = load(path)
 		var named := String(path).get_file()
 		if shader == null:
@@ -1155,7 +1155,7 @@ func _test_the_star_occludes_itself(h, scene: SpacesimSystemScene, root: Node) -
 			"and applies it to the light, not to the normal" % [])
 	h.check(
 		FileAccess.get_file_as_string(
-			"res://addons/spacesim/render/star_transmission.gdshaderinc"
+			"res://addons/stoichon/render/star_transmission.gdshaderinc"
 		).contains("uniform float star_angle"),
 		"the law takes the star's own angular radius, which varies 77x across Sol"
 	)
@@ -1211,7 +1211,7 @@ func _test_the_star_occludes_itself(h, scene: SpacesimSystemScene, root: Node) -
 	h.check(angle is float and float(angle) > 0.0,
 		"with the star's angular radius, which is what sizes the penumbra (%s)" % [angle])
 	if angle is float:
-		h.check_near(float(angle), SpacesimLod.angular_radius(star_body.radius, to_star.length()),
+		h.check_near(float(angle), StoichonLod.angular_radius(star_body.radius, to_star.length()),
 			"derived from the body's distance, not fixed at one astronomical unit", 1.0e-9)
 	camera.queue_free()
 
@@ -1226,12 +1226,12 @@ func _test_the_star_occludes_itself(h, scene: SpacesimSystemScene, root: Node) -
 ## **Checked against the source text**, because a `ShaderMaterial` whose parameter was never set returns
 ## `null` rather than the shader's own default: the mistake is invisible to anything that reads a material.
 func _test_shader_defaults_are_the_hosts(h) -> void:
-	var surface := "res://addons/spacesim/render/body_surface.gdshader"
+	var surface := "res://addons/stoichon/render/body_surface.gdshader"
 	var pairs := [
 		# The fallback when a publish is missed: a 1080-line 70-degree frame's centre pixel, the same unit
-		# `SpacesimLod.pixel_angle` works in — not zero, which would ask for unbounded detail.
-		[surface, "pixel_angle", SpacesimLod.pixel_angle(70.0, 1080.0)],
-		["res://addons/spacesim/render/body_deck.gdshader", "softness", SpacesimBodyRenderer.DECK_SOFTNESS],
+		# `StoichonLod.pixel_angle` works in — not zero, which would ask for unbounded detail.
+		[surface, "pixel_angle", StoichonLod.pixel_angle(70.0, 1080.0)],
+		["res://addons/stoichon/render/body_deck.gdshader", "softness", StoichonBodyRenderer.DECK_SOFTNESS],
 	]
 	for pair in pairs:
 		var shader: Shader = load(pair[0])
@@ -1272,31 +1272,31 @@ func _test_the_frame_holds_every_radiance_it_is_given(h) -> void:
 	const LARGEST := 65504.0
 
 	# The two halves of the one constant, which a shader and a script cannot share any other way.
-	var include := FileAccess.get_file_as_string(SpacesimRadiance.SHADER_INCLUDE)
+	var include := FileAccess.get_file_as_string(StoichonRadiance.SHADER_INCLUDE)
 	var found := RegEx.create_from_string("RADIANCE_GAIN = ([0-9.]+)").search(include)
 	h.check(found != null, "the shader include declares RADIANCE_GAIN")
 	if found != null:
-		h.check_near(float(found.get_string(1)), SpacesimRadiance.GAIN,
+		h.check_near(float(found.get_string(1)), StoichonRadiance.GAIN,
 			"and the script's gain is the shader's number", 0.5)
 
 	# **A magnitude-8 star, the depth the catalogue ships**, as the sky computes it: its whole light over one
 	# pixel's solid angle, in the frame's currency, at 720p and a 75-degree field.
 	var pixel_angle := 2.0 * tan(deg_to_rad(75.0) * 0.5) / 720.0
 	var lux8 := 2.54e-6 * pow(10.0, -0.4 * 8.0)
-	var radiance8 := lux8 * SpacesimRadiance.GAIN / (pixel_angle * pixel_angle * SpacesimRadiance.UNIT_LUX_PER_SR)
+	var radiance8 := lux8 * StoichonRadiance.GAIN / (pixel_angle * pixel_angle * StoichonRadiance.UNIT_LUX_PER_SR)
 	var levels8 := int(radiance8 / SUBNORMAL_STEP)
 	h.check(levels8 >= 256,
 		"a magnitude-8 star's pixel has at least eight bits of mantissa left (%s levels)" % str(levels8))
 
 	# The star that started this: magnitude 6.5, which before the gain carried about five levels.
 	var lux65 := 2.54e-6 * pow(10.0, -0.4 * 6.5)
-	var radiance65 := lux65 * SpacesimRadiance.GAIN / (pixel_angle * pixel_angle * SpacesimRadiance.UNIT_LUX_PER_SR)
+	var radiance65 := lux65 * StoichonRadiance.GAIN / (pixel_angle * pixel_angle * StoichonRadiance.UNIT_LUX_PER_SR)
 	h.check(radiance65 > SMALLEST_NORMAL,
 		"and a magnitude-6.5 star is back inside the format's normal range (%s)" % str(snappedf(radiance65, 1e-7)))
 
 	# The ceiling binds the gain: the star's disc is authored at `STAR_INTENSITY` times white, and an
 	# infinity in the frame propagates through the glow rather than clipping quietly.
-	var disc := SpacesimBodyRenderer.STAR_INTENSITY * SpacesimRadiance.GAIN
+	var disc := StoichonBodyRenderer.STAR_INTENSITY * StoichonRadiance.GAIN
 	h.check(disc < LARGEST, "and the star's own disc still fits the format's top end (%s of 65504)" % str(disc))
 
 	# **A star's splat and its disc must land on the same number.** The disc writes `intensity` straight into a
@@ -1304,16 +1304,16 @@ func _test_the_frame_holds_every_radiance_it_is_given(h) -> void:
 	# be encoded to come back to the same level. It was not, and now that the value carries the gain the power
 	# would be the difference between a glow at 24x white and one at millions.
 	var tint := Color(1.0, 0.95, 0.9)
-	var level := SpacesimBodyRenderer.STAR_INTENSITY * SpacesimRadiance.GAIN
-	var written := SpacesimBodyRenderer._at_unit_luminance(tint, level).linear_to_srgb()
+	var level := StoichonBodyRenderer.STAR_INTENSITY * StoichonRadiance.GAIN
+	var written := StoichonBodyRenderer._at_unit_luminance(tint, level).linear_to_srgb()
 	h.check_near(written.srgb_to_linear().get_luminance(), level,
 		"a star's splat decodes back to the level its disc writes", level * 0.01)
 
 	# A sunlit surface is lifted too, and must not clip.
-	var sunlit := SpacesimRadiance.frame(SpacesimExposure.REFERENCE_LUX / PI)
+	var sunlit := StoichonRadiance.frame(StoichonExposure.REFERENCE_LUX / PI)
 	h.check(sunlit < LARGEST, "and a sunlit surface does too (%s)" % str(sunlit))
 
 	# The night-side ambient, the frame's dimmest authored light: 2e-4 lux, the whole naked-eye sky.
-	var ambient := 2.0e-4 / SpacesimExposure.REFERENCE_LUX * SpacesimRadiance.GAIN
+	var ambient := 2.0e-4 / StoichonExposure.REFERENCE_LUX * StoichonRadiance.GAIN
 	h.check(ambient > SMALLEST_NORMAL * 0.02,
 		"and the night-side ambient is three decades off the format's floor (%s)" % str(snappedf(ambient, 1e-7)))

@@ -14,7 +14,7 @@ const RADIUS := 6371000.0
 
 func _init() -> void:
 	for depth in [4, 6, 8, 10]:
-		var chunks := SpacesimPatches.select(RADIUS * 1.5, Vector3.UP, RADIUS, 1.3e-3, 0.5)
+		var chunks := StoichonPatches.select(RADIUS * 1.5, Vector3.UP, RADIUS, 1.3e-3, 0.5)
 		var shortest := Vector3(INF, INF, INF)
 		var longest := Vector3.ZERO
 		var count := 0
@@ -39,13 +39,13 @@ func _init() -> void:
 
 ## A chunk's three spherical side lengths, from the same corner arithmetic the geometry uses.
 static func _outline_sides(chunk: Array) -> Vector3:
-	var face: Array = SpacesimPatches.ROOT_FACES[int(chunk[0])]
-	var a: Vector3 = SpacesimIcosphere.VERTICES[int(face[0])].normalized()
-	var b: Vector3 = SpacesimIcosphere.VERTICES[int(face[1])].normalized()
-	var c: Vector3 = SpacesimIcosphere.VERTICES[int(face[2])].normalized()
+	var face: Array = StoichonPatches.ROOT_FACES[int(chunk[0])]
+	var a: Vector3 = StoichonIcosphere.VERTICES[int(face[0])].normalized()
+	var b: Vector3 = StoichonIcosphere.VERTICES[int(face[1])].normalized()
+	var c: Vector3 = StoichonIcosphere.VERTICES[int(face[2])].normalized()
 	var route := String(chunk[1])
 	for index in route.length():
-		var kids: Array = SpacesimPatches._child_triangles(a, b, c)
+		var kids: Array = StoichonPatches._child_triangles(a, b, c)
 		var kid: Array = kids[int(route[index])]
 		a = kid[0]
 		b = kid[1]

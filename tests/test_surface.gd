@@ -13,14 +13,14 @@ extends RefCounted
 ## re-fitting the content to the published split, which changes what is drawn and is a separate step.
 ##
 ## What is asserted here is the **derivation**, and what is printed is the comparison.
-func _test_the_missing_air_term(h, sol: SpacesimSolarSystem, materials: SpacesimMaterialTable) -> void:
+func _test_the_missing_air_term(h, sol: StoichonSolarSystem, materials: StoichonMaterialTable) -> void:
 	var earth := sol.body_by_id("planet:earth")
 	var luna := sol.body_by_id("moon:luna")
 	var star := sol.star()
-	var luminosity := SpacesimStarModel.luminosity(star)
+	var luminosity := StoichonStarModel.luminosity(star)
 
-	var per_channel := SpacesimAtmosphereModel.clear_sky_albedo(
-		earth.atmosphere, materials, SpacesimAtmosphereModel.surface_gravity(earth)
+	var per_channel := StoichonAtmosphereModel.clear_sky_albedo(
+		earth.atmosphere, materials, StoichonAtmosphereModel.surface_gravity(earth)
 	)
 	h.check(per_channel.z > per_channel.x,
 		"a Rayleigh atmosphere reflects blue more than red (%.4f against %.4f)" % [per_channel.z, per_channel.x])
@@ -29,14 +29,14 @@ func _test_the_missing_air_term(h, sol: SpacesimSolarSystem, materials: Spacesim
 	# `k(1/m) * H(m)` is `[sigma p / kT] * [kT / m-bar g]` and the two T's cancel — which is also what
 	# stops the albedo depending on itself through the equilibrium temperature that is computed FROM it.
 	# A factor of four in the input temperature must move nothing in the output.
-	var warm := SpacesimAtmosphereModel.clear_sky_scalar(
-		earth.atmosphere, materials, SpacesimAtmosphereModel.surface_gravity(earth),
+	var warm := StoichonAtmosphereModel.clear_sky_scalar(
+		earth.atmosphere, materials, StoichonAtmosphereModel.surface_gravity(earth),
 		Vector3.ONE * 4.0
 	)
 	h.check_near(warm * 0.0, 0.0, "the air's reflection can be weighted by any scheme at all", 1.0e-12)
 
-	var air := SpacesimSurfaceModel.air_albedo(earth, materials)
-	var ground := SpacesimSurfaceModel.surface_albedo(earth, materials)
+	var air := StoichonSurfaceModel.air_albedo(earth, materials)
+	var ground := StoichonSurfaceModel.surface_albedo(earth, materials)
 	var published_air := 0.149 - ground
 	h.check(air > 0.03 and air < 0.12,
 		"and Earth's clear sky reflects %.4f of the star's light on its own" % air)
@@ -45,7 +45,7 @@ func _test_the_missing_air_term(h, sol: SpacesimSolarSystem, materials: Spacesim
 			% published_air)
 
 	# Airless bodies contribute nothing, and that is a value rather than a failure.
-	var luna_air := SpacesimSurfaceModel.air_albedo(luna, materials)
+	var luna_air := StoichonSurfaceModel.air_albedo(luna, materials)
 	h.check_near(luna_air, 0.0, "while an airless body reflects none of it", 1.0e-12)
 
 	# --- the split, printed because the comparison is the point ---
@@ -65,19 +65,19 @@ func _test_the_missing_air_term(h, sol: SpacesimSolarSystem, materials: Spacesim
 	# not about the clear-sky column at all. Two different quantities, one plausible-looking pair of
 	# numbers. The 88 % does corroborate one thing: the surface's contribution to the *all-sky* albedo is
 	# near 12 % of it, which is what `(1 - f) * surface_albedo` gives here.
-	var terms := SpacesimSurfaceModel.reflectance_terms(earth, materials)
+	var terms := StoichonSurfaceModel.reflectance_terms(earth, materials)
 	# **Two quantities share the name "cloud contribution" and they are not the same number.** The 0.144
 	# is the difference between the *planetary* albedos — all-sky minus clear-sky, which is the cloud
 	# radiative effect. The *share of the disc's reflection* is instead `f * A_cloud` against
 	# `(1 - f) * A_clear`, which is 0.233 against 0.0596. Printing both, because conflating them is what
 	# made this model look wrong in one place and right in another for two sessions.
-	var clear := (1.0 - SpacesimSurfaceModel.cloud_fraction(earth))
+	var clear := (1.0 - StoichonSurfaceModel.cloud_fraction(earth))
 	print("    ---   published (CERES 2015): all-sky 0.293, clear-sky 0.149, difference 0.144")
 	print("    ---   published shares: cloud %.3f = f * 0.389,  clear %.3f = (1-f) * 0.149" % [0.6 * 0.389, 0.4 * 0.149])
 	print("    ---   net model:        cloud %.3f = f * %.3f,  clear %.3f = (1-f) * %.3f,  total %.3f" % [
 		float(terms["cloud"]), float(terms["cloud_albedo"]),
-		clear * SpacesimSurfaceModel.clear_sky_albedo(earth, materials),
-		SpacesimSurfaceModel.clear_sky_albedo(earth, materials), float(terms["total"])
+		clear * StoichonSurfaceModel.clear_sky_albedo(earth, materials),
+		StoichonSurfaceModel.clear_sky_albedo(earth, materials), float(terms["total"])
 	])
 	print("    ---   and the clear column breaks into ground %.3f + air %.3f" % [
 		float(terms["surface_albedo"]), float(terms["air_albedo"])
@@ -90,9 +90,9 @@ func _test_the_missing_air_term(h, sol: SpacesimSolarSystem, materials: Spacesim
 	# giants are untouched by this, and Luna and Mercury have no deck to rescale.
 	for id in ["planet:earth", "planet:mars"]:
 		var body := sol.body_by_id(id)
-		var cover := SpacesimSurfaceModel.cloud_fraction(body)
+		var cover := StoichonSurfaceModel.cloud_fraction(body)
 		var measured := float(MEASURED[id][0])
-		var fitted := (measured - (1.0 - cover) * SpacesimSurfaceModel.clear_sky_albedo(body, materials)) / cover
+		var fitted := (measured - (1.0 - cover) * StoichonSurfaceModel.clear_sky_albedo(body, materials)) / cover
 		print("    ---   %s: deck albedo %.3f -> %.3f keeps its measured %.3f" % [
 			id, body.clouds.albedo, fitted, measured
 		])
@@ -123,11 +123,11 @@ const MEASURED := {
 
 func run(h, _root: Node) -> void:
 	print("  surface")
-	var sol: SpacesimSolarSystem = load(SOL_PATH)
+	var sol: StoichonSolarSystem = load(SOL_PATH)
 	h.check(sol != null, "Sol loads")
 	if sol == null:
 		return
-	var materials := SpacesimMaterialTable.engine_table()
+	var materials := StoichonMaterialTable.engine_table()
 	h.check(materials != null, "and the engine material table loads with it")
 	if materials == null:
 		return
@@ -143,7 +143,7 @@ func run(h, _root: Node) -> void:
 	_test_snow_line(h, sol, materials)
 
 
-func _test_albedos(h, sol: SpacesimSolarSystem, materials: SpacesimMaterialTable) -> void:
+func _test_albedos(h, sol: StoichonSolarSystem, materials: StoichonMaterialTable) -> void:
 	for id in MEASURED:
 		var body := sol.body_by_id(id)
 		h.check(body != null, "%s is present" % id)
@@ -152,7 +152,7 @@ func _test_albedos(h, sol: SpacesimSolarSystem, materials: SpacesimMaterialTable
 		var measured: float = MEASURED[id][0]
 		var tolerance: float = MEASURED[id][1]
 		var note: String = MEASURED[id][2]
-		var derived := SpacesimSurfaceModel.bond_albedo(body, materials)
+		var derived := StoichonSurfaceModel.bond_albedo(body, materials)
 		var message := "%s reflects %.3f against a measured %.3f" % [body.display_name, derived, measured]
 		if not note.is_empty():
 			message += " — " + note
@@ -161,12 +161,12 @@ func _test_albedos(h, sol: SpacesimSolarSystem, materials: SpacesimMaterialTable
 
 ## The Moon is the proof that the surface half is right on its own: no atmosphere, no deck, and the
 ## area-weighted material albedo is the whole answer.
-func _test_airless_bodies_need_no_clouds(h, sol: SpacesimSolarSystem, materials: SpacesimMaterialTable) -> void:
+func _test_airless_bodies_need_no_clouds(h, sol: StoichonSolarSystem, materials: StoichonMaterialTable) -> void:
 	var luna := sol.body_by_id("moon:luna")
 	h.check(luna.clouds == null, "Luna has no cloud deck")
 	if luna != null:
-		h.check_near(SpacesimSurfaceModel.bond_albedo(luna, materials),
-			SpacesimSurfaceModel.surface_albedo(luna, materials),
+		h.check_near(StoichonSurfaceModel.bond_albedo(luna, materials),
+			StoichonSurfaceModel.surface_albedo(luna, materials),
 			"so its albedo is exactly its surface's", 1.0e-9)
 
 	var earth := sol.body_by_id("planet:earth")
@@ -180,46 +180,46 @@ func _test_airless_bodies_need_no_clouds(h, sol: SpacesimSolarSystem, materials:
 		# smaller number and it is asserted separately below.
 		var bare := earth.duplicate(true)
 		bare.clouds = null
-		h.check_near(SpacesimSurfaceModel.bond_albedo(bare, materials),
-			SpacesimSurfaceModel.clear_sky_albedo(earth, materials),
+		h.check_near(StoichonSurfaceModel.bond_albedo(bare, materials),
+			StoichonSurfaceModel.clear_sky_albedo(earth, materials),
 			"and without it Earth derives its clear sky, %.3f — ground plus air, not the ground alone"
-				% SpacesimSurfaceModel.bond_albedo(bare, materials), 1.0e-9)
-		h.check(SpacesimSurfaceModel.surface_albedo(earth, materials) < 0.12,
+				% StoichonSurfaceModel.bond_albedo(bare, materials), 1.0e-9)
+		h.check(StoichonSurfaceModel.surface_albedo(earth, materials) < 0.12,
 			"while the ground under it reflects only %.3f"
-				% SpacesimSurfaceModel.surface_albedo(earth, materials))
+				% StoichonSurfaceModel.surface_albedo(earth, materials))
 
 
-func _test_colours(h, sol: SpacesimSolarSystem, materials: SpacesimMaterialTable) -> void:
+func _test_colours(h, sol: StoichonSolarSystem, materials: StoichonMaterialTable) -> void:
 	# Deep blue, not pale: the deck is a drawn layer, so it must not also be mixed into the surface.
 	# Blending it in gave (0.66, 0.69, 0.73) — 1.15:1 from neutral, which the eye reads as grey, and
 	# which is why Earth had structure and no colour.
-	var earth := SpacesimSurfaceModel.color(sol.body_by_id("planet:earth"), materials)
+	var earth := StoichonSurfaceModel.color(sol.body_by_id("planet:earth"), materials)
 	h.check(earth.b > earth.g and earth.g > earth.r,
 		"Earth is blue-dominant (%.2f, %.2f, %.2f)" % [earth.r, earth.g, earth.b])
 	h.check(earth.b < 0.45, "and deep rather than washed toward white")
 
 	# The two deliberately disagree: the albedo needs the deck, the picture does not.
 	var earth_body := sol.body_by_id("planet:earth")
-	h.check_near(SpacesimSurfaceModel.bond_albedo(earth_body, materials), 0.302,
+	h.check_near(StoichonSurfaceModel.bond_albedo(earth_body, materials), 0.302,
 		"the albedo still counts the deck, because the temperature depends on it", 0.02)
-	h.check_near(SpacesimSurfaceModel.surface_albedo(earth_body, materials), 0.081,
+	h.check_near(StoichonSurfaceModel.surface_albedo(earth_body, materials), 0.081,
 		"while the surface alone is the much darker number", 0.01)
 
 	# A body with no surface at all is drawn in its deck's colour — for a gas giant that is the only
 	# thing there is to see.
 	var neptune_body := sol.body_by_id("planet:neptune")
-	h.check(SpacesimSurfaceModel.color(neptune_body, materials) == neptune_body.clouds.color,
+	h.check(StoichonSurfaceModel.color(neptune_body, materials) == neptune_body.clouds.color,
 		"Neptune has no surface, so it is drawn in its deck's colour")
 
 	# Luna is grey-brown, and stays that way — no deck to whiten it.
-	var luna := SpacesimSurfaceModel.color(sol.body_by_id("moon:luna"), materials)
+	var luna := StoichonSurfaceModel.color(sol.body_by_id("moon:luna"), materials)
 	h.check(luna.r > luna.g and luna.g > luna.b,
 		"Luna is grey-brown (%.2f, %.2f, %.2f)" % [luna.r, luna.g, luna.b])
 
 	# A body with neither surface nor deck gets the deliberate placeholder, never a plausible guess.
-	var bare := SpacesimSystemBody.new()
+	var bare := StoichonSystemBody.new()
 	bare.id = "planet:nothing"
-	h.check(SpacesimSurfaceModel.color(bare, materials) == SpacesimSurfaceModel.UNPINNED_COLOR,
+	h.check(StoichonSurfaceModel.color(bare, materials) == StoichonSurfaceModel.UNPINNED_COLOR,
 		"a body with nothing to derive from is drawn in the placeholder grey")
 
 
@@ -245,7 +245,7 @@ const MEASURED_TEMPERATURE := {
 ## A body's distance from the star, walking the parent chain — **a moon's orbit is relative to its
 ## planet**, so Titan's own semi-major axis is a distance to *Saturn*. Eccentricity is ignored: this is a
 ## test convenience, and every verdict here has 10 K of slack.
-func _star_distance(sol: SpacesimSolarSystem, body: SpacesimSystemBody) -> float:
+func _star_distance(sol: StoichonSolarSystem, body: StoichonSystemBody) -> float:
 	var distance := 0.0
 	var current := body
 	while current != null and current.orbit != null:
@@ -260,7 +260,7 @@ func _star_distance(sol: SpacesimSolarSystem, body: SpacesimSystemBody) -> float
 ## s vapour pressure is 101,325 Pa" — which for water is its boiling point, 373.15 K, in whichever phase
 ## the block happens to store. Three of the four water entries carried the triple point instead, and a
 ## phase test built on that reads ice as a gas above freezing.
-func _test_the_one_atm_reference(h, materials: SpacesimMaterialTable) -> void:
+func _test_the_one_atm_reference(h, materials: StoichonMaterialTable) -> void:
 	var water := materials.by_name("water_vapour")
 	h.check(water != null, "water is in the table")
 	if water == null:
@@ -280,54 +280,54 @@ func _test_the_one_atm_reference(h, materials: SpacesimMaterialTable) -> void:
 ## The rules, then the bodies. **The rule checks use temperatures the body really has**, so they test the
 ## physics rather than our temperature derivation; the body checks then say what the engine will actually
 ## draw.
-func _test_phases(h, sol: SpacesimSolarSystem, materials: SpacesimMaterialTable) -> void:
+func _test_phases(h, sol: StoichonSolarSystem, materials: StoichonMaterialTable) -> void:
 	var ice := materials.by_name("water_ice")
 	var methane := materials.by_name("methane_ice")
 	var carbon_dioxide := materials.by_name("carbon_dioxide")
 	var regolith := materials.by_name("regolith")
 
 	# --- the rules, at real surface conditions ---
-	h.check(SpacesimSurfaceModel.phase_of(ice, 288.0, 101325.0) == SpacesimSurfaceModel.Phase.LIQUID,
+	h.check(StoichonSurfaceModel.phase_of(ice, 288.0, 101325.0) == StoichonSurfaceModel.Phase.LIQUID,
 		"water at Earth's surface is a liquid")
-	h.check(SpacesimSurfaceModel.phase_of(ice, 210.0, 636.0) == SpacesimSurfaceModel.Phase.SOLID,
+	h.check(StoichonSurfaceModel.phase_of(ice, 210.0, 636.0) == StoichonSurfaceModel.Phase.SOLID,
 		"at Mars' it is ice, because 210 K is below freezing")
-	h.check(SpacesimSurfaceModel.phase_of(ice, 737.0, 9200000.0) == SpacesimSurfaceModel.Phase.GAS,
+	h.check(StoichonSurfaceModel.phase_of(ice, 737.0, 9200000.0) == StoichonSurfaceModel.Phase.GAS,
 		"at Venus' it is vapour — past the boiling point even at 92 bar")
-	h.check(SpacesimSurfaceModel.phase_of(ice, 94.0, 100.0) == SpacesimSurfaceModel.Phase.SOLID,
+	h.check(StoichonSurfaceModel.phase_of(ice, 94.0, 100.0) == StoichonSurfaceModel.Phase.SOLID,
 		"and in vacuum at 94 K it is ice, the state the label already claimed")
 	# **Titan's methane is the check a temperature-only model cannot pass.** 94 K is above methane's 90.69 K
 	# melting point and below its 111.7 K boiling point at Titan's 1.47 bar, so the seas are liquid — on a
 	# body whose content calls the same material `methane_ice`.
-	h.check(SpacesimSurfaceModel.phase_of(methane, 94.0, 147000.0) == SpacesimSurfaceModel.Phase.LIQUID,
+	h.check(StoichonSurfaceModel.phase_of(methane, 94.0, 147000.0) == StoichonSurfaceModel.Phase.LIQUID,
 		"methane at Titan's surface is liquid, which is what its lakes are")
 	# **Triple point, not temperature.** Mars is warm enough to melt CO2 — 211 K against 216.6 K is close —
 	# but at 636 Pa CO2 has no liquid phase at all, so warming it up produces a gas rather than a sea.
-	h.check(SpacesimSurfaceModel.phase_of(carbon_dioxide, 211.0, 636.0) != SpacesimSurfaceModel.Phase.LIQUID,
+	h.check(StoichonSurfaceModel.phase_of(carbon_dioxide, 211.0, 636.0) != StoichonSurfaceModel.Phase.LIQUID,
 		"Mars' air is far too thin to hold liquid CO2")
-	h.check(SpacesimSurfaceModel.phase_of(carbon_dioxide, 300.0, 636.0) == SpacesimSurfaceModel.Phase.GAS,
+	h.check(StoichonSurfaceModel.phase_of(carbon_dioxide, 300.0, 636.0) == StoichonSurfaceModel.Phase.GAS,
 		"and warm CO2 at 636 Pa sublimates rather than melts — its triple point is 5.18 bar")
 	# **And the corner this model does not model, asserted so it cannot change silently.** A CO2 entry whose
 	# 1-atm reference is a sublimation point is never given a liquid, which is right at 1 atm and wrong
 	# above CO2's 5.18 bar triple point — 10 MPa of CO2 at 300 K is a liquid in reality, because its
 	# saturation pressure there is 6.7 MPa. Nothing in Sol is in that corner, and the assertion is here to
 	# say so out loud rather than to bless it.
-	h.check(SpacesimSurfaceModel.phase_of(carbon_dioxide, 300.0, 1000000.0)
-			== SpacesimSurfaceModel.Phase.GAS,
+	h.check(StoichonSurfaceModel.phase_of(carbon_dioxide, 300.0, 1000000.0)
+			== StoichonSurfaceModel.Phase.GAS,
 		"and above the triple point it still says gas, which is the named limit: 10 MPa of CO2 at 300 K is a"
 			+ " liquid in reality and would need a triple-point-anchored curve")
 	# A substance the table has no melting point for is not placed in a phase at all.
-	h.check(SpacesimSurfaceModel.phase_of(regolith, 288.0, 101325.0) == SpacesimSurfaceModel.Phase.UNKNOWN,
+	h.check(StoichonSurfaceModel.phase_of(regolith, 288.0, 101325.0) == StoichonSurfaceModel.Phase.UNKNOWN,
 		"and a material with no melting point is UNKNOWN rather than guessed")
 
 	# --- the bodies ---
 	var star := sol.star()
-	var luminosity := SpacesimStarModel.luminosity(star)
+	var luminosity := StoichonStarModel.luminosity(star)
 	for id in MEASURED_TEMPERATURE:
 		var body := sol.body_by_id(id)
 		if body == null:
 			h.check(false, "%s is present" % id)
 			continue
-		var temperature := SpacesimAtmosphereModel.reference_temperature(
+		var temperature := StoichonAtmosphereModel.reference_temperature(
 			body, materials, luminosity, _star_distance(sol, body)
 		)
 		var target: Array = MEASURED_TEMPERATURE[id]
@@ -338,13 +338,13 @@ func _test_phases(h, sol: SpacesimSolarSystem, materials: SpacesimMaterialTable)
 	# Earth's water is liquid, so its surface is an ocean world — and the temperature the phase test used is
 	# the atmosphere model's own, not a second one.
 	var earth := sol.body_by_id("planet:earth")
-	var bearing := SpacesimSurfaceModel.ocean_bearing(
+	var bearing := StoichonSurfaceModel.ocean_bearing(
 		earth, materials, luminosity, _star_distance(sol, earth)
 	)
 	h.check(not bearing.is_empty(), "Earth carries a volatile on its surface")
 	if not bearing.is_empty():
 		h.check(String(bearing["material"]) == "ocean", "which is water, %s" % bearing["material"])
-		h.check(int(bearing["phase"]) == SpacesimSurfaceModel.Phase.LIQUID,
+		h.check(int(bearing["phase"]) == StoichonSurfaceModel.Phase.LIQUID,
 			"and it is liquid at %.0f K" % float(bearing["temperature"]))
 
 	# **Titan is the check a temperature-only model cannot pass, on a body whose content calls the material
@@ -352,7 +352,7 @@ func _test_phases(h, sol: SpacesimSolarSystem, materials: SpacesimMaterialTable)
 	# and below its 111.7 K boiling point at 1.47 bar, so the label is overruled by the phase — which is
 	# exactly the rule, and Titan really does have methane seas.
 	var titan := sol.body_by_id("moon:titan")
-	var titan_bearing := SpacesimSurfaceModel.ocean_bearing(
+	var titan_bearing := StoichonSurfaceModel.ocean_bearing(
 		titan, materials, luminosity, _star_distance(sol, titan)
 	)
 	var titan_temperature := float(titan_bearing.get("temperature", 0.0))
@@ -360,51 +360,51 @@ func _test_phases(h, sol: SpacesimSolarSystem, materials: SpacesimMaterialTable)
 		titan_temperature, _phase_name(int(titan_bearing.get("phase", 0)))
 	])
 	h.check_near(titan_temperature, 94.0, "which is close enough for the phase to be the real one", 5.0)
-	h.check(int(titan_bearing.get("phase", 0)) == SpacesimSurfaceModel.Phase.LIQUID,
+	h.check(int(titan_bearing.get("phase", 0)) == StoichonSurfaceModel.Phase.LIQUID,
 		"so `methane_ice` is drawn as a liquid, and the label loses to the phase")
 
 
 func _phase_name(phase: int) -> String:
 	match phase:
-		SpacesimSurfaceModel.Phase.SOLID:
+		StoichonSurfaceModel.Phase.SOLID:
 			return "solid"
-		SpacesimSurfaceModel.Phase.LIQUID:
+		StoichonSurfaceModel.Phase.LIQUID:
 			return "liquid"
-		SpacesimSurfaceModel.Phase.GAS:
+		StoichonSurfaceModel.Phase.GAS:
 			return "gas"
 	return "unknown"
 
 
 ## **The verdict a renderer branches on**, per body. The list is the whole reason the enum exists: each of
 ## these would be drawn wrongly by a model that ignored phase.
-func _test_surface_kinds(h, sol: SpacesimSolarSystem, materials: SpacesimMaterialTable) -> void:
-	var luminosity := SpacesimStarModel.luminosity(sol.star())
+func _test_surface_kinds(h, sol: StoichonSolarSystem, materials: StoichonMaterialTable) -> void:
+	var luminosity := StoichonStarModel.luminosity(sol.star())
 	var expected := {
-		"planet:earth": SpacesimSurfaceModel.SurfaceKind.OCEAN,
+		"planet:earth": StoichonSurfaceModel.SurfaceKind.OCEAN,
 		# **Titan is an ocean world by this model, and the reason is content rather than rule**: its coverage
 		# says 40 % methane and methane is liquid at 92.8 K, so a 40 % sea is what the content describes.
 		# Real Titan's lakes are a few percent of an icy surface; if that matters, the *fraction* in
 		# `sol.tres` is the thing to change, not the rule.
-		"moon:titan": SpacesimSurfaceModel.SurfaceKind.OCEAN,
-		"moon:europa": SpacesimSurfaceModel.SurfaceKind.ICE,
-		"moon:ganymede": SpacesimSurfaceModel.SurfaceKind.ICE,
-		"moon:triton": SpacesimSurfaceModel.SurfaceKind.ICE,
-		"planet:mars": SpacesimSurfaceModel.SurfaceKind.ROCKY,
-		"planet:venus": SpacesimSurfaceModel.SurfaceKind.ROCKY,
-		"planet:mercury": SpacesimSurfaceModel.SurfaceKind.ROCKY,
-		"moon:luna": SpacesimSurfaceModel.SurfaceKind.ROCKY,
-		"moon:io": SpacesimSurfaceModel.SurfaceKind.ROCKY,
-		"planet:jupiter": SpacesimSurfaceModel.SurfaceKind.GAS_GIANT,
-		"planet:saturn": SpacesimSurfaceModel.SurfaceKind.GAS_GIANT,
-		"planet:uranus": SpacesimSurfaceModel.SurfaceKind.GAS_GIANT,
-		"planet:neptune": SpacesimSurfaceModel.SurfaceKind.GAS_GIANT,
+		"moon:titan": StoichonSurfaceModel.SurfaceKind.OCEAN,
+		"moon:europa": StoichonSurfaceModel.SurfaceKind.ICE,
+		"moon:ganymede": StoichonSurfaceModel.SurfaceKind.ICE,
+		"moon:triton": StoichonSurfaceModel.SurfaceKind.ICE,
+		"planet:mars": StoichonSurfaceModel.SurfaceKind.ROCKY,
+		"planet:venus": StoichonSurfaceModel.SurfaceKind.ROCKY,
+		"planet:mercury": StoichonSurfaceModel.SurfaceKind.ROCKY,
+		"moon:luna": StoichonSurfaceModel.SurfaceKind.ROCKY,
+		"moon:io": StoichonSurfaceModel.SurfaceKind.ROCKY,
+		"planet:jupiter": StoichonSurfaceModel.SurfaceKind.GAS_GIANT,
+		"planet:saturn": StoichonSurfaceModel.SurfaceKind.GAS_GIANT,
+		"planet:uranus": StoichonSurfaceModel.SurfaceKind.GAS_GIANT,
+		"planet:neptune": StoichonSurfaceModel.SurfaceKind.GAS_GIANT,
 	}
 	for id in expected:
 		var body := sol.body_by_id(id)
 		if body == null:
 			h.check(false, "%s is present" % id)
 			continue
-		var kind: int = SpacesimSurfaceModel.surface_kind(
+		var kind: int = StoichonSurfaceModel.surface_kind(
 			body, materials, luminosity, _star_distance(sol, body)
 		)
 		h.check(kind == int(expected[id]), "%s is %s" % [body.display_name, _kind_name(int(expected[id]))])
@@ -412,11 +412,11 @@ func _test_surface_kinds(h, sol: SpacesimSolarSystem, materials: SpacesimMateria
 
 func _kind_name(kind: int) -> String:
 	match kind:
-		SpacesimSurfaceModel.SurfaceKind.OCEAN:
+		StoichonSurfaceModel.SurfaceKind.OCEAN:
 			return "an ocean world"
-		SpacesimSurfaceModel.SurfaceKind.ICE:
+		StoichonSurfaceModel.SurfaceKind.ICE:
 			return "an ice world"
-		SpacesimSurfaceModel.SurfaceKind.GAS_GIANT:
+		StoichonSurfaceModel.SurfaceKind.GAS_GIANT:
 			return "a gas giant"
 	return "rock"
 
@@ -424,21 +424,21 @@ func _kind_name(kind: int) -> String:
 ## **Sea level, and the bands above it.** Sea level is a percentile measured against the field, so the
 ## drawn ocean is the authored fraction of the area; the bands then stack up the slope in the order content
 ## authored them, and every band's colour carries its own material's reflectance as its luminance.
-func _test_bands(h, sol: SpacesimSolarSystem, materials: SpacesimMaterialTable) -> void:
-	var luminosity := SpacesimStarModel.luminosity(sol.star())
+func _test_bands(h, sol: StoichonSolarSystem, materials: StoichonMaterialTable) -> void:
+	var luminosity := StoichonStarModel.luminosity(sol.star())
 	var earth := sol.body_by_id("planet:earth")
 	var distance := _star_distance(sol, earth)
 
 	# **The area below the sea surface IS the ocean fraction**, so the percentile is 0.708 rather than its
 	# complement — the direction is easy to get backwards and impossible to notice in a picture.
-	var sea_level := SpacesimSurfaceModel.sea_level_percentile(earth, materials, luminosity, distance)
+	var sea_level := StoichonSurfaceModel.sea_level_percentile(earth, materials, luminosity, distance)
 	h.check_near(sea_level, 0.708, "Earth's sea level is the %.3f of the surface that is under water" % sea_level, 1.0e-6)
 
 	# **THE BANDS ARE SOLIDS ONLY (2026-11-01).** Evert: *"chop out the blue fake ocean. I'm happy with just sand,
 	# we'll do an ocean shader soonish."* The liquid used to claim the bottom of the ramp and was coloured as water,
 	# which painted an ocean on the LAND shader — no level, no depth, nothing transparent. A liquid is a level and
 	# gets its own layer, so the land's ramp is rock, sand and vegetation and no water.
-	var bands := SpacesimSurfaceModel.bands(earth, materials, luminosity, distance)
+	var bands := StoichonSurfaceModel.bands(earth, materials, luminosity, distance)
 	h.check(bands.size() == 2, "Earth's two solids make two bands, and the ocean makes none (%d)" % bands.size())
 	if bands.size() != 2:
 		return
@@ -474,25 +474,25 @@ func _test_bands(h, sol: SpacesimSolarSystem, materials: SpacesimMaterialTable) 
 
 	# A body with no surface register has no bands at all.
 	var jupiter := sol.body_by_id("planet:jupiter")
-	h.check(SpacesimSurfaceModel.bands(jupiter, materials, luminosity, _star_distance(sol, jupiter)).is_empty(),
+	h.check(StoichonSurfaceModel.bands(jupiter, materials, luminosity, _star_distance(sol, jupiter)).is_empty(),
 		"a gas giant has no surface bands to draw")
 
 
 ## **The snow line, derived from the profile the air already has.** `h = (T - T_freeze) / lapse` — and it
 ## comes out low, because that lapse is the dry adiabat. The number is asserted with its reason rather
 ## than tuned.
-func _test_snow_line(h, sol: SpacesimSolarSystem, materials: SpacesimMaterialTable) -> void:
-	var luminosity := SpacesimStarModel.luminosity(sol.star())
+func _test_snow_line(h, sol: StoichonSolarSystem, materials: StoichonMaterialTable) -> void:
+	var luminosity := StoichonStarModel.luminosity(sol.star())
 	var earth := sol.body_by_id("planet:earth")
-	var line := SpacesimSurfaceModel.snow_line(earth, materials, luminosity, _star_distance(sol, earth))
+	var line := StoichonSurfaceModel.snow_line(earth, materials, luminosity, _star_distance(sol, earth))
 	h.check(line > 1000.0 and line < 2000.0,
 		"Earth's snow line is at %.0f m — the dry adiabat's answer, lower than the real 2-3 km" % line)
 
 	# The arithmetic, from the same two functions, so a change to either shows up here.
-	var lapse := SpacesimAtmosphereModel.lapse_rate(
-		earth.atmosphere, materials, SpacesimAtmosphereModel.surface_gravity(earth)
+	var lapse := StoichonAtmosphereModel.lapse_rate(
+		earth.atmosphere, materials, StoichonAtmosphereModel.surface_gravity(earth)
 	)
-	var temperature := SpacesimAtmosphereModel.reference_temperature(
+	var temperature := StoichonAtmosphereModel.reference_temperature(
 		earth, materials, luminosity, _star_distance(sol, earth)
 	)
 	var water := materials.by_name("ocean")
@@ -501,12 +501,12 @@ func _test_snow_line(h, sol: SpacesimSolarSystem, materials: SpacesimMaterialTab
 
 	# No air means no profile, so no line. No surface volatile means nothing to freeze.
 	var luna := sol.body_by_id("moon:luna")
-	h.check_near(SpacesimSurfaceModel.snow_line(luna, materials, luminosity, _star_distance(sol, luna)),
+	h.check_near(StoichonSurfaceModel.snow_line(luna, materials, luminosity, _star_distance(sol, luna)),
 		0.0, "an airless body has no snow line", 1.0e-9)
 	var mars := sol.body_by_id("planet:mars")
-	h.check_near(SpacesimSurfaceModel.snow_line(mars, materials, luminosity, _star_distance(sol, mars)),
+	h.check_near(StoichonSurfaceModel.snow_line(mars, materials, luminosity, _star_distance(sol, mars)),
 		0.0, "and neither has a body with no surface volatile", 1.0e-9)
 
 	# The polar cap is the energy balance model's, and the seam answers "none" until it lands.
-	h.check_near(SpacesimSurfaceModel.polar_ice_line(earth), 0.0,
+	h.check_near(StoichonSurfaceModel.polar_ice_line(earth), 0.0,
 		"and the polar cap waits for the latitudinal energy balance", 1.0e-9)

@@ -67,7 +67,7 @@ var suite_paths: Array = [
 
 
 func _ready() -> void:
-	print("SpaceSim tests  (", Engine.get_version_info()["string"], ")")
+	print("Stoichon tests  (", Engine.get_version_info()["string"], ")")
 	var harness := Harness.new()
 	var wanted := _wanted_suites()
 	for path in suite_paths:

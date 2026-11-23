@@ -6,7 +6,7 @@ extends RefCounted
 ## real planets are: Jupiter banded, Earth banded-and-shredded, Venus featureless, and a body whose
 ## wind speed nobody has looked up coming back `UNKNOWN` rather than being given a plausible answer.
 ##
-## That last one is a check rather than politeness. `SpacesimAtmosphere.wind_speed` is the one input the
+## That last one is a check rather than politeness. `StoichonAtmosphere.wind_speed` is the one input the
 ## model cannot derive, and the whole point of returning `UNKNOWN` is that a guessed wind would produce
 ## a *confident* verdict for a body nobody has measured — which is exactly the failure the material
 ## table's "keep a zero" rule exists to prevent. So it gets an assertion.
@@ -21,19 +21,19 @@ const SOL_PATH := "res://systems/sol.tres"
 
 func run(h, root: Node) -> void:
 	print("  clouds")
-	var sol: SpacesimSolarSystem = load(SOL_PATH)
+	var sol: StoichonSolarSystem = load(SOL_PATH)
 	h.check(sol != null, "Sol loads")
 	if sol == null:
 		return
 
-	var scene := SpacesimSystemScene.from_content(sol)
+	var scene := StoichonSystemScene.from_content(sol)
 	h.check(scene != null, "a scene wraps it")
 	if scene == null:
 		return
 	scene.build(root)
 
-	var materials := SpacesimMaterialTable.engine_table()
-	var luminosity := SpacesimStarModel.luminosity(scene.star().content)
+	var materials := StoichonMaterialTable.engine_table()
+	var luminosity := StoichonStarModel.luminosity(scene.star().content)
 
 	_test_the_verdicts(h, scene, materials, luminosity)
 	_test_the_rotation_is_the_airs(h, scene)
@@ -54,27 +54,27 @@ func run(h, root: Node) -> void:
 ## applied the layers top-down instead — letting a deeper deck overwrite the one above it — fails. That is
 ## the whole failure mode, and with one layer it is invisible, which is why the flat shorthand cannot
 ## catch it.
-func _test_a_cloud_stack_composites(h, scene: SpacesimSystemScene, materials: SpacesimMaterialTable) -> void:
+func _test_a_cloud_stack_composites(h, scene: StoichonSystemScene, materials: StoichonMaterialTable) -> void:
 	var earth := scene.body_by_id("planet:earth")
-	var body := SpacesimSystemBody.new()
+	var body := StoichonSystemBody.new()
 	# Read-only borrow of a real atmosphere, so the clear column is a real number rather than zero.
 	body.atmosphere = earth.content.atmosphere
-	var clouds := SpacesimClouds.new()
-	var top := SpacesimCloudLayer.new()
+	var clouds := StoichonClouds.new()
+	var top := StoichonCloudLayer.new()
 	top.species = "water_vapour"
 	top.coverage = 0.5
 	top.albedo = 0.8
-	var deep := SpacesimCloudLayer.new()
+	var deep := StoichonCloudLayer.new()
 	deep.species = "water_vapour"
 	deep.coverage = 0.5
 	deep.albedo = 0.2
 	clouds.layers = [top, deep]
 	body.clouds = clouds
 
-	var terms := SpacesimSurfaceModel.reflectance_terms(body, materials)
+	var terms := StoichonSurfaceModel.reflectance_terms(body, materials)
 	var clear: float = terms["surface_albedo"] + terms["air_albedo"]
 	var expected := 0.5 * 0.8 + 0.5 * (0.5 * 0.2 + 0.5 * clear)
-	h.check_near(SpacesimSurfaceModel.bond_albedo(body, materials), expected,
+	h.check_near(StoichonSurfaceModel.bond_albedo(body, materials), expected,
 		"a two-layer stack composites deepest-first, so the top deck hides what is under it", 1.0e-9)
 
 	# **The cloud-free fraction is the product of the gaps**, not the top layer's own.
@@ -85,17 +85,17 @@ func _test_a_cloud_stack_composites(h, scene: SpacesimSystemScene, materials: Sp
 	# and water at 0.75/0.30 — composite to its measured 0.503 Bond albedo, which is the check that the
 	# two reflectances were fitted to the composite and not to the top deck alone.
 	var jupiter_body := scene.body_by_id("planet:jupiter")
-	h.check_near(SpacesimSurfaceModel.bond_albedo(jupiter_body.content, materials), 0.503,
+	h.check_near(StoichonSurfaceModel.bond_albedo(jupiter_body.content, materials), 0.503,
 		"and Jupiter's two layers composite to its measured 0.503 Bond albedo", 0.01)
 
 	# The flat shorthand is one layer, and must give exactly the old formula.
-	var flat := SpacesimClouds.new()
+	var flat := StoichonClouds.new()
 	flat.fraction = 0.6
 	flat.albedo = 0.419
 	body.clouds = flat
-	var flat_terms := SpacesimSurfaceModel.reflectance_terms(body, materials)
+	var flat_terms := StoichonSurfaceModel.reflectance_terms(body, materials)
 	var flat_clear: float = flat_terms["surface_albedo"] + flat_terms["air_albedo"]
-	h.check_near(SpacesimSurfaceModel.bond_albedo(body, materials),
+	h.check_near(StoichonSurfaceModel.bond_albedo(body, materials),
 		0.6 * 0.419 + 0.4 * flat_clear,
 		"while one flat deck is exactly the one-layer formula, which is what keeps Earth's fit", 1.0e-9)
 
@@ -104,15 +104,15 @@ func _test_a_cloud_stack_composites(h, scene: SpacesimSystemScene, materials: Sp
 ## table on purpose: the real one has no product species yet (that is content, `Cloud Layers` §9), and a
 ## mechanism that cannot be exercised is a mechanism nobody knows works.
 func _test_a_product_needs_its_reactants(h) -> void:
-	var table := SpacesimMaterialTable.new()
+	var table := StoichonMaterialTable.new()
 	for name in ["first", "second"]:
-		var gas := SpacesimSpecies.new()
+		var gas := StoichonSpecies.new()
 		gas.species_name = name
 		gas.molar_mass = 30.0
 		gas.heat_capacity = 1000.0
 		gas.condensation_temperature = 1.0 # never condenses: it is only a reactant here
 		table.species.append(gas)
-	var product := SpacesimSpecies.new()
+	var product := StoichonSpecies.new()
 	product.species_name = "product"
 	product.molar_mass = 51.0
 	product.heat_capacity = 1000.0
@@ -121,31 +121,31 @@ func _test_a_product_needs_its_reactants(h) -> void:
 	table.species.append(product)
 
 	var gravity := 9.81
-	var atmosphere := SpacesimAtmosphere.new()
+	var atmosphere := StoichonAtmosphere.new()
 	atmosphere.surface_pressure = 101325.0
 	atmosphere.species = {"first": 0.8, "second": 0.2}
-	var both := SpacesimAtmosphereModel.condensation_levels(atmosphere, table, gravity, 255.0)
+	var both := StoichonAtmosphereModel.condensation_levels(atmosphere, table, gravity, 255.0)
 	var found := _formation_of(both, "product")
-	h.check(found == SpacesimAtmosphereModel.Condensation.Formation.REACTION,
+	h.check(found == StoichonAtmosphereModel.Condensation.Formation.REACTION,
 		"a product with both reactants present gives a REACTION level")
 
 	# **One reactant missing and there is no product at all** — the check that it is not simply reading
 	# the table.
 	atmosphere.species = {"first": 1.0}
-	var one := SpacesimAtmosphereModel.condensation_levels(atmosphere, table, gravity, 255.0)
+	var one := StoichonAtmosphereModel.condensation_levels(atmosphere, table, gravity, 255.0)
 	h.check(_formation_of(one, "product") == -1,
 		"and no level at all when one of them is missing")
 
 	# An input is still a CONDENSATION level, not a product: the two paths must not be confused.
-	var plain := SpacesimSpecies.new()
+	var plain := StoichonSpecies.new()
 	plain.species_name = "plain"
 	plain.molar_mass = 30.0
 	plain.heat_capacity = 1000.0
 	plain.condensation_temperature = 250.0
 	table.species.append(plain)
 	atmosphere.species = {"plain": 1.0}
-	var only_plain := SpacesimAtmosphereModel.condensation_levels(atmosphere, table, gravity, 255.0)
-	h.check(_formation_of(only_plain, "plain") == SpacesimAtmosphereModel.Condensation.Formation.CONDENSATION,
+	var only_plain := StoichonAtmosphereModel.condensation_levels(atmosphere, table, gravity, 255.0)
+	h.check(_formation_of(only_plain, "plain") == StoichonAtmosphereModel.Condensation.Formation.CONDENSATION,
 		"while a gas in the mix is CONDENSATION")
 
 
@@ -155,8 +155,8 @@ func _test_a_product_needs_its_reactants(h) -> void:
 ## deck and nothing to compare it against a warm body), so they are exercised on a synthetic table the way
 ## the product rule above is.
 func _test_a_solid_form_needs_a_cold_top(h) -> void:
-	var table := SpacesimMaterialTable.new()
-	var gas := SpacesimSpecies.new()
+	var table := StoichonMaterialTable.new()
+	var gas := StoichonSpecies.new()
 	gas.species_name = "gas"
 	gas.molar_mass = 18.0
 	gas.heat_capacity = 1000.0
@@ -164,7 +164,7 @@ func _test_a_solid_form_needs_a_cold_top(h) -> void:
 	gas.latent_heat = 40000.0
 	gas.solid_form = "frost"
 	table.species.append(gas)
-	var frost := SpacesimSpecies.new()
+	var frost := StoichonSpecies.new()
 	frost.species_name = "frost"
 	frost.molar_mass = 18.0
 	frost.heat_capacity = 1000.0
@@ -174,21 +174,21 @@ func _test_a_solid_form_needs_a_cold_top(h) -> void:
 	table.species.append(frost)
 
 	var gravity := 9.81
-	var atmosphere := SpacesimAtmosphere.new()
+	var atmosphere := StoichonAtmosphere.new()
 	atmosphere.surface_pressure = 101325.0
 	atmosphere.species = {"gas": 1.0}
 
 	# **A cold tropopause gives a level AT it**, which is the whole rule: the height is the clamp the
 	# temperature profile already has, so nothing new is authored.
 	var cold := 255.0
-	var surface := SpacesimAtmosphereModel.surface_temperature(atmosphere, table, gravity, cold)
-	var lapse := SpacesimAtmosphereModel.lapse_rate(atmosphere, table, gravity)
-	var ceiling := SpacesimAtmosphereModel.tropopause_temperature(cold)
-	var levels := SpacesimAtmosphereModel.condensation_levels(atmosphere, table, gravity, cold)
+	var surface := StoichonAtmosphereModel.surface_temperature(atmosphere, table, gravity, cold)
+	var lapse := StoichonAtmosphereModel.lapse_rate(atmosphere, table, gravity)
+	var ceiling := StoichonAtmosphereModel.tropopause_temperature(cold)
+	var levels := StoichonAtmosphereModel.condensation_levels(atmosphere, table, gravity, cold)
 	var deposition := _level_of_species(levels, "frost")
 	h.check(deposition != null, "a solid form whose melting point is above the ceiling gets a level")
 	if deposition != null:
-		h.check(deposition.formation == SpacesimAtmosphereModel.Condensation.Formation.DEPOSITION,
+		h.check(deposition.formation == StoichonAtmosphereModel.Condensation.Formation.DEPOSITION,
 			"and it is a DEPOSITION level, not a condensation one")
 		h.check_near(deposition.height, (surface - ceiling) / lapse,
 			"placed at the tropopause, where the profile stops cooling (%.0f m)" % deposition.height, 1.0e-6)
@@ -201,15 +201,15 @@ func _test_a_solid_form_needs_a_cold_top(h) -> void:
 	# **A warm top and the substance is not solid up there**, so there is no level — the honest answer,
 	# rather than a sheet placed at a height where it would be liquid.
 	var warm := 400.0
-	var warm_levels := SpacesimAtmosphereModel.condensation_levels(atmosphere, table, gravity, warm)
+	var warm_levels := StoichonAtmosphereModel.condensation_levels(atmosphere, table, gravity, warm)
 	h.check(_level_of_species(warm_levels, "frost") == null,
-		"while a ceiling above the melting point gives none (%s)" % SpacesimAtmosphereModel.tropopause_temperature(warm))
+		"while a ceiling above the melting point gives none (%s)" % StoichonAtmosphereModel.tropopause_temperature(warm))
 
 
 ## A level for a species, or null.
-func _level_of_species(levels: Array, species_name: String) -> SpacesimAtmosphereModel.Condensation:
+func _level_of_species(levels: Array, species_name: String) -> StoichonAtmosphereModel.Condensation:
 	for level in levels:
-		var condensation: SpacesimAtmosphereModel.Condensation = level
+		var condensation: StoichonAtmosphereModel.Condensation = level
 		if condensation.species == species_name:
 			return condensation
 	return null
@@ -218,7 +218,7 @@ func _level_of_species(levels: Array, species_name: String) -> SpacesimAtmospher
 ## The formation of the level for a species, or -1 where there is no level.
 func _formation_of(levels: Array, species_name: String) -> int:
 	for level in levels:
-		var condensation: SpacesimAtmosphereModel.Condensation = level
+		var condensation: StoichonAtmosphereModel.Condensation = level
 		if condensation.species == species_name:
 			return condensation.formation
 	return -1
@@ -229,11 +229,11 @@ func _formation_of(levels: Array, species_name: String) -> int:
 ## **Annotated rather than inferred.** An untyped return makes this a `Variant`, and `:=` on a Variant
 ## is a hard parse error — the same trap that has caught this project five times.
 func _of(
-	scene: SpacesimSystemScene, id: String, materials: SpacesimMaterialTable, luminosity: float
-) -> SpacesimCloudModel.Morphology:
+	scene: StoichonSystemScene, id: String, materials: StoichonMaterialTable, luminosity: float
+) -> StoichonCloudModel.Morphology:
 	var body := scene.body_by_id(id)
 	var star := scene.star()
-	return SpacesimCloudModel.morphology(
+	return StoichonCloudModel.morphology(
 		body.content, materials, luminosity, body.position.distance_to(star.position)
 	)
 
@@ -244,16 +244,16 @@ func _of(
 ## result: Earth and Venus land where they do *for reasons the model can be asked about*, not because
 ## anybody tuned them. Jupiter's 50 m/s mean zonal wind, Earth's 10 m/s eddy velocity and Venus's 100 m/s
 ## superrotation are the published velocity scales; the rotations are content.
-func _test_the_verdicts(h, scene: SpacesimSystemScene, materials: SpacesimMaterialTable, luminosity: float) -> void:
+func _test_the_verdicts(h, scene: StoichonSystemScene, materials: StoichonMaterialTable, luminosity: float) -> void:
 	var jupiter := _of(scene, "planet:jupiter", materials, luminosity)
 	var earth := _of(scene, "planet:earth", materials, luminosity)
 	var venus := _of(scene, "planet:venus", materials, luminosity)
 
-	h.check(jupiter.banding == SpacesimCloudModel.Banding.BANDED,
+	h.check(jupiter.banding == StoichonCloudModel.Banding.BANDED,
 		"Jupiter is BANDED — belts and zones, at L_Rh/a = %.3f" % jupiter.ratio)
-	h.check(earth.banding == SpacesimCloudModel.Banding.SHREDDED,
+	h.check(earth.banding == StoichonCloudModel.Banding.SHREDDED,
 		"Earth is SHREDDED — bands the eddies cross and break up, at %.3f" % earth.ratio)
-	h.check(venus.banding == SpacesimCloudModel.Banding.FEATURELESS,
+	h.check(venus.banding == StoichonCloudModel.Banding.FEATURELESS,
 		"Venus is FEATURELESS, at %.3f — one cell, nothing to generate" % venus.ratio)
 
 	# The ordering is the claim; the thresholds are a calibration. If the ordering inverted, the
@@ -288,29 +288,29 @@ func _test_the_verdicts(h, scene: SpacesimSystemScene, materials: SpacesimMateri
 ## It is recorded because it is the opposite of what was expected, and because a check that cannot tell
 ## two cases apart is not a check: the two verdicts and the two band scales are both asserted below, so
 ## the difference between them is a measurement rather than an assumption.
-func _test_the_rotation_is_the_airs(h, scene: SpacesimSystemScene) -> void:
+func _test_the_rotation_is_the_airs(h, scene: StoichonSystemScene) -> void:
 	var venus_body := scene.body_by_id("planet:venus")
-	var venus := SpacesimCloudModel.rotation_of(venus_body.content)
-	h.check(venus.source == SpacesimCloudModel.Rotation.Source.AUTHORED,
+	var venus := StoichonCloudModel.rotation_of(venus_body.content)
+	h.check(venus.source == StoichonCloudModel.Rotation.Source.AUTHORED,
 		"Venus's air is known to superrotate, so content's rate is used")
 	h.check(venus.ratio > 55.0 and venus.ratio < 70.0,
 		"at %.1f times the planet's own rotation" % venus.ratio)
 
-	var earth := SpacesimCloudModel.rotation_of(scene.body_by_id("planet:earth").content)
-	h.check(earth.source == SpacesimCloudModel.Rotation.Source.BODY,
+	var earth := StoichonCloudModel.rotation_of(scene.body_by_id("planet:earth").content)
+	h.check(earth.source == StoichonCloudModel.Rotation.Source.BODY,
 		"Earth's air turns with the body, and that is reported rather than assumed")
 	h.check_near(earth.ratio, 1.0, "so its ratio is 1.0 exactly", 1.0e-9)
 
 	# --- what the wrong answer would have been, computed rather than argued ----------------------
 	var radius := venus_body.content.radius
-	var from_air := SpacesimCloudModel.band_scale(venus.omega, radius, 100.0)
-	var from_body := SpacesimCloudModel.band_scale(
+	var from_air := StoichonCloudModel.band_scale(venus.omega, radius, 100.0)
+	var from_body := StoichonCloudModel.band_scale(
 		TAU / venus_body.content.rotation_period, radius, 100.0
 	)
 	h.check(from_body > 0.0 and from_air > 0.0, "both scales are computable")
 	h.check(
-		SpacesimCloudModel.banding(from_air / radius) == SpacesimCloudModel.Banding.FEATURELESS
-			and SpacesimCloudModel.banding(from_body / radius) == SpacesimCloudModel.Banding.FEATURELESS,
+		StoichonCloudModel.banding(from_air / radius) == StoichonCloudModel.Banding.FEATURELESS
+			and StoichonCloudModel.banding(from_body / radius) == StoichonCloudModel.Banding.FEATURELESS,
 		"and the body's own rotation gives FEATURELESS too (%.2f against %.2f) — the verdict is robust "
 			% [from_body / radius, from_air / radius]
 			+ "to the error, which is not what was expected"
@@ -318,36 +318,36 @@ func _test_the_rotation_is_the_airs(h, scene: SpacesimSystemScene) -> void:
 	h.check(from_body > from_air * 4.0,
 		"while the band scale is not: %.0f km from the body against %.0f km from the air"
 			% [from_body / 1000.0, from_air / 1000.0])
-	h.check(SpacesimCloudModel.cell_count(from_body / radius) < SpacesimCloudModel.cell_count(from_air / radius),
+	h.check(StoichonCloudModel.cell_count(from_body / radius) < StoichonCloudModel.cell_count(from_air / radius),
 		"and a smaller cell count follows — so the field matters for what is drawn even here")
 
 
 ## **A body nobody has a wind speed for gets no verdict.** Not a default, not a plausible guess.
-func _test_the_two_scales(h, scene: SpacesimSystemScene, materials: SpacesimMaterialTable, luminosity: float) -> void:
+func _test_the_two_scales(h, scene: StoichonSystemScene, materials: StoichonMaterialTable, luminosity: float) -> void:
 	# **A body with no wind speed, built here rather than borrowed.** This used to point at Titan, which
 	# had no `wind_speed`; on 2026-10-17 every atmosphere got one, so the check lost its subject and went
 	# red with the *right* numbers in the message (a ratio of 0.206 where it expected zero). A rule about a
 	# missing input must be tested with a missing input, not with whichever body happens to lack one today.
-	var bare := SpacesimCloudModel.Morphology.new()
-	var stripped := SpacesimSystemBody.new()
+	var bare := StoichonCloudModel.Morphology.new()
+	var stripped := StoichonSystemBody.new()
 	stripped.radius = 6.371e6
 	stripped.mass = 5.972e24
 	stripped.rotation_period = 86400.0
-	var air := SpacesimAtmosphere.new()
+	var air := StoichonAtmosphere.new()
 	air.surface_pressure = 101325.0
 	air.species = {"nitrogen": 1.0}
 	stripped.atmosphere = air
-	var verdict := SpacesimCloudModel.morphology(stripped, materials, luminosity, 1.496e11)
-	h.check(verdict.banding == SpacesimCloudModel.Banding.UNKNOWN,
+	var verdict := StoichonCloudModel.morphology(stripped, materials, luminosity, 1.496e11)
+	h.check(verdict.banding == StoichonCloudModel.Banding.UNKNOWN,
 		"a body with no wind speed gets UNKNOWN rather than a verdict")
 	h.check_near(verdict.ratio, 0.0, "and no ratio", 1.0e-12)
 	h.check_near(verdict.band_scale, 0.0, "and no band scale", 1.0e-12)
 	h.check_near(verdict.cells, 0.0, "and no cell count", 1.0e-12)
 	# And the real bodies now all have one, which is the content state this test should also state.
 	var titan := _of(scene, "moon:titan", materials, luminosity)
-	h.check(titan.banding != SpacesimCloudModel.Banding.UNKNOWN,
+	h.check(titan.banding != StoichonCloudModel.Banding.UNKNOWN,
 		"while every body in Sol now carries a wind speed and so gets a verdict")
-	h.check_near(SpacesimCloudModel.banding(0.0), SpacesimCloudModel.Banding.UNKNOWN,
+	h.check_near(StoichonCloudModel.banding(0.0), StoichonCloudModel.Banding.UNKNOWN,
 		"which is what a zero ratio means, and not BANDED", 1.0e-12)
 
 	# --- the eddy scale, which is the other half and a weaker one --------------------------------
@@ -355,29 +355,29 @@ func _test_the_two_scales(h, scene: SpacesimSystemScene, materials: SpacesimMate
 	# adiabat, so the model's own N is zero by construction. The check is that it is the right order
 	# against Earth's real tropospheric ~0.01, not that it is right.
 	var earth := scene.body_by_id("planet:earth")
-	var gravity := SpacesimAtmosphereModel.surface_gravity(earth.content)
-	var equilibrium := SpacesimAtmosphereModel.equilibrium_temperature(
+	var gravity := StoichonAtmosphereModel.surface_gravity(earth.content)
+	var equilibrium := StoichonAtmosphereModel.equilibrium_temperature(
 		earth.content, materials, luminosity, earth.position.distance_to(scene.star().position)
 	)
-	var temperature := SpacesimAtmosphereModel.reference_temperature(
+	var temperature := StoichonAtmosphereModel.reference_temperature(
 		earth.content, materials, luminosity, earth.position.distance_to(scene.star().position)
 	)
-	var air_height := SpacesimAtmosphereModel.scale_height(
+	var air_height := StoichonAtmosphereModel.scale_height(
 		earth.content.atmosphere, materials, temperature, gravity
 	)
-	var buoyancy := SpacesimCloudModel.buoyancy_frequency(
+	var buoyancy := StoichonCloudModel.buoyancy_frequency(
 		earth.content.atmosphere, materials, gravity, temperature
 	)
 	h.check(buoyancy > 0.010 and buoyancy < 0.030,
 		"Earth's N comes to %.4f 1/s against a real tropospheric ~0.01 (the isothermal value, ~2x high)"
 			% buoyancy)
 
-	var morphology: SpacesimCloudModel.Morphology = _of(scene, "planet:earth", materials, luminosity)
+	var morphology: StoichonCloudModel.Morphology = _of(scene, "planet:earth", materials, luminosity)
 	h.check(morphology.eddy_scale > 5.0e5 and morphology.eddy_scale < 3.0e6,
 		"so its eddies come to %.0f km, against a real deformation radius near 1,000 km"
 			% (morphology.eddy_scale / 1000.0))
 	# The deformation radius has no meaning at the equator; the function must not divide by zero there.
-	h.check_near(SpacesimCloudModel.eddy_scale(air_height, buoyancy, morphology.rotation.omega, 0.0),
+	h.check_near(StoichonCloudModel.eddy_scale(air_height, buoyancy, morphology.rotation.omega, 0.0),
 		0.0, "and it is zero at the equator rather than infinite", 1.0e-12)
 
 
@@ -388,36 +388,36 @@ func _test_the_two_scales(h, scene: SpacesimSystemScene, materials: SpacesimMate
 ## prediction made by a cosine, and it is why this is worth deriving rather than authoring.
 func _test_the_favouring_profile(h) -> void:
 	var deg := PI / 180.0
-	h.check_near(SpacesimCloudModel.condensation_favouring(0.0, 3.0), 1.0,
+	h.check_near(StoichonCloudModel.condensation_favouring(0.0, 3.0), 1.0,
 		"the equator is the ITCZ: fully favoured", 1.0e-9)
-	h.check_near(SpacesimCloudModel.condensation_favouring(30.0 * deg, 3.0), 0.0,
+	h.check_near(StoichonCloudModel.condensation_favouring(30.0 * deg, 3.0), 0.0,
 		"30 degrees is the subtropical high: deserts", 1.0e-9)
-	h.check_near(SpacesimCloudModel.condensation_favouring(60.0 * deg, 3.0), 1.0,
+	h.check_near(StoichonCloudModel.condensation_favouring(60.0 * deg, 3.0), 1.0,
 		"60 degrees is the storm track: favoured again", 1.0e-9)
-	h.check_near(SpacesimCloudModel.condensation_favouring(90.0 * deg, 3.0), 0.0,
+	h.check_near(StoichonCloudModel.condensation_favouring(90.0 * deg, 3.0), 0.0,
 		"and the pole sinks", 1.0e-9)
 
 	# One cell — a slowly rotating body — has no alternation to offer, so it is uniformly favoured
 	# rather than divided into a band that does not exist.
-	h.check_near(SpacesimCloudModel.condensation_favouring(45.0 * deg, 0.0), 1.0,
+	h.check_near(StoichonCloudModel.condensation_favouring(45.0 * deg, 0.0), 1.0,
 		"a body with no cells has nothing to alternate", 1.0e-9)
 	# Bands only get narrower with more cells, never wider: the profile's first minimum moves up.
-	var early := SpacesimCloudModel.condensation_favouring(20.0 * deg, 3.0)
-	var late := SpacesimCloudModel.condensation_favouring(20.0 * deg, 9.0)
+	var early := StoichonCloudModel.condensation_favouring(20.0 * deg, 3.0)
+	var late := StoichonCloudModel.condensation_favouring(20.0 * deg, 9.0)
 	h.check(late > early,
 		"and more cells means a wider rising branch at a given latitude (%.3f against %.3f)"
 			% [late, early])
 
 
 ## The deck stack, which is a **selection** from the condensation derivation rather than a second one.
-func _test_the_layer_stack(h, scene: SpacesimSystemScene, materials: SpacesimMaterialTable, luminosity: float) -> void:
+func _test_the_layer_stack(h, scene: StoichonSystemScene, materials: StoichonMaterialTable, luminosity: float) -> void:
 	var starred := scene.star()
 	var earth := scene.body_by_id("planet:earth")
-	var gravity := SpacesimAtmosphereModel.surface_gravity(earth.content)
-	var equilibrium := SpacesimAtmosphereModel.equilibrium_temperature(
+	var gravity := StoichonAtmosphereModel.surface_gravity(earth.content)
+	var equilibrium := StoichonAtmosphereModel.equilibrium_temperature(
 		earth.content, materials, luminosity, earth.position.distance_to(starred.position)
 	)
-	var levels := SpacesimCloudModel.layers(earth.content.atmosphere, materials, gravity, equilibrium)
+	var levels := StoichonCloudModel.layers(earth.content.atmosphere, materials, gravity, equilibrium)
 	var found := ""
 	for level in levels:
 		found += String(level.species) + " "
@@ -427,10 +427,10 @@ func _test_the_layer_stack(h, scene: SpacesimSystemScene, materials: SpacesimMat
 	h.check(levels.size() == 2 and found.contains("water_ice") and found.contains("water_vapour"),
 		"Earth's deck stack is water under ice, two levels (%s)" % found.strip_edges())
 	if levels.size() == 2:
-		var top: SpacesimAtmosphereModel.Condensation = levels[0]
-		var below: SpacesimAtmosphereModel.Condensation = levels[1]
+		var top: StoichonAtmosphereModel.Condensation = levels[0]
+		var below: StoichonAtmosphereModel.Condensation = levels[1]
 		h.check(top.species == "water_ice"
-			and top.formation == SpacesimAtmosphereModel.Condensation.Formation.DEPOSITION,
+			and top.formation == StoichonAtmosphereModel.Condensation.Formation.DEPOSITION,
 			"the upper one is a DEPOSITION level of the ice at %.0f m" % top.height)
 		# **Inside the observed band for cirrus**, 8-10 km, and low for the reason the module names: the profile
 		# is a DRY adiabat, which puts Earth's tropopause at 7.4 against a real 11-12.
@@ -443,10 +443,10 @@ func _test_the_layer_stack(h, scene: SpacesimSystemScene, materials: SpacesimMat
 	# deck on — its real 1.2 bar methane deck exists because methane is *undersaturated* there, and
 	# saturation is not modelled. An empty stack says so; a zero-height deck would pretend.
 	var uranus := scene.body_by_id("planet:uranus")
-	var uranus_levels := SpacesimCloudModel.layers(
+	var uranus_levels := StoichonCloudModel.layers(
 		uranus.content.atmosphere, materials,
-		SpacesimAtmosphereModel.surface_gravity(uranus.content),
-		SpacesimAtmosphereModel.equilibrium_temperature(
+		StoichonAtmosphereModel.surface_gravity(uranus.content),
+		StoichonAtmosphereModel.equilibrium_temperature(
 			uranus.content, materials, luminosity, uranus.position.distance_to(starred.position)
 		)
 	)
@@ -458,7 +458,7 @@ func _test_the_layer_stack(h, scene: SpacesimSystemScene, materials: SpacesimMat
 		"while Uranus's methane is a layer now, a little below the reference (%d)" % uranus_levels.size())
 
 	# Nothing in the module may hand a shader a NaN or an infinity, whatever it is fed.
-	var jupiter_morphology: SpacesimCloudModel.Morphology = _of(scene, "planet:jupiter", materials, luminosity)
+	var jupiter_morphology: StoichonCloudModel.Morphology = _of(scene, "planet:jupiter", materials, luminosity)
 	h.check(is_finite(jupiter_morphology.ratio) and is_finite(jupiter_morphology.band_scale)
 		and is_finite(jupiter_morphology.eddy_scale) and is_finite(jupiter_morphology.cells),
 		"and every number the model produces is finite")
@@ -469,12 +469,12 @@ func _test_the_layer_stack(h, scene: SpacesimSystemScene, materials: SpacesimMat
 ## The thickness is the condensate scale height — where the saturation mixing ratio has fallen by e —
 ## capped by the tropopause. What the suite can honestly check is what it checked for the base: that the
 ## number lands where the real decks are, and that the two bodies where it *cannot* are named rather than
-## tuned. See `SpacesimAtmosphereModel.Condensation.thickness`.
+## tuned. See `StoichonAtmosphereModel.Condensation.thickness`.
 func _test_the_deck_thickness(
-	h, scene: SpacesimSystemScene, materials: SpacesimMaterialTable, luminosity: float
+	h, scene: StoichonSystemScene, materials: StoichonMaterialTable, luminosity: float
 ) -> void:
 	var earth_deck := _level_of(scene, "planet:earth", "water_vapour", materials, luminosity)
-	h.check(earth_deck != null and earth_deck.regime == SpacesimAtmosphereModel.Condensation.Regime.LEVEL,
+	h.check(earth_deck != null and earth_deck.regime == StoichonAtmosphereModel.Condensation.Regime.LEVEL,
 		"Earth's water has a level to put a deck on")
 	if earth_deck == null:
 		return
@@ -498,10 +498,10 @@ func _test_the_deck_thickness(
 	var earth := scene.body_by_id("planet:earth")
 	var levelled := true
 	var count := 0
-	for level in SpacesimCloudModel.layers(
+	for level in StoichonCloudModel.layers(
 		earth.content.atmosphere, materials,
-		SpacesimAtmosphereModel.surface_gravity(earth.content),
-		SpacesimAtmosphereModel.equilibrium_temperature(earth.content, materials, luminosity,
+		StoichonAtmosphereModel.surface_gravity(earth.content),
+		StoichonAtmosphereModel.equilibrium_temperature(earth.content, materials, luminosity,
 			earth.position.distance_to(scene.star().position))
 	):
 		count += 1
@@ -521,16 +521,16 @@ func _test_the_deck_thickness(
 
 ## One species' level on a body, or null when the model places none.
 func _level_of(
-	scene: SpacesimSystemScene, body_id: String, species_name: String,
-	materials: SpacesimMaterialTable, luminosity: float
-) -> SpacesimAtmosphereModel.Condensation:
+	scene: StoichonSystemScene, body_id: String, species_name: String,
+	materials: StoichonMaterialTable, luminosity: float
+) -> StoichonAtmosphereModel.Condensation:
 	var body := scene.body_by_id(body_id)
 	if body == null or body.content == null or body.content.atmosphere == null:
 		return null
-	var levels := SpacesimCloudModel.layers(
+	var levels := StoichonCloudModel.layers(
 		body.content.atmosphere, materials,
-		SpacesimAtmosphereModel.surface_gravity(body.content),
-		SpacesimAtmosphereModel.equilibrium_temperature(body.content, materials, luminosity,
+		StoichonAtmosphereModel.surface_gravity(body.content),
+		StoichonAtmosphereModel.equilibrium_temperature(body.content, materials, luminosity,
 			body.position.distance_to(scene.star().position))
 	)
 	for level in levels:

@@ -2,7 +2,7 @@ extends Node3D
 ## Fly **Sol** and land on planets.
 ##
 ## **The controls are the action registry's, not this file's.** Every key but Esc is an action declared in
-## `SpacesimActions` with its bindings in `SpacesimBindingsStore`, and the bottom line of the HUD is
+## `StoichonActions` with its bindings in `StoichonBindingsStore`, and the bottom line of the HUD is
 ## generated from whatever is bound — so a list written here would be a second copy that drifts. It did:
 ## the version of this paragraph before 2026-10-25 had throttle on `W`/`S`, roll on `A`/`D`, and the error
 ## budget on the brackets, all three of which had moved. Read the registry, or the HUD.
@@ -15,14 +15,14 @@ extends Node3D
 ## render range and a readout. A different system file should not need this script changed.
 
 const PlayerShip := preload("res://game/player_ship.gd")
-const Frame := preload("res://addons/spacesim/coordinate/frame.gd")
-const Location := preload("res://addons/spacesim/coordinate/location.gd")
-const Actions := preload("res://addons/spacesim/input/actions.gd")
-const Devices := preload("res://addons/spacesim/input/devices.gd")
-const BindingsStore := preload("res://addons/spacesim/input/bindings_store.gd")
-const InputMapScript := preload("res://addons/spacesim/input/input_map.gd")
-const ControlsScript := preload("res://addons/spacesim/input/controls.gd")
-const Session := preload("res://addons/spacesim/save/session.gd")
+const Frame := preload("res://addons/stoichon/coordinate/frame.gd")
+const Location := preload("res://addons/stoichon/coordinate/location.gd")
+const Actions := preload("res://addons/stoichon/input/actions.gd")
+const Devices := preload("res://addons/stoichon/input/devices.gd")
+const BindingsStore := preload("res://addons/stoichon/input/bindings_store.gd")
+const InputMapScript := preload("res://addons/stoichon/input/input_map.gd")
+const ControlsScript := preload("res://addons/stoichon/input/controls.gd")
+const Session := preload("res://addons/stoichon/save/session.gd")
 
 const SYSTEM_PATH := "res://systems/sol.tres"
 
@@ -32,13 +32,13 @@ const MOUSE_SENSITIVITY_FALLBACK := 0.0015
 ## continuous number: it is a perceptual trim, so the useful question is "is this better or worse"
 ## rather than "is 3.7 better than 3.9". **It is a setting and not a debug variable** — the same shape
 ## the star field's gain established — so it is tuned by flying, and kept in the config until a render
-## set justifies freezing it into `SpacesimLod`.
+## set justifies freezing it into `StoichonLod`.
 ##
 ## The index is read from the setting every time rather than cached, because a setting cached in a
 ## variable is the one thing that turns it cold.
 
-var _system: SpacesimSystemScene
-var _session: SpacesimSession
+var _system: StoichonSystemScene
+var _session: StoichonSession
 var _ship: Node3D
 var _camera: Camera3D
 ## **The eye, in the ship's frame.** The camera itself lives in the band's `SubViewport` — a `Camera3D`
@@ -46,51 +46,51 @@ var _camera: Camera3D
 ## model moves the ship, this is the viewpoint inside it, and `_sync_camera` hands the interpolated
 ## result to the camera once a frame.
 var _camera_mount: Node3D
-## The band the picture is drawn in, and the strip under it. See `SpacesimBand`.
-var _band: SpacesimBand
+## The band the picture is drawn in, and the strip under it. See `StoichonBand`.
+var _band: StoichonBand
 ## Set by the stop key and consumed by the next physics step.
 var _throttle_stop := false
 ## The camera's exposure attributes, held only so they can be put at **identity**: the frame-wide pass
-## applies the multiplier, so anything here would be applied twice. See `SpacesimExposure`.
-var _exposure: SpacesimExposure
-## The frame-wide exposure pass: the metre and the multiply, on the GPU. See `SpacesimExposurePass`.
-var _exposure_pass: SpacesimExposurePass
+## applies the multiplier, so anything here would be applied twice. See `StoichonExposure`.
+var _exposure: StoichonExposure
+## The frame-wide exposure pass: the metre and the multiply, on the GPU. See `StoichonExposurePass`.
+var _exposure_pass: StoichonExposurePass
 ## **The fog, which is the atmosphere pass's one remaining live behaviour.** Evert, 2026-11-03: *"Can we re-enable
 ## fog? We disabled it for reasons when doing the layered atmosphere shaders."* The pass came back into the
 ## compositor for this alone: its air march is still unreachable (`MARCHES_DECK`), the shells own the air, and what
 ## is left in it is the medium at the eye — the cloud map read at the camera and ramped from the deck's base to its
 ## top. Re-enabled rather than re-implemented, because that code has been flown.
-var _atmosphere_pass: SpacesimAtmospherePass
-var _markers: SpacesimMarkers
+var _atmosphere_pass: StoichonAtmospherePass
+var _markers: StoichonMarkers
 var _ui_layer: CanvasLayer
-var _player: SpacesimPlayer
-var _settings_screen: SpacesimSettingsPanel
-var _player_screen: SpacesimPlayerPanel
-var _saved_games_screen: SpacesimSavedGamesPanel
+var _player: StoichonPlayer
+var _settings_screen: StoichonSettingsPanel
+var _player_screen: StoichonPlayerPanel
+var _saved_games_screen: StoichonSavedGamesPanel
 
 ## The player's bindings and what they are doing. Built after the session, because the store's first open
 ## is where an old `settings.cfg`'s keys are imported.
-var _bindings: SpacesimBindingsStore
-var _input_map: SpacesimInput
+var _bindings: StoichonBindingsStore
+var _input_map: StoichonInput
 ## **The degrees of freedom** — roll, pitch, yaw, throttle — which are dimensions with sources, not actions
 ## with a press. See the vault's *Flight Control*.
-var _controls: SpacesimControls
+var _controls: StoichonControls
 
 ## The screen that is open, or null. Having one open *is* being paused.
-var _screen: SpacesimScreen
+var _screen: StoichonScreen
 
 ## Where closing the open screen goes, when it was opened *from* another screen. Null means the world.
-var _back_to: SpacesimScreen
+var _back_to: StoichonScreen
 var _selected_index := -1
 var _hud: Label
 ## **The strip's four groups** — Ship, Sensors, Location, Time (Evert, 2026-11-07). Each is a bordered panel
-## with a heading, and each gains lines as readings are wired in; see `SpacesimGroup`. They are separate
+## with a heading, and each gains lines as readings are wired in; see `StoichonGroup`. They are separate
 ## nodes from the block because they are a different place and a different question: the strip is the flying
 ## view's instrument panel, and the block is the diagnostics that replace it when asked for.
-var _group_ship: SpacesimGroup
-var _group_sensors: SpacesimGroup
-var _group_location: SpacesimGroup
-var _group_time: SpacesimGroup
+var _group_ship: StoichonGroup
+var _group_sensors: StoichonGroup
+var _group_location: StoichonGroup
+var _group_time: StoichonGroup
 var _hints: Label
 var _fps: Label
 var _skip_next_motion := false
@@ -105,31 +105,31 @@ var _wireframe := false
 ## **One field per population, each with the body it orbits.** A population is not a body, so it has no
 ## node, no frame and no geometry — it has a density, and the field makes fragments out of it around
 ## the ship. The parent is what the fragments orbit, so the two arrays are parallel.
-var _fields: Array[SpacesimPopulationField] = []
-var _field_parents: Array[SpacesimSceneBody] = []
+var _fields: Array[StoichonPopulationField] = []
+var _field_parents: Array[StoichonSceneBody] = []
 
-## **The rocks you can see**: one [SpacesimFragmentBodies] per belt population, each holding a real
-## [SpacesimSceneBody] per live fragment. The rings' managers live on the scene, because a ring is built whole
+## **The rocks you can see**: one [StoichonFragmentBodies] per belt population, each holding a real
+## [StoichonSceneBody] per live fragment. The rings' managers live on the scene, because a ring is built whole
 ## — and both are read through [method rocks], so a rock is one object rather than a marker entry and a scale
 ## body and a node that might disagree.
-var _fragment_bodies: Array[SpacesimFragmentBodies] = []
+var _fragment_bodies: Array[StoichonFragmentBodies] = []
 
 ## **The scale bodies the ship is slowed by**: the system's own, then one per live rock. Rebuilt only when the
 ## set of rocks changes — a rock's position does not, so rewriting this every tick would be garbage for nothing.
-var _system_scale: Array[SpacesimScaleBody] = []
+var _system_scale: Array[StoichonScaleBody] = []
 ## **One per ring band: the nearest spot, as a place, with no body behind it.** `S3` — a rock is significant from the
 ## moment it exists, so the speed falls as the ship closes on a band before anything resolves. Nothing is created
 ## or destroyed: this object lives for the session and its position is updated.
-var _ring_spots: Array[SpacesimScaleBody] = []
+var _ring_spots: Array[StoichonScaleBody] = []
 ## The ring spots that are NAMED this frame — `R23`'s pool, for the marker overlay.
 var _ring_marked: Array[Dictionary] = []
-var _scale_bodies: Array[SpacesimScaleBody] = []
+var _scale_bodies: Array[StoichonScaleBody] = []
 var _rocks_version := -1
 
 
 func _ready() -> void:
 	_print_build()
-	_system = SpacesimSystemScene.from_file(SYSTEM_PATH)
+	_system = StoichonSystemScene.from_file(SYSTEM_PATH)
 	if _system == null:
 		push_error("cannot load %s" % SYSTEM_PATH)
 		return
@@ -137,7 +137,7 @@ func _ready() -> void:
 	_ship = PlayerShip.create()
 	PlayerShip.place(_system, _ship)
 	_build_fields()
-	_markers = SpacesimMarkers.new()
+	_markers = StoichonMarkers.new()
 	_markers.name = "Markers"
 	# The HUD is built after this, and the marker overlay needs its rectangles to place labels clear
 	# of them — but `refresh` reads them every frame, so the order it is built in does not matter.
@@ -151,10 +151,10 @@ func _ready() -> void:
 	# Exposure is a camera property, and it is ours: the star's light is physical, so the exposure that
 	# puts a lit body at middle grey is arithmetic. Settled at once rather than transitioned into, so
 	# the first frame is already right.
-	_exposure = SpacesimExposure.new()
+	_exposure = StoichonExposure.new()
 	_camera.attributes = _exposure.attributes
 	# **The exposure is applied frame-wide now, by a pass over the finished frame.** The camera's own
-	# attributes go to identity, and `SpacesimExposure`'s per-location target is not used for the frame
+	# attributes go to identity, and `StoichonExposure`'s per-location target is not used for the frame
 	# any more — it was the three-disagreeing-estimates problem in miniature, and it is what left the
 	# ambient unscaled (measured: exposure ×1/×1000/×80000 give byte-identical pixels).
 	#
@@ -162,29 +162,29 @@ func _ready() -> void:
 	# never `null`: with no attributes the engine skips the factor that implements Godot's lux
 	# convention and the scene renders about 95x too bright (`light_storage.cpp:764`).
 	# **`--debug` before anything can print.** The command line is read here because `_ready` is the first
-	# place the game owns before a frame, and `SpacesimDebug.enabled` is what every diagnostic print checks.
-	SpacesimDebug.enabled = (
+	# place the game owns before a frame, and `StoichonDebug.enabled` is what every diagnostic print checks.
+	StoichonDebug.enabled = (
 		OS.get_cmdline_user_args().has("--debug") or OS.get_cmdline_args().has("--debug")
 	)
 	_exposure.identity()
-	_exposure_pass = SpacesimExposurePass.new()
+	_exposure_pass = StoichonExposurePass.new()
 	# **The surface maps refine on the render thread**, through a pass of this camera's compositor: a bake is a
 	# `RenderingDevice` dispatch, and a callback *is* the render thread. After the exposure pass, because it
 	# writes no colour and must not sit between the frame and the metre.
 	#
 	# **The air is not a pass here any more.** It is `air_shell.gdshader` on each body's own geometry, so the
-	# rasteriser's depth is what clips it and the exposure still meters the finished frame. `SpacesimAtmospherePass`
+	# rasteriser's depth is what clips it and the exposure still meters the finished frame. `StoichonAtmospherePass`
 	# is left in the tree, unregistered: `march_deck`/`deck_span` are the deck-as-a-boundary machinery the second
 	# shell will want, and deleting a 45 KB effect is its own commit rather than a footnote on this one.
 	# **The fog composites before the exposure**, so the metre weighs the finished frame — the same ordering the air
 	# march needed when it lived here, and still right for a veil over the view.
-	_atmosphere_pass = SpacesimAtmospherePass.new()
+	_atmosphere_pass = StoichonAtmospherePass.new()
 	var compositor := Compositor.new()
 	var effects: Array[CompositorEffect] = [_atmosphere_pass, _exposure_pass]
 	compositor.compositor_effects = effects
 	_camera.compositor = compositor
 	_apply_settings()
-	SpacesimSettings.changed.connect(_on_setting_changed)
+	StoichonSettings.changed.connect(_on_setting_changed)
 	_build_hud()
 	_build_band()
 
@@ -211,10 +211,10 @@ func _ready() -> void:
 	_input_map = InputMapScript.new(_bindings)
 	_controls = ControlsScript.new(_bindings)
 
-	_settings_screen = SpacesimSettingsPanel.new()
-	_settings_screen.configure(SpacesimSettings, _bindings)
+	_settings_screen = StoichonSettingsPanel.new()
+	_settings_screen.configure(StoichonSettings, _bindings)
 	_register_screen(_settings_screen, "Settings")
-	_player_screen = SpacesimPlayerPanel.new()
+	_player_screen = StoichonPlayerPanel.new()
 	_player_screen.configure(_player, _session, _system)
 	# **Exit Game lives here, not on the settings screen.** Settings is where a value is edited and
 	# throwing the edits away is Close's job; leaving the game is about the player, and the screen
@@ -224,7 +224,7 @@ func _ready() -> void:
 
 	# The browser of what has been played, behind a button on the personal-data screen rather than a
 	# key of its own. It is the one screen that can move the player, so it is the one that reports it.
-	_saved_games_screen = SpacesimSavedGamesPanel.new()
+	_saved_games_screen = StoichonSavedGamesPanel.new()
 	_saved_games_screen.configure(_player, _session, _system)
 	# Opening it from the player screen closes that one on the way through: one screen open is what
 	# being paused means, and `_open_screen` is where that rule lives.
@@ -339,10 +339,10 @@ func _handle_key(event: InputEventKey) -> void:
 ##
 ## Not `Viewport.DEBUG_DRAW_WIREFRAME`: that draws its lines **with the material's own shading**, so a
 ## sunlit disc comes out white lines on white and shows nothing. The scene swaps each body's mesh for a
-## `PRIMITIVE_LINES` version of the same level (`SpacesimIcosphere.lines_at`) and an unshaded white
+## `PRIMITIVE_LINES` version of the same level (`StoichonIcosphere.lines_at`) and an unshaded white
 ## material instead, which is white everywhere by construction.
 ##
-## **Off restores the lit material exactly**, because the body kept its own: `SpacesimSceneBody.mesh_material`
+## **Off restores the lit material exactly**, because the body kept its own: `StoichonSceneBody.mesh_material`
 ## is set when the body is built and put back by `update_lod`, so the toggle is not a mode the renderer
 ## reasons about, only a swap.
 ##
@@ -357,13 +357,13 @@ func set_wireframe(on: bool) -> void:
 	_system.wireframe = on
 	# **The toggle is a mode, and the mode is the setting**, so the key, the settings screen and the HUD cannot disagree
 	# about what is being drawn. `rendered` is left alone: the key toggles between the two modes that draw something.
-	SpacesimSettings.set_value("render.mode", "wireframe" if on else "flat")
+	StoichonSettings.set_value("render.mode", "wireframe" if on else "flat")
 	var hidden := 0
 	for suffix in ["Deck", "Air"]:
 		for node in find_children("*%s*" % suffix, "MeshInstance3D", true, false):
 			(node as VisualInstance3D).layers = 0 if on else 1
 			hidden += 1
-	SpacesimDebug.say("wireframe %s: %d deck/air mesh(es) %s" % [
+	StoichonDebug.say("wireframe %s: %d deck/air mesh(es) %s" % [
 		"on" if on else "off", hidden, "hidden" if on else "restored"
 	])
 
@@ -401,14 +401,14 @@ func _ship_mouse_look(event: InputEventMouseMotion) -> void:
 
 ## Pausing the game is the scene's business rather than the tree's: only the simulation needs to
 ## stop, and a screen has to keep running inside it.
-func _toggle(screen: SpacesimScreen) -> void:
+func _toggle(screen: StoichonScreen) -> void:
 	if _screen == screen:
 		_close_screen()
 	else:
 		_open_screen(screen)
 
 
-func _open_screen(screen: SpacesimScreen) -> void:
+func _open_screen(screen: StoichonScreen) -> void:
 	# **The game stops watching while a menu is open**, so nothing may be left held when it resumes.
 	_input_map.release_all()
 	if _screen != null:
@@ -424,7 +424,7 @@ func _open_screen(screen: SpacesimScreen) -> void:
 ## Open a screen that belongs to another one, so its Close goes back there instead of dropping the
 ## player into the world. The browser and the configuration screen are reached this way from the
 ## personal-data screen; a screen opened by its own hotkey has no way back and closes to the world.
-func _open_from(screen: SpacesimScreen, back: SpacesimScreen) -> void:
+func _open_from(screen: StoichonScreen, back: StoichonScreen) -> void:
 	_open_screen(screen)
 	_back_to = back
 
@@ -445,7 +445,7 @@ func _close_screen() -> void:
 
 
 ## Put a screen in the UI layer, hidden, with its close wired.
-func _register_screen(screen: SpacesimScreen, screen_name: String) -> void:
+func _register_screen(screen: StoichonScreen, screen_name: String) -> void:
 	screen.name = screen_name
 	screen.visible = false
 	_ui_layer.add_child(screen)
@@ -455,7 +455,7 @@ func _register_screen(screen: SpacesimScreen, screen_name: String) -> void:
 func _on_exit_requested() -> void:
 	# Unapplied edits are discarded, not applied: the Close button's colour said so. The file is
 	# written for anything already applied.
-	SpacesimSettings.save()
+	StoichonSettings.save()
 	# **The scene owns a local `RenderingDevice`** (the surface maps bake on it), and one left alive to be
 	# destroyed at teardown segfaults the process on exit — after everything else has shut down cleanly, which
 	# is what makes it look unrelated.
@@ -487,20 +487,20 @@ func _cycle_target(direction: int = 1) -> void:
 ## Everything this scene takes from settings, applied now. Called at startup and again on any
 ## change, so nothing here is read once at startup and then forgotten.
 func _apply_settings() -> void:
-	_camera.fov = SpacesimSettings.get_value("camera.fov")
+	_camera.fov = StoichonSettings.get_value("camera.fov")
 	# The exposure's ceiling, hot like everything else here: `exposure.range_stops` is in stops above
 	# the light-adapted floor, and 32.0 is the whole window with no cap on the derived value.
-	_exposure_pass.max_multiplier = SpacesimExposure.max_multiplier_for_stops(
-		float(SpacesimSettings.get_value("exposure.range_stops"))
+	_exposure_pass.max_multiplier = StoichonExposure.max_multiplier_for_stops(
+		float(StoichonSettings.get_value("exposure.range_stops"))
 	)
 	_exposure_pass.adaptation_rate = float(
-		SpacesimSettings.get_value("exposure.adaptation_rate")
+		StoichonSettings.get_value("exposure.adaptation_rate")
 	)
-	_atmosphere_pass.fog_gain = float(SpacesimSettings.get_value("fog.gain"))
-	_markers.rebuild_pool(int(SpacesimSettings.get_value("markers.pool_size")))
-	_markers.font_size = int(SpacesimSettings.get_value("markers.font_size"))
-	_markers.margin = float(SpacesimSettings.get_value("markers.margin"))
-	_markers.selected_color = SpacesimSettings.get_value("markers.selected_color")
+	_atmosphere_pass.fog_gain = float(StoichonSettings.get_value("fog.gain"))
+	_markers.rebuild_pool(int(StoichonSettings.get_value("markers.pool_size")))
+	_markers.font_size = int(StoichonSettings.get_value("markers.font_size"))
+	_markers.margin = float(StoichonSettings.get_value("markers.margin"))
+	_markers.selected_color = StoichonSettings.get_value("markers.selected_color")
 
 
 func _on_setting_changed(key: String, _value: Variant) -> void:
@@ -554,7 +554,7 @@ func _physics_process(delta: float) -> void:
 
 	# **The degrees of freedom produce this frame's contribution each**, in radians for a rotation and a
 	# fraction of the throttle for throttle. The mouse, a stick and a key differ only in how they arrive.
-	_controls.pointer_sensitivity = float(SpacesimSettings.get_value("mouse.sensitivity"))
+	_controls.pointer_sensitivity = float(StoichonSettings.get_value("mouse.sensitivity"))
 	_controls.step(delta)
 
 	# **The stop key is edge-triggered**, so it puts the throttle at zero now rather than winding it down.
@@ -579,7 +579,7 @@ func _physics_process(delta: float) -> void:
 	_update_fields(delta)
 	_ship.step(delta, input)
 	# **Both clocks, one second at a time** — Evert, 2026-11-08. The world's runs faster only when
-	# relativistic travel lands, and `SpacesimSession.advance` is the one place either of them moves.
+	# relativistic travel lands, and `StoichonSession.advance` is the one place either of them moves.
 	_session.advance(delta)
 	# **After the step, before anything renders.** The camera is in the band's viewport and inherits nothing,
 	# so it is placed here — in the physics tick, which is where its own interpolation history comes from.
@@ -615,13 +615,13 @@ var _hud_since := 0.0
 ## round of it already. One `git rev-parse` costs nothing and makes every pasted console self-describing,
 ## including whether the tree had uncommitted changes when it started.
 func _print_build() -> void:
-	var git := SpacesimGit.new(ProjectSettings.globalize_path("res://"))
+	var git := StoichonGit.new(ProjectSettings.globalize_path("res://"))
 	var result := git.run(["rev-parse", "--short", "HEAD"])
 	var head := git.text(result).strip_edges() if result["ok"] else ""
 	if head.is_empty():
-		print("SpaceSim: build unknown — no git metadata in the project directory")
+		print("Stoichon: build unknown — no git metadata in the project directory")
 		return
-	print("SpaceSim: build %s%s" % [head, "" if git.is_clean() else ", with uncommitted changes"])
+	print("Stoichon: build %s%s" % [head, "" if git.is_clean() else ", with uncommitted changes"])
 
 
 ## **The fog: a medium at the eye, and the only thing the atmosphere pass still draws.**
@@ -641,7 +641,7 @@ func _print_build() -> void:
 func _update_fog(observer: Vector3) -> void:
 	if _atmosphere_pass == null or _camera == null:
 		return
-	if _atmosphere_pass.fog_gain <= 0.0 or not bool(SpacesimSettings.get_value("render.atmosphere_volume")):
+	if _atmosphere_pass.fog_gain <= 0.0 or not bool(StoichonSettings.get_value("render.atmosphere_volume")):
 		_clear_fog()
 		return
 	var air := _system.air_for_eye(observer)
@@ -680,7 +680,7 @@ func _clear_fog() -> void:
 ## `physics/common/physics_interpolation` is off. And when a frame runs long Godot takes up to
 ## `max_physics_steps_per_frame` (8) physics steps before drawing one frame, so every call below used
 ## to run **up to eight times for a single frame** — the work multiplying exactly when there was the
-## least time for it. See vault `SpaceSim/Engine Review 2026-10-15 — Actions.md`.
+## least time for it. See vault `Stoichon/Engine Review 2026-10-15 — Actions.md`.
 ##
 ## Nothing here feeds the simulation, which is what makes the split safe: the ship has already been
 ## stepped and the frame tree already evaluated by the time this runs.
@@ -736,7 +736,7 @@ func _update_view(delta: float) -> void:
 	# a mode change must open the walk like any other change in what is needed. `flat` and `rendered` are the same mesh
 	# and the same material — one uniform short-circuits the fragment's texture reads — so only `wireframe` changes the
 	# geometry and only `flat` changes the shading.
-	var mode := String(SpacesimSettings.get_value("render.mode"))
+	var mode := String(StoichonSettings.get_value("render.mode"))
 	_system.wireframe = mode == "wireframe"
 	_system.flat_shaded = mode == "flat"
 	# **The ship's origin, not the camera's** — the camera's offset swings on a 32 m arm as the ship rotates, and at low
@@ -750,14 +750,14 @@ func _update_view(delta: float) -> void:
 	# moon's extraction threshold and wireframe are decided, so a rock's belong beside it.
 	_update_rocks(observer, pixel)
 	# **The exposure is no longer decided here.** It is the metre's, on the GPU, applied to the finished
-	# frame — see `SpacesimExposurePass` and the lighting plan's §6a. What this function owes the pass is
+	# frame — see `StoichonExposurePass` and the lighting plan's §6a. What this function owes the pass is
 	# the frame's own delta, because `_render_callback` has no clock of its own.
 	_exposure_pass.frame_delta = delta
 	_update_fog(observer)
 	# **EV compensation, on or off.** On is the metre's — a compute pass over the rendered pixels, so the exposure and
 	# the frame cannot disagree. Off disables the pass, so the frame is drawn at Godot's own reference: no multiplier,
 	# and a difference in the picture is a difference in the geometry rather than in the exposure.
-	_exposure_pass.enabled = bool(SpacesimSettings.get_value("render.ev_compensation"))
+	_exposure_pass.enabled = bool(StoichonSettings.get_value("render.ev_compensation"))
 	_update_markers(_camera)
 	_update_camera(_camera)
 	_hud_since += delta
@@ -817,15 +817,15 @@ func _build_fields() -> void:
 		if parent == null:
 			push_warning("%s orbits '%s', which is not in the system" % [population.id, parent_id])
 			continue
-		_fields.append(SpacesimPopulationField.new(population))
+		_fields.append(StoichonPopulationField.new(population))
 		_field_parents.append(parent)
-		var bodies := SpacesimFragmentBodies.new(population, _system)
+		var bodies := StoichonFragmentBodies.new(population, _system)
 		bodies.name = "Fragments_%s" % population.id.replace(":", "_")
 		add_child(bodies)
 		_fragment_bodies.append(bodies)
 	# One place per band, kept alive for the session: the travel unit's reference near a ring.
 	for _ring in _system.rings:
-		var spot := SpacesimScaleBody.new(null, 0.0)
+		var spot := StoichonScaleBody.new(null, 0.0)
 		spot.solid = false
 		_ring_spots.append(spot)
 	_system_scale = _ship.bodies.duplicate()
@@ -844,7 +844,7 @@ func _update_fields(delta: float) -> void:
 		if parent.node == null:
 			continue
 		_fields[index].update(
-			parent.node.global_position, SpacesimKepler.mu_of(parent.content.mass), eye, delta
+			parent.node.global_position, StoichonKepler.mu_of(parent.content.mass), eye, delta
 		)
 	_sync_rocks()
 
@@ -861,7 +861,7 @@ func _sync_rocks() -> void:
 	if version == _rocks_version:
 		return
 	_rocks_version = version
-	var wanted: Array[SpacesimScaleBody] = _system_scale.duplicate()
+	var wanted: Array[StoichonScaleBody] = _system_scale.duplicate()
 	for body in rocks():
 		if body.scale_body != null:
 			wanted.append(body.scale_body)
@@ -874,10 +874,10 @@ func _sync_rocks() -> void:
 
 
 ## **Every rock in the game, from the two places they are made.** A belt's fragment and a ring's spot are the
-## same kind of object — a `SpacesimSceneBody` built by [SpacesimFragmentBodies] — so the marker path, the
+## same kind of object — a `StoichonSceneBody` built by [StoichonFragmentBodies] — so the marker path, the
 ## travel unit and the mesh all read this one list.
-func rocks() -> Array[SpacesimSceneBody]:
-	var list: Array[SpacesimSceneBody] = []
+func rocks() -> Array[StoichonSceneBody]:
+	var list: Array[StoichonSceneBody] = []
 	for manager in _fragment_bodies + _system.ring_bodies:
 		list.append_array(manager.rocks())
 	return list
@@ -889,7 +889,7 @@ func _pixel_angle() -> float:
 	var viewport := _camera.get_viewport()
 	if viewport == null:
 		return 0.0
-	return SpacesimLod.pixel_angle(_camera.fov, float(viewport.size.y))
+	return StoichonLod.pixel_angle(_camera.fov, float(viewport.size.y))
 
 
 ## **Every rock, once a drawn frame**: the belt's fragments from its field, and each ring's spots by the rule
@@ -964,10 +964,10 @@ func _update_markers(camera: Camera3D) -> void:
 		if body.node == null:
 			continue
 		var distance := camera.global_position.distance_to(body.node.global_position)
-		var screen := SpacesimLod.screen_radius_pixels(
-			SpacesimLod.angular_radius(body.radius, distance), pixel_angle
+		var screen := StoichonLod.screen_radius_pixels(
+			StoichonLod.angular_radius(body.radius, distance), pixel_angle
 		)
-		if screen < SpacesimIrregularBody.RESOLVE_PIXELS:
+		if screen < StoichonIrregularBody.RESOLVE_PIXELS:
 			continue
 		context.append(body.node)
 		rock_nodes[body.node] = true
@@ -976,8 +976,8 @@ func _update_markers(camera: Camera3D) -> void:
 	_markers.targets = _ring_marked
 	# **The band, because the camera draws into it.** The camera is inside the band's `SubViewport`, so
 	# `unproject_position` answers in the band's pixels while the labels are laid out in the root canvas;
-	# `refresh` converts with this rect. See `SpacesimMarkers.to_canvas`.
-	_markers.refresh(camera, SpacesimDisplay.band_rect())
+	# `refresh` converts with this rect. See `StoichonMarkers.to_canvas`.
+	_markers.refresh(camera, StoichonDisplay.band_rect())
 
 
 ## Render range tracks the scale you are operating at. Only the ratio costs depth precision, and
@@ -985,7 +985,7 @@ func _update_markers(camera: Camera3D) -> void:
 ## settled number.
 func _update_camera(camera: Camera3D) -> void:
 	var frame: Frame = _system.frame_tree.active_frame
-	var range_for_frame: Vector2 = SpacesimSettings.get_value(_range_key(frame.kind))
+	var range_for_frame: Vector2 = StoichonSettings.get_value(_range_key(frame.kind))
 	# **The near plane follows what is nearest, and the frame's setting is its CEILING.**
 	#
 	# The plane used to be the setting outright, and in space that is 100 m — so a small body inside 100 m lost its
@@ -1005,7 +1005,7 @@ func _update_camera(camera: Camera3D) -> void:
 	# beyond 0.67 au — the star included — was clipped and simply not drawn. Inside a body's air it is
 	# the sky **and everything in it**: the grazing ray reaches ~1,600 km and the star is 1.5e11 m, so a
 	# terrain-tight plane clips the sky itself as well as the sun and the other bodies. See
-	# `SpacesimSystemScene.sky_reach` for why the sky is that far away.
+	# `StoichonSystemScene.sky_reach` for why the sky is that far away.
 	if frame.kind == Frame.Kind.SPACE or _system.air_body(frame) != null:
 		far = maxf(far, maxf(_system.sky_reach(frame), _system.view_distance()))
 	# **And in EVERY frame, reach the nearest air shell's far side.** This is `ec59384`'s rule — *make the far plane
@@ -1034,7 +1034,7 @@ func _range_key(kind: int) -> String:
 ## **A black outline, because the readout has to survive a blown-out frame.** The exposure's own flash is the
 ## case that matters: while the frame is white, an unoutlined label is white on white and the one instrument
 ## that would say what the metre is doing is the thing that disappears. The marker labels already do this
-## (`SpacesimMarkers`); the HUD did not.
+## (`StoichonMarkers`); the HUD did not.
 ## **The four groups' shares of the strip's width**, in the order they are placed. Weights rather than
 ## pixels: a wider window gives every group the same proportion, and changing one number here rearranges the
 ## strip without touching the layout arithmetic.
@@ -1059,14 +1059,14 @@ func _outline(label: Label, font_size: int) -> void:
 
 ## **The band, and the strip under it.** The picture is rendered into a `SubViewport` the size of the
 ## band — not drawn full-screen with black painted over it, which would be a vertical crop of the 20 % the
-## strip covers. `SpacesimBand` carries the reasoning; this is only the wiring.
+## strip covers. `StoichonBand` carries the reasoning; this is only the wiring.
 func _build_band() -> void:
 	var layer := CanvasLayer.new()
 	layer.name = "Band"
 	# **Under the HUD**, which is a layer above it: the readouts sit in the strip this paints.
 	layer.layer = 0
 	add_child(layer)
-	_band = SpacesimBand.new()
+	_band = StoichonBand.new()
 	layer.add_child(_band)
 	# The camera moves into the band's viewport here; from now on `_sync_camera` is what moves it.
 	_band.take(_camera)
@@ -1075,16 +1075,16 @@ func _build_band() -> void:
 	_fit_band()
 
 
-## **The band's four numbers, from the one place that owns them** — `SpacesimDisplay`, which derives both
+## **The band's four numbers, from the one place that owns them** — `StoichonDisplay`, which derives both
 ## rects from `hud.strip_height` and the viewport's size from the window's own pixels.
 func _fit_band() -> void:
 	if _band == null or not _band.is_inside_tree():
 		return
 	_band.fit(
-		SpacesimDisplay.band_rect(),
-		SpacesimDisplay.strip_rect(),
-		SpacesimDisplay.band_pixels(),
-		SpacesimDisplay.render_scale_now()
+		StoichonDisplay.band_rect(),
+		StoichonDisplay.strip_rect(),
+		StoichonDisplay.band_pixels(),
+		StoichonDisplay.render_scale_now()
 	)
 	_place_strip_groups()
 
@@ -1095,12 +1095,12 @@ func _fit_band() -> void:
 ## The row is the strip inset by `STRIP_MARGIN`; the widths come from `GROUP_WEIGHTS` less the gaps. Nothing
 ## here knows what any group contains, so a group that gains a line does not move any of the others.
 func _place_strip_groups() -> void:
-	var groups: Array[SpacesimGroup] = [
+	var groups: Array[StoichonGroup] = [
 		_group_ship, _group_sensors, _group_location, _group_time
 	]
 	if groups.any(func(group): return group == null):
 		return
-	var strip := SpacesimDisplay.strip_rect()
+	var strip := StoichonDisplay.strip_rect()
 	var row := Rect2(
 		strip.position + STRIP_MARGIN,
 		strip.size - STRIP_MARGIN * 2.0
@@ -1114,10 +1114,10 @@ func _place_strip_groups() -> void:
 		x += width + GROUP_GAP
 
 
-## One bordered group in the strip, with its heading. Built here rather than in `SpacesimGroup`'s `_ready`,
+## One bordered group in the strip, with its heading. Built here rather than in `StoichonGroup`'s `_ready`,
 ## because the heading is the caller's word and not a property of the node.
-func _add_group(layer: CanvasLayer, node_name: String, heading: String) -> SpacesimGroup:
-	var group := SpacesimGroup.new()
+func _add_group(layer: CanvasLayer, node_name: String, heading: String) -> StoichonGroup:
+	var group := StoichonGroup.new()
 	group.name = node_name
 	layer.add_child(group)
 	group.set_heading(heading)
@@ -1192,8 +1192,8 @@ func _update_hud() -> void:
 	if _markers.selected != null:
 		target_name = _markers.selected.name
 		# **The ship's own scaled bodies, not the scene's** — `surface_distance_to` is
-		# `SpacesimScaleBody`'s, and the ship already holds the list the flight controller finds the nearest
-		# body with. `_system.bodies` is a list of `SpacesimSceneBody`, which does not have it: calling it on
+		# `StoichonScaleBody`'s, and the ship already holds the list the flight controller finds the nearest
+		# body with. `_system.bodies` is a list of `StoichonSceneBody`, which does not have it: calling it on
 		# one aborted this function, which froze the strip while still drawing the block.
 		for body in _ship.bodies:
 			if body != null and body.node == _markers.selected:
@@ -1211,7 +1211,7 @@ func _update_hud() -> void:
 		]
 	)
 
-	# **Sensors** — the air and the pull where the observer is, from `SpacesimSystemScene.conditions_at`,
+	# **Sensors** — the air and the pull where the observer is, from `StoichonSystemScene.conditions_at`,
 	# which is the one call that knows how to derive them. A body with no air answers 0 Pa rather than
 	# dropping the line, because standing on a moon is a real place to be.
 	var air := _system.conditions_at(_ship.global_position)
@@ -1235,8 +1235,8 @@ func _update_hud() -> void:
 			# and the sector line under it is the system, which is named after its star.
 			["Galaxy", GALAXY],
 			["Sector", _system.name],
-			["Target", "%s, %s" % [target_name, SpacesimMarkers.format_distance(target_distance)]],
-			["Nearest", "%s, %s" % [_ship.nearest_name, SpacesimMarkers.format_distance(_ship.altitude())]],
+			["Target", "%s, %s" % [target_name, StoichonMarkers.format_distance(target_distance)]],
+			["Nearest", "%s, %s" % [_ship.nearest_name, StoichonMarkers.format_distance(_ship.altitude())]],
 		]
 	)
 
@@ -1250,8 +1250,8 @@ func _update_hud() -> void:
 	# Clocks` is why they will not forever.
 	_group_time.set_fields(
 		[
-			["Player", "%s s" % SpacesimWorldTime.grouped(SpacesimWorldTime.since_bang(_session.player_time))],
-			["Universe", "%s s" % SpacesimWorldTime.grouped(SpacesimWorldTime.since_bang(_session.world_time))],
+			["Player", "%s s" % StoichonWorldTime.grouped(StoichonWorldTime.since_bang(_session.player_time))],
+			["Universe", "%s s" % StoichonWorldTime.grouped(StoichonWorldTime.since_bang(_session.world_time))],
 		]
 	)
 
@@ -1262,16 +1262,16 @@ func _update_hud() -> void:
 			[
 				"system      %s" % _system.name,
 				"player      %s   in %s" % [_player.display_name(), _session.repo.current_history()],
-				"date        %s" % SpacesimWorldTime.format(_session.world_time),
+				"date        %s" % StoichonWorldTime.format(_session.world_time),
 				"frame       %s" % frame.name,
-				"settings    %s" % SpacesimSettings.path(),
+				"settings    %s" % StoichonSettings.path(),
 				"mode        %s%s%s" % [
-					String(SpacesimSettings.get_value("render.mode")),
-					", depth tint" if bool(SpacesimSettings.get_value("render.depth_tint")) else "",
-					", EV compensated" if bool(SpacesimSettings.get_value("render.ev_compensation")) else ", EV off",
+					String(StoichonSettings.get_value("render.mode")),
+					", depth tint" if bool(StoichonSettings.get_value("render.depth_tint")) else "",
+					", EV compensated" if bool(StoichonSettings.get_value("render.ev_compensation")) else ", EV off",
 				],
-				"nearest     %s at %s" % [_ship.nearest_name, SpacesimMarkers.format_distance(_ship.nearest_distance)],
-				"local unit  %s" % SpacesimMarkers.format_distance(length),
+				"nearest     %s at %s" % [_ship.nearest_name, StoichonMarkers.format_distance(_ship.nearest_distance)],
+				"local unit  %s" % StoichonMarkers.format_distance(length),
 				"state       %s" % contact,
 				"",
 				"bodies      %s, %d triangles, %d chunks, depth %d"
@@ -1323,9 +1323,9 @@ func _update_hud() -> void:
 ## here rather than cached, so a change on the settings screen is on screen before the player looks
 ## back; `_on_setting_changed` calls this for the same reason when a screen is open over the game.
 func _apply_hud_visibility() -> void:
-	_hud.visible = bool(SpacesimSettings.get_value("hud.debug"))
-	_hints.visible = bool(SpacesimSettings.get_value("hud.key_hints"))
-	_fps.visible = bool(SpacesimSettings.get_value("hud.fps"))
+	_hud.visible = bool(StoichonSettings.get_value("hud.debug"))
+	_hints.visible = bool(StoichonSettings.get_value("hud.key_hints"))
+	_fps.visible = bool(StoichonSettings.get_value("hud.fps"))
 
 
 ## The key an action currently names, for the readout.

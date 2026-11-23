@@ -1,16 +1,16 @@
-[gd_resource type="Resource" script_class="SpacesimSolarSystem" format=3]
+[gd_resource type="Resource" script_class="StoichonSolarSystem" format=3]
 
-[ext_resource type="Script" path="res://addons/spacesim/system/content/solar_system.gd" id="system"]
-[ext_resource type="Script" path="res://addons/spacesim/system/content/framing.gd" id="framing"]
-[ext_resource type="Script" path="res://addons/spacesim/system/content/system_body.gd" id="body"]
-[ext_resource type="Script" path="res://addons/spacesim/system/content/layer.gd" id="layer"]
-[ext_resource type="Script" path="res://addons/spacesim/system/content/orbit.gd" id="orbit"]
-[ext_resource type="Script" path="res://addons/spacesim/system/content/atmosphere.gd" id="atmosphere"]
-[ext_resource type="Script" path="res://addons/spacesim/system/content/surface.gd" id="surface"]
-[ext_resource type="Script" path="res://addons/spacesim/system/content/overrides.gd" id="overrides"]
-[ext_resource type="Script" path="res://addons/spacesim/system/content/cloud_layer.gd" id="cloud_layer"]
-[ext_resource type="Script" path="res://addons/spacesim/system/content/clouds.gd" id="clouds"]
-[ext_resource type="Script" path="res://addons/spacesim/system/content/population.gd" id="population"]
+[ext_resource type="Script" path="res://addons/stoichon/system/content/solar_system.gd" id="system"]
+[ext_resource type="Script" path="res://addons/stoichon/system/content/framing.gd" id="framing"]
+[ext_resource type="Script" path="res://addons/stoichon/system/content/system_body.gd" id="body"]
+[ext_resource type="Script" path="res://addons/stoichon/system/content/layer.gd" id="layer"]
+[ext_resource type="Script" path="res://addons/stoichon/system/content/orbit.gd" id="orbit"]
+[ext_resource type="Script" path="res://addons/stoichon/system/content/atmosphere.gd" id="atmosphere"]
+[ext_resource type="Script" path="res://addons/stoichon/system/content/surface.gd" id="surface"]
+[ext_resource type="Script" path="res://addons/stoichon/system/content/overrides.gd" id="overrides"]
+[ext_resource type="Script" path="res://addons/stoichon/system/content/cloud_layer.gd" id="cloud_layer"]
+[ext_resource type="Script" path="res://addons/stoichon/system/content/clouds.gd" id="clouds"]
+[ext_resource type="Script" path="res://addons/stoichon/system/content/population.gd" id="population"]
 
 ; SOL — the development and calibration system.
 ;
@@ -412,7 +412,7 @@ composition = Dictionary[String, float]({
 ; from ~31,800 km to ~4,080 and its cells from 0.07 to 0.58. `wind_speed` is the ~100 m/s
 ; superrotation, which is what puts its band scale at the planet's own size and makes the model say
 ; FEATURELESS. **Both rotations give FEATURELESS**, so the field is about the numbers a map is built
-; from rather than about the verdict; `tests/test_clouds.gd` asserts both. See `SpacesimCloudModel`.
+; from rather than about the verdict; `tests/test_clouds.gd` asserts both. See `StoichonCloudModel`.
 script = ExtResource("atmosphere")
 surface_pressure = 9200000.0
 species = Dictionary[String, float]({
@@ -904,7 +904,7 @@ optical_depth = 1.0
 ; **The deck you can see: ammonia, at 0.90 bar.** Its colour here is AUTHORED and not the species' own,
 ; because the giants' visible tint is a chromophore — complex organics and phosphorus compounds mixed
 ; into the cloud — and **the chromophore is not in the species table**. A pale cream stands in for it,
-; which is the honest interim: `SpacesimSpecies.color` supplies a species' true scattering colour, and a
+; which is the honest interim: `StoichonSpecies.color` supplies a species' true scattering colour, and a
 ; chromophore needs to exist as a material before it can supply this one.
 script = ExtResource("cloud_layer")
 species = "ammonia"
@@ -1769,7 +1769,7 @@ significant = true
 ; famous for having a LOT of moons. If I recall correctly, Uranus also has a few."*
 ;
 ; These are big enough that their own gravity rounded them, so they are NOT drawn from the field: the potato radius
-; is derived per material now (`SpacesimIrregularBody.rounding_radius`), and ice rounds at 129 km against rock's
+; is derived per material now (`StoichonIrregularBody.rounding_radius`), and ice rounds at 129 km against rock's
 ; 338, which is what lets Mimas at 198 km be a sphere while Amalthea at 83 km stays a lump.
 ;
 ; SOURCES as for the rest of the file: JPL/NASA fact sheets for radii, masses, semi-major axes and periods, all

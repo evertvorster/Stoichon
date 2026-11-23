@@ -4,9 +4,9 @@ extends RefCounted
 ## The world under test is a planet 1e9 m from the system origin, with an atmosphere frame whose
 ## origin is the planet's centre. The observer starts in the system frame and flies down.
 
-const Frame := preload("res://addons/spacesim/coordinate/frame.gd")
-const FrameTree := preload("res://addons/spacesim/coordinate/frame_tree.gd")
-const TransitionRule := preload("res://addons/spacesim/coordinate/transition_rule.gd")
+const Frame := preload("res://addons/stoichon/coordinate/frame.gd")
+const FrameTree := preload("res://addons/stoichon/coordinate/frame_tree.gd")
+const TransitionRule := preload("res://addons/stoichon/coordinate/transition_rule.gd")
 
 const PLANET_RADIUS := 6_371_000.0 ## metres
 const ENTER_ALTITUDE := 100_000.0 ## metres
@@ -185,9 +185,9 @@ func _apparent_radius(world: Dictionary) -> float:
 ## be standing in it when it goes, there has to be somewhere left to stand.
 func _test_a_discarded_frame_lets_go_of_the_observer(h, root: Node) -> void:
 	var world := _build(root)
-	var tree: SpacesimFrameTree = world["tree"]
-	var system: SpacesimFrame = world["system"]
-	var atmosphere: SpacesimFrame = world["atmosphere"]
+	var tree: StoichonFrameTree = world["tree"]
+	var system: StoichonFrame = world["system"]
+	var atmosphere: StoichonFrame = world["atmosphere"]
 
 	# Down into the frame, so it is the active one.
 	_place_at_altitude(world, 50_000.0)

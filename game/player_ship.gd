@@ -21,14 +21,14 @@ static func create(ship_name := "Ship") -> Node3D:
 	camera.name = "Camera"
 	camera.fov = 70.0
 	# Exposure is NOT set here: it is physics-computed and kept up to date by the game
-	# (SpacesimExposure), so the ship does not guess at it.
+	# (StoichonExposure), so the ship does not guess at it.
 	ship.add_child(camera)
 
 	return ship
 
 
 ## Put a ship into a system at the system's start position, in the system frame.
-static func place(system: SpacesimSystemScene, ship: Node3D) -> void:
+static func place(system: StoichonSystemScene, ship: Node3D) -> void:
 	ship.bodies = system.scale_bodies()
 	ship.frame_tree = system.frame_tree
 	system.frame_tree.observer = ship

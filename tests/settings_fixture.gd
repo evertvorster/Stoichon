@@ -4,8 +4,8 @@ extends RefCounted
 ## Two copies of this drifted the moment there were two settings suites — the same four helpers,
 ## one different temp path — so there is one.
 
-const Settings := preload("res://addons/spacesim/settings/settings.gd")
-const Store := preload("res://addons/spacesim/input/bindings_store.gd")
+const Settings := preload("res://addons/stoichon/settings/settings.gd")
+const Store := preload("res://addons/stoichon/input/bindings_store.gd")
 
 const TEST_PATH := "user://test-settings.cfg"
 const BINDINGS_PATH := "user://test-bindings.cfg"
@@ -22,7 +22,7 @@ func open() -> Node:
 
 
 ## A bindings store on the throwaway file, for the screen that edits both.
-func bindings() -> SpacesimBindingsStore:
+func bindings() -> StoichonBindingsStore:
 	var store := Store.new()
 	store.open(BINDINGS_PATH, TEST_PATH)
 	return store

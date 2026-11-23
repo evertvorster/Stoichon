@@ -6,7 +6,7 @@ extends RefCounted
 ## not claimed to be.
 
 const SOL_PATH := "res://systems/sol.tres"
-const Settings := preload("res://addons/spacesim/settings/settings.gd")
+const Settings := preload("res://addons/stoichon/settings/settings.gd")
 const AU := 1.495978707e11
 const SOLAR_CONSTANT := 1361.0 ## W/m² at 1 au, measured
 const SUN_EFFECTIVE_TEMPERATURE := 5772.0 ## K, measured
@@ -20,7 +20,7 @@ const SUN_EFFECTIVE_TEMPERATURE := 5772.0 ## K, measured
 ## the claim "halves every ln2/rate seconds" is a test rather than a comment. The GPU side is the same formula
 ## with the same numbers, and the setting is what feeds `rate`.
 func _test_adaptation_halves(h) -> void:
-	var rate: float = SpacesimExposure.ADAPTATION_RATE
+	var rate: float = StoichonExposure.ADAPTATION_RATE
 	var half_life := log(2.0) / rate
 	h.check(half_life > 0.05 and half_life < 2.0,
 		"the default rate halves the gap every %.2f s" % half_life)
@@ -50,7 +50,7 @@ func _test_adaptation_halves(h) -> void:
 	# halving tomorrow and these checks would stay green. `--headless` cannot run the pass (no
 	# `RenderingDevice`), so the strongest headless claim available is on the SOURCE — the ease, the log2
 	# space, the mix, and the rate arriving as a push constant rather than a literal.
-	var source: String = SpacesimExposurePass.FINALIZE_SOURCE
+	var source: String = StoichonExposurePass.FINALIZE_SOURCE
 	h.check(source.contains("exp2(mix("),
 		"the finalize shader eases in log2 space with exp2(mix(...)), which is the law asserted above")
 	h.check(source.contains("1.0 - exp(-params.rate * params.delta)"),
@@ -73,7 +73,7 @@ func run(h, root: Node) -> void:
 	# The check above fails the suite when the setting is off, so there is nothing to assert here: a `check(true)`
 	# after a guard is a count that cannot fail.
 
-	var sol: SpacesimSolarSystem = load(SOL_PATH)
+	var sol: StoichonSolarSystem = load(SOL_PATH)
 	h.check(sol != null, "Sol loads")
 	if sol == null:
 		return
@@ -92,7 +92,7 @@ func run(h, root: Node) -> void:
 ## **95x too bright**. The second is that the pass owns the exposure now, so the camera's own multiplier
 ## must be 1.0 or the two multiply.
 func _test_the_frame_exposure(h) -> void:
-	var exposure := SpacesimExposure.new()
+	var exposure := StoichonExposure.new()
 	h.check(exposure.attributes != null, "the camera's attributes always exist")
 	h.check(
 		not exposure.attributes.auto_exposure_enabled,
@@ -109,45 +109,45 @@ func _test_the_frame_exposure(h) -> void:
 	)
 
 
-func _test_the_star(h, star: SpacesimSystemBody) -> void:
-	var luminosity := SpacesimStarModel.luminosity(star)
+func _test_the_star(h, star: StoichonSystemBody) -> void:
+	var luminosity := StoichonStarModel.luminosity(star)
 	h.check_near(luminosity, 3.828e26, "the Sun's pinned luminosity is 3.828e26 W", 1.0e24)
 
 	# L and R are measured independently, so this checks the data rather than restating it.
-	var temperature := SpacesimStarModel.effective_temperature(luminosity, star.radius)
+	var temperature := StoichonStarModel.effective_temperature(luminosity, star.radius)
 	h.check_near(temperature, SUN_EFFECTIVE_TEMPERATURE,
 		"Stefan-Boltzmann gives 5772 K from L and R (%.1f)" % temperature, 5.0)
 
 	# The colour follows the temperature, by the blackbody fit the Shaders project already uses —
 	# taken rather than invented, and linearised on the way out.
-	var sun_color := SpacesimStarModel.color(temperature)
+	var sun_color := StoichonStarModel.color(temperature)
 	h.check(sun_color.r >= sun_color.g and sun_color.g >= sun_color.b,
 		"so the Sun is warm white (%.3f, %.3f, %.3f)" % [sun_color.r, sun_color.g, sun_color.b])
 	h.check(sun_color.r > 0.9 and sun_color.b > 0.6, "and near-white rather than strongly tinted")
 
 	# A cooler star is markedly redder and a hotter one bluer — the point of deriving it at all, since
 	# it means every stellar class is free.
-	var cool := SpacesimStarModel.color(3000.0)
-	var hot := SpacesimStarModel.color(15000.0)
+	var cool := StoichonStarModel.color(3000.0)
+	var hot := StoichonStarModel.color(15000.0)
 	h.check(cool.r > cool.b * 3.0,
 		"a 3000 K star is markedly redder (%.3f red against %.3f blue)" % [cool.r, cool.b])
 	h.check(hot.b > hot.r, "and a 15000 K star is bluer than it is red")
 
 
-func _test_the_star_light(h, sol: SpacesimSolarSystem, root: Node) -> void:
-	var luminosity := SpacesimStarModel.luminosity(sol.star())
+func _test_the_star_light(h, sol: StoichonSolarSystem, root: Node) -> void:
+	var luminosity := StoichonStarModel.luminosity(sol.star())
 
-	h.check_near(SpacesimStarLight.irradiance(luminosity, AU), SOLAR_CONSTANT,
+	h.check_near(StoichonStarLight.irradiance(luminosity, AU), SOLAR_CONSTANT,
 		"one au receives the solar constant, 1361 W/m²", 2.0)
-	h.check_near(SpacesimStarLight.illuminance(luminosity, AU), 128000.0,
+	h.check_near(StoichonStarLight.illuminance(luminosity, AU), 128000.0,
 		"which is 128,000 lux of daylight", 2000.0)
 
 	var earth := sol.body_by_id("planet:earth")
-	h.check_near(SpacesimStarLight.irradiance(luminosity, earth.orbit.semi_major_axis), SOLAR_CONSTANT,
+	h.check_near(StoichonStarLight.irradiance(luminosity, earth.orbit.semi_major_axis), SOLAR_CONSTANT,
 		"and Earth's own orbit gives the same number", 10.0)
 
 	var neptune := sol.body_by_id("planet:neptune")
-	var dim := SpacesimStarLight.illuminance(luminosity, neptune.orbit.semi_major_axis)
+	var dim := StoichonStarLight.illuminance(luminosity, neptune.orbit.semi_major_axis)
 	h.check(dim > 100.0 and dim < 200.0,
 		"Neptune gets about 140 lux — dim, and not black (%s lux)" % String.num(dim))
 
@@ -157,25 +157,25 @@ func _test_the_star_light(h, sol: SpacesimSolarSystem, root: Node) -> void:
 	# 30x too large at Neptune. The star's radius is read from the content rather than restated, so a
 	# wrong radius in `sol.tres` fails here too.
 	var sun_radius: float = sol.star().radius
-	h.check_near(rad_to_deg(SpacesimLod.angular_radius(sun_radius, AU)), 0.266,
+	h.check_near(rad_to_deg(StoichonLod.angular_radius(sun_radius, AU)), 0.266,
 		"the Sun's angular radius at one au is the 0.533-degree disk halved", 0.001)
-	h.check_near(rad_to_deg(SpacesimLod.angular_radius(sun_radius, 0.39 * AU)), 0.683,
+	h.check_near(rad_to_deg(StoichonLod.angular_radius(sun_radius, 0.39 * AU)), 0.683,
 		"at Mercury it is 2.6x that, which a constant fixed at 1 au could not have carried", 0.002)
-	h.check_near(rad_to_deg(SpacesimLod.angular_radius(sun_radius, 30.07 * AU)), 0.0089,
+	h.check_near(rad_to_deg(StoichonLod.angular_radius(sun_radius, 30.07 * AU)), 0.0089,
 		"and at Neptune it is 30x the other way (%.4f degrees)"
-			% rad_to_deg(SpacesimLod.angular_radius(sun_radius, 30.07 * AU)), 0.0005)
-	h.check(SpacesimLod.angular_radius(0.0, AU) == 0.0,
+			% rad_to_deg(StoichonLod.angular_radius(sun_radius, 30.07 * AU)), 0.0005)
+	h.check(StoichonLod.angular_radius(0.0, AU) == 0.0,
 		"and a body with no radius has no angular size, rather than a division by nothing")
 
-	# **The camera's own multiplier is identity**, because `SpacesimExposurePass` applies the exposure
+	# **The camera's own multiplier is identity**, because `StoichonExposurePass` applies the exposure
 	# frame-wide; anything else here would be applied twice. Godot's auto-exposure stays off, so the frame
 	# average is not allowed to set it either.
-	var attributes := SpacesimExposure.new().attributes
+	var attributes := StoichonExposure.new().attributes
 	h.check(not attributes.auto_exposure_enabled,
 		"auto-exposure is off: the frame average is not allowed to set this")
 	h.check_near(attributes.exposure_multiplier, 1.0, "and starts at Godot's own reference", 1.0e-9)
 
-	# **The metre's arithmetic and the adaptation are not checked here.** `SpacesimExposurePass` does both
+	# **The metre's arithmetic and the adaptation are not checked here.** `StoichonExposurePass` does both
 	# against the rendered frame, and **the suite cannot see it**: `tests/run.sh` runs `--headless`, where
 	# there is no `RenderingDevice` and nothing is drawn. What is checkable headlessly is the arithmetic
 	# (`tests/test_meter.gd`) and the wiring below; the *behaviour* needs a render, and
@@ -186,22 +186,22 @@ func _test_the_star_light(h, sol: SpacesimSolarSystem, root: Node) -> void:
 	# EV range to 32."* The floor being below 1.0 is the check that it is a *state* and not a guess: a
 	# sunlit surface at middle grey is 1.0, and "as bright as the eye still adapts to" is a sunlit
 	# surface that is BRIGHTER than middle grey, so the multiplier is smaller.
-	var range_stops := log(SpacesimExposure.MAX_MULTIPLIER / SpacesimExposure.MIN_MULTIPLIER) / log(2.0)
+	var range_stops := log(StoichonExposure.MAX_MULTIPLIER / StoichonExposure.MIN_MULTIPLIER) / log(2.0)
 	h.check_near(range_stops, 32.0, "the exposure can swing 32 stops (%.2f)" % range_stops, 0.01)
-	h.check(SpacesimExposure.MIN_MULTIPLIER < 1.0 and SpacesimExposure.MIN_MULTIPLIER > 0.0,
-		"with the floor under middle grey and above zero (%.4f)" % SpacesimExposure.MIN_MULTIPLIER)
+	h.check(StoichonExposure.MIN_MULTIPLIER < 1.0 and StoichonExposure.MIN_MULTIPLIER > 0.0,
+		"with the floor under middle grey and above zero (%.4f)" % StoichonExposure.MIN_MULTIPLIER)
 
 	# **The ceiling is a setting now** — `exposure.range_stops`, in stops above the floor — because a
 	# frame of nothing but stars has no mean luminance to answer with and the metre asks for the top of
 	# the window. The declared default has to reproduce the derived `MAX_MULTIPLIER` exactly, or the
 	# window moves the day someone edits the registry, so the two are tied here rather than trusted.
-	h.check_near(SpacesimExposure.max_multiplier_for_stops(range_stops),
-		SpacesimExposure.MAX_MULTIPLIER, "the ceiling formula reproduces the derived window",
-		SpacesimExposure.MAX_MULTIPLIER * 1.0e-9)
+	h.check_near(StoichonExposure.max_multiplier_for_stops(range_stops),
+		StoichonExposure.MAX_MULTIPLIER, "the ceiling formula reproduces the derived window",
+		StoichonExposure.MAX_MULTIPLIER * 1.0e-9)
 	var declared_stops := float(Settings.default_of("exposure.range_stops"))
 	h.check_near(declared_stops, range_stops,
 		"and the setting's declared default is that same window (%.2f stops)" % declared_stops, 1.0e-6)
-	h.check(SpacesimExposure.max_multiplier_for_stops(16.0) < SpacesimExposure.MAX_MULTIPLIER,
+	h.check(StoichonExposure.max_multiplier_for_stops(16.0) < StoichonExposure.MAX_MULTIPLIER,
 		"a smaller window caps the gain, which is what the setting is for")
 
 	# **AgX ignores `tonemap_white`**, and the engine says so outright: *"tonemap_agx_white will be
@@ -213,7 +213,7 @@ func _test_the_star_light(h, sol: SpacesimSolarSystem, root: Node) -> void:
 	# only, and Sirius moves about 4% — but a constant and a curve that disagree about white is a trap
 	# for the next person either way.)
 	var environment := Environment.new()
-	SpacesimExposure.configure(environment)
+	StoichonExposure.configure(environment)
 	h.check(environment.tonemap_mode == Environment.TONE_MAPPER_AGX,
 		"the tone curve is AgX, the one built for a wide range without ACES' highlight colour shifts")
 	h.check_near(environment.tonemap_agx_white, environment.tonemap_white,
@@ -230,16 +230,16 @@ func _test_the_star_light(h, sol: SpacesimSolarSystem, root: Node) -> void:
 	# The relations, rather than the numbers: the threshold has to be under the star's own emission or a
 	# star cannot glare, and the cap has to be above it or the brightest thing in the frame glares exactly
 	# as much as a merely bright one.
-	h.check(environment.glow_hdr_threshold < SpacesimBodyRenderer.STAR_INTENSITY,
+	h.check(environment.glow_hdr_threshold < StoichonBodyRenderer.STAR_INTENSITY,
 		"with the glow threshold under the star's emission, so a star glares at all")
-	h.check(environment.glow_hdr_luminance_cap > SpacesimBodyRenderer.STAR_INTENSITY,
+	h.check(environment.glow_hdr_luminance_cap > StoichonBodyRenderer.STAR_INTENSITY,
 		"and the cap above it, so a glare can be brighter than a glimmer")
 	h.check(environment.ambient_light_source == Environment.AMBIENT_SOURCE_COLOR,
 		"with the ambient set from the catalogue's starlight rather than from the sky's radiance cubemap "
 			+ "— a point-source sky cannot be represented in one")
 
 	# And the light is aimed from the star through the observer, with the strength for that distance.
-	var scene := SpacesimSystemScene.from_content(sol)
+	var scene := StoichonSystemScene.from_content(sol)
 	h.check(scene != null, "a scene wraps Sol")
 	if scene == null:
 		return
@@ -252,9 +252,9 @@ func _test_the_star_light(h, sol: SpacesimSolarSystem, root: Node) -> void:
 	if scene.star_light != null:
 		var distance := lit_earth.node.global_position.distance_to(star_node.node.global_position)
 		# **Times the frame's radiance gain**, because the light is lifted with every other radiance path so that
-		# a lit surface and a splat of the same body stay in step — see `SpacesimRadiance`.
+		# a lit surface and a splat of the same body stay in step — see `StoichonRadiance`.
 		h.check_near(scene.star_light.light.light_intensity_lux,
-			SpacesimStarLight.illuminance(luminosity, distance) * SpacesimRadiance.GAIN,
+			StoichonStarLight.illuminance(luminosity, distance) * StoichonRadiance.GAIN,
 			"whose strength is the illuminance at the observer, lifted into the frame's currency", 10.0)
 		# A DirectionalLight3D shines along its -Z, so its +Z points back at the star.
 		var to_star := (star_node.node.global_position - lit_earth.node.global_position).normalized()
@@ -274,7 +274,7 @@ func _test_the_star_light(h, sol: SpacesimSolarSystem, root: Node) -> void:
 	#
 	# **The ratio it was written as is gone with the dark-adapted multiplier**, which was a compensation
 	# dressed as a constant and was removed on 2026-10-16. What a night side renders at is
-	# `SpacesimExposurePass`'s answer for that frame, which is as invisible to this suite as the rest of
+	# `StoichonExposurePass`'s answer for that frame, which is as invisible to this suite as the rest of
 	# the pass's behaviour. What is still checkable is the light that does it.
 	if scene.star_sky != null:
 		var sky_lux := scene.star_sky.illuminance(6.5)

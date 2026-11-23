@@ -49,7 +49,7 @@ func _initialize() -> void:
 func _turn_off_ev() -> void:
 	if OS.get_environment("SHOT_EV") != "off":
 		return
-	var settings := get_root().get_node_or_null("/root/SpacesimSettings")
+	var settings := get_root().get_node_or_null("/root/StoichonSettings")
 	if settings == null:
 		print("SHOT: no settings autoload found, so EV is whatever the file says")
 		return
@@ -132,7 +132,7 @@ func _process(delta: float) -> bool:
 	if OS.has_environment("SHOT_PROFILE"):
 		_report_profile()
 		return true
-	var path := "/tmp/spacesim_shot.png"
+	var path := "/tmp/stoichon_shot.png"
 	if OS.has_environment("SHOT_PATH"):
 		path = OS.get_environment("SHOT_PATH")
 	var image := get_root().get_texture().get_image()
@@ -441,7 +441,7 @@ func _hide_meshes(node: Node) -> int:
 
 
 ## **The ship, by NAME** — the rig used to find it as "the parent of a `Camera3D`", which stopped being
-## true when the camera moved into the HUD band's `SubViewport` (2026-11-07, `SpacesimBand.take`). A
+## true when the camera moved into the HUD band's `SubViewport` (2026-11-07, `StoichonBand.take`). A
 ## `SubViewport` is not a `Node3D`, so that search returned one and the function reported a type error
 ## instead of a ship.
 func _find_ship(node: Node) -> Node3D:

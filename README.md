@@ -1,6 +1,6 @@
-# SpaceSim
+# Stoichon
 
-**SpaceSim is a game engine** built on [Godot](https://godotengine.org) — rendering, physics, the
+**Stoichon is a game engine** built on [Godot](https://godotengine.org) — rendering, physics, the
 simulation framework, persistence, coordinate spaces and a modding platform.
 
 **Every planet in it is derived from its chemistry, and so is the picture of it.** No body here is a
@@ -8,7 +8,7 @@ texture, a hand-picked colour or a height map drawn in an editor: a system file 
 *made of*, and its mass, its air, its temperature, its clouds, its colour and its terrain all come out of
 that.
 
-**Cladogenesis** is a story/world built on it (not yet a repo). SpaceSim uses **no vegastrike
+**Cladogenesis** is a story/world built on it (not yet a repo). Stoichon uses **no vegastrike
 assets** and is not a vegastrike port; that codebase is only a reference for what to avoid.
 
 ## Everything is derived
@@ -107,7 +107,7 @@ There is no physics and no simulation.
 ## Saves
 
 A save is a commit: **a world per repository, a history per playthrough, a save per commit**, in
-`$XDG_DATA_HOME/spacesim/worlds/<world>/`. Loading an older save moves the history back and restores
+`$XDG_DATA_HOME/stoichon/worlds/<world>/`. Loading an older save moves the history back and restores
 only the player's own state — the world's state is left alone, so the world has moved on. The game
 loads the last save on startup and puts you back in the frame it names.
 
@@ -117,12 +117,12 @@ is the only way one happens, and the same screen browses the histories and their
 ## Layout
 
 ```
-addons/spacesim/   the engine library (idiomatic Godot addon layout)
+addons/stoichon/   the engine library (idiomatic Godot addon layout)
   coordinate/      compartmentalised coordinate spaces and threshold transitions
   travel/          the local unit of travel (speed scales with distance to the nearest body)
-  system/          the built scene (SpacesimSystemScene), the Kepler solver, the builder a rock gets
-                   instead of a planet (SpacesimIrregularBody), and a population of small bodies as a
-                   DENSITY (SpacesimPopulationField) whose fragments are made up around the observer
+  system/          the built scene (StoichonSystemScene), the Kepler solver, the builder a rock gets
+                   instead of a planet (StoichonIrregularBody), and a population of small bodies as a
+                   DENSITY (StoichonPopulationField) whose fragments are made up around the observer
                    and forgotten when they leave. Beneath it:
     content/       the authored content as Godot Resources — bodies, orbits, layers, species
     model/         the derivation: what a body's numbers are, from what it is made of
@@ -187,13 +187,13 @@ there without a rebuild.
 **fraction of the panel's own refresh** — half of a 240 Hz laptop is 120, and the same setting on a 60 Hz
 screen is 30. Both are choices on the settings screen's **Display** tab.
 
-Defaults live in code (the registry in `addons/spacesim/settings/settings.gd`); the player's file
+Defaults live in code (the registry in `addons/stoichon/settings/settings.gd`); the player's file
 holds only what differs from them, so a default that improves reaches anyone who never changed it.
 It is machine read and written:
 
 ```
-$XDG_CONFIG_HOME/spacesim/settings.cfg      player settings          (fallback ~/.config/...)
-$XDG_DATA_HOME/spacesim/                    worlds and save branches (fallback ~/.local/share/...)
+$XDG_CONFIG_HOME/stoichon/settings.cfg      player settings          (fallback ~/.config/...)
+$XDG_DATA_HOME/stoichon/                    worlds and save branches (fallback ~/.local/share/...)
 ```
 
 Not Godot's `user://`, which is one directory under the data home and cannot separate configuration
@@ -224,7 +224,7 @@ the playground flight test drives ~120000 steps.
 - [`docs/API.md`](docs/API.md) — the engine as it is, one section per subsystem, with a contents table.
   Updated with the code.
 - Design, planning and bug-hunting notes live in the project notes vault (Obsidian,
-  `Notes/Projects/Programming/SpaceSim/`), not in this repo. **Start at its `Where to read.md`:** one row
+  `Notes/Projects/Programming/Stoichon/`), not in this repo. **Start at its `Where to read.md`:** one row
   per subsystem naming the document that governs it, the code it lives in and the tests that hold it.
 - [`AGENTS.md`](AGENTS.md) — the short list of rules that bite when working in this tree, and which
   documents to read first.

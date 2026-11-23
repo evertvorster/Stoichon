@@ -1,0 +1,301 @@
+// **The surface height field, as GLSL** — and the *single* implementation of it.
+//
+// Two consumers, and neither is a reimplementation:
+//
+//  - `StoichonSurfaceGpu` compiles it inside a compute kernel and bakes the whole-body map from it;
+//  - `body_surface.gdshader` includes it for the detail below the map's own Nyquist.
+//
+// The GDScript side (`StoichonSurfaceField`) owns the **numbers** — the frequencies, the octave counts, the
+// strengths, the FBM normalisers — and hands them over as a `SurfacePlan`. A constant typed in here would
+// be a second copy of a number the plan already knows, and it would drift away from the one the tests
+// check.
+//
+// **Everything is sampled on the UNIT SPHERE**, never in world metres: a planet is millions of metres
+// across and the field is tens of features, so world sampling lands adjacent pixels in unrelated voxels —
+// a cloud of dots rather than structure, and worse at astronomical coordinates where a float has metres of
+// resolution. The unit direction is the one coordinate this field has.
+//
+// ## Land is not cloud, and the mechanisms are not the cloud field's
+//
+// The only thing this shares with the cloud field is `noise.gdshaderinc` — a FastNoiseLite primitive, which
+// is a *noise function*, not weather. Everything the clouds are built from is wrong here, and none of it is
+// used:
+//
+//  - **no zonal stretch.** `StoichonCloudField` squeezes latitude so its features are drawn out east-west,
+//    because a jet does that. **Land has no jet**: a continent is as wide as it is, and a stretched one
+//    would read as weather painted onto the ground.
+//  - **no advection, no eddies, no vortices.** A cloud is carried and torn; a plate is not. What moves rock
+//    is tectonic, and it moves it at plate boundaries.
+//  - **no bands.** Latitude structure in a cloud field is a circulation cell. Here latitude enters through
+//    nothing at all — a body's land would look the same from any axis, because a rotating sphere tessellates
+//    the same way whichever way you spin it.
+//
+// What replaces them is **geology, in three mechanisms:**
+//
+//  - **Plates** — a Voronoi partition of the sphere (`Procedural Generation` §"Voronoi": *"a planet's biome
+//    or terrain zones are a partition of a sphere, and spherical Voronoi is the honest way to make one"*).
+//    Each plate carries a level, standing or sagging, which is what makes the elevation histogram
+//    **bimodal** — continents and ocean basins, which is Earth's own hypsometric signature and the reason a
+//    single fbm never looks like a planet.
+//  - **Mountain belts along the boundaries**, because that is where rock is deformed: `ridged` noise
+//    multiplied by how close the sample is to a plate edge, and by nothing else.
+//  - **Ridged noise for the crests themselves** (`1 - |n|`, squared), which is the one mechanism that reads
+//    as "mountain" rather than as "bumpy".
+//  - **A region term**, slower than a plate, multiplied into the level — so one continent stands higher than
+//    another and one basin floods deeper, with the plate interiors still flat. Added 2026-10-19 because
+//    nothing in the field was slower than a plate, and a planet of one place repeated is what that looks like.
+//
+// **The result is a field, not a height in metres, and it is not sea-levelled.** The datum is 0 and the
+// spread is about ±1; sea level is a *percentile* of this distribution, measured after the bake, so the
+// field cannot pre-empt where the ocean goes. Metres are the host's business (`plan.amplitude`).
+
+struct SurfacePlan {
+	int seed;
+	float continent_frequency;
+	int continent_octaves;
+	float ridge_frequency;
+	int ridge_octaves;
+	float warp_frequency;
+	int warp_octaves;
+	float warp_strength;
+	float ridge_strength;
+	float continent_share;
+	float plate_bias_share;
+	float belt_width;
+	float plate_phase;
+	float gain;
+	float lacunarity;
+	float continent_bounding;
+	float warp_bounding;
+	float region_frequency;
+	int region_octaves;
+	float region_share;
+	float region_bounding;
+	float mottle_plain_gain;
+};
+
+// **How many plates.** Fourteen, which is Earth's count of major plates, and it is a *shape* number rather
+// than a derived one: nothing in a body's composition says how it fractured. A rock with no air will want
+// craters and few plates, an ice shell long cracks — those are the next mechanisms, and this is the seam
+// they join at.
+const int SURFACE_PLATES = 14;
+// `pi * (3 - sqrt(5))`, the golden angle: successive Fibonacci points turn by this much, which is what
+// makes them quasi-uniform on the sphere.
+const float SURFACE_GOLDEN_ANGLE = 2.3999632297286535;
+
+
+// **A plate's centre: a Fibonacci lattice, turned by the body's own phase.**
+//
+// A lattice rather than a hash, deliberately: it is *exactly* the same arithmetic in GDScript and in GLSL
+// (no integer mixing to agree on, which is where a cross-language invariant usually breaks), and it needs
+// no buffer to carry it — which matters because the fragment shader will want this field too, and a
+// fragment shader cannot read the compute kernel's `shared` memory. What the lattice gives up in
+// irregularity, the domain warp below restores: the distance test is made from the **warped** direction, so
+// the cells come out irregular while the centres stay put.
+vec3 surface_plate_centre(int index, float phase) {
+	float z = 1.0 - (2.0 * float(index) + 1.0) / float(SURFACE_PLATES);
+	float ring = sqrt(max(1.0 - z * z, 0.0));
+	float angle = float(index) * SURFACE_GOLDEN_ANGLE + phase;
+	return vec3(ring * cos(angle), z, ring * sin(angle));
+}
+
+
+// **Whether a plate stands or sags**, on -1..1 — the bimodality itself.
+//
+// `sin` of an irrational multiple of the index, saturated through a clamp so a plate is either clearly up or
+// clearly down and the crossing between them is smooth rather than an exact sign test (a sign test on a
+// nearly-zero argument is the one way this could come out different on the CPU and the GPU).
+//
+// **The bias is what keeps this from being a 50/50 coin.** The planet's *water* is content's ocean fraction
+// and the sea level is a percentile of this field, so the area split is forced either way — but a field with
+// as many plates up as down puts that percentile in the middle of the gap between the two modes, which
+// drowns every standing plate to its peaks and puts every coastline on a plate boundary. A standing minority
+// is the default instead (about a quarter of the plates reach +1, half sit at -1, and the rest are between),
+// which is what a look at Earth's own hypsometry asks for: a floor with most of the area, and a minority
+// standing clear of it. What the fraction of *water* is stays content's business.
+// **TWO POPULATIONS, not a spread.** Evert, 2026-11-02: *"a planet has to have a certain amount of rock, with a
+// surface roughness that turns into continents and islands. Then it also needs to have an amount of liquid, which would
+// then fill the lower surfaces first, and give us the ocean level. Should be calculable.... special casing things below
+// the ocean surface would make later work more difficult."*
+//
+// Continental crust and oceanic crust are different things at two different levels; a planet is not one surface with a
+// symmetric spread about its mean. So a plate is either standing or sitting, and *which* is a hash of its index — that
+// is what makes them populations rather than a slope — with the region term and the roughness on top carrying the
+// variation within each one.
+//
+// **The split is a hash, not a coin flip against the water.** The sea level is a percentile of this field, so the area
+// of ocean is whatever content says it is either way; what this decides is how much *land* exists to be flooded. At
+// 62 % oceanic plates, 71 % water leaves the sea standing in the shallow continental crust — shelves — rather than
+// drowning every standing plate down to its peaks.
+const float OCEAN_CRUST = -0.95;
+const float CONTINENT_CRUST = 0.45;
+const float OCEANIC_SHARE = 0.62;
+
+float surface_plate_level(int index, float phase) {
+	// A hash, not an interpolation: the point is that the value is one of exactly two, so the hypsometry has two modes
+	// and the sea level lands between them instead of somewhere on a ramp.
+	float hash = fract(sin(float(index) * 12.9898 + phase * 7.0) * 43758.5453);
+	return mix(CONTINENT_CRUST, OCEAN_CRUST, step(1.0 - OCEANIC_SHARE, hash));
+}
+
+
+// **The two things the plates decide**: the level of the one you are standing on, and how close to a
+// boundary you are (1 at an edge, 0 well inside).
+void surface_plates(vec3 q, float phase, float belt_width, out float level, out float belt) {
+	float nearest = 2.0;
+	float second = 2.0;
+	int nearest_index = 0;
+	for (int index = 0; index < SURFACE_PLATES; index++) {
+		// `1 - dot` is a monotone stand-in for the angle: 0 at the centre, 2 at the antipode.
+		float distance = 1.0 - dot(q, surface_plate_centre(index, phase));
+		if (distance < nearest) {
+			second = nearest;
+			nearest = distance;
+			nearest_index = index;
+		} else if (distance < second) {
+			second = distance;
+		}
+	}
+	level = surface_plate_level(nearest_index, phase);
+	// The gap between the nearest two centres is zero *on* the boundary and grows inward, so it is the
+	// boundary distance without an edge distance function.
+	belt = 1.0 - smoothstep(0.0, max(belt_width, 1.0e-4), second - nearest);
+}
+
+
+// **Ridged multifractal**: crests where the noise crosses zero, sharp because the absolute value is, and
+// smooth on the flanks because the square of `1 - |n|` is.
+//
+// **Each rung is one octave through `fnl_fbm3`, not a bare `fnl_os2s3`** — the fbm wrapper is what applies
+// the R3 rotation every other sample of this generator gets, so a bare lattice call would be a *different
+// field* under the same seed. One octave also makes `fractal_bounding` exactly 1, so the rung comes back on
+// [-1, 1] and the weighting below is the whole of the shape.
+// **The ridged sum, band-limited by the pixel** — the same law as `fnl_fbm3_banded`, and full strength at
+// `footprint` 0 so a bake is untouched. `p` is already multiplied by the caller's `ridge_frequency`, so octave 0's
+// feature is one unit of `p`, which is one radian of sphere-arc.
+float surface_ridged3_banded(
+	vec3 p, int seed, int octaves, float gain, float lacunarity, float footprint
+) {
+	float sum = 0.0;
+	float amplitude = 1.0;
+	float weight = 0.0;
+	float frequency = 1.0;
+	float feature = 1.0;
+	for (int octave = 0; octave < octaves; octave++) {
+		// **Not `sample`**: that is a RESERVED WORD in GLSL, and the error it produces names the wrong
+		// thing entirely — *"syntax error, unexpected SAMPLE, expecting COMMA or SEMICOLON"* on a line that
+		// looks correct. `filter`, `input`, `output`, `common`, `partition` and `active` are in the same set.
+		float fade = 1.0 - smoothstep(feature * 0.25, feature * 0.5, footprint);
+		if (fade <= 0.0) {
+			break;
+		}
+		float rung = fnl_fbm3(p, seed + octave, frequency, 1, gain, lacunarity, 1.0);
+		float ridge = 1.0 - abs(rung);
+		sum += amplitude * ridge * ridge * fade;
+		// **The divisor carries the fade TOO, and it did not until 2026-11-03.** This sum is NORMALISED, so a
+		// weight that ignored the fade made the normalised height a *discontinuous* function of the pixel's
+		// footprint: while an octave tapered out its contribution shrank but its weight did not, so the whole
+		// height sagged toward zero; and the moment that octave's fade reached 0 the loop broke and the weight
+		// lost it in one step, so the height jumped back UP.
+		//
+		// Evert, 2026-11-03: *"Keeping stationary, and just adjusting the camera angle, there is a line that
+		// sweeps through the images that seems to invert the shadow direction."* That is exactly it, and the
+		// footprint is the only camera-DIRECTION-dependent quantity in the ground shader: `pixel_angle /
+		// max(dot(up, eye_direction), 0.02)`, so rotating on the spot walks the octave count across the frame.
+		// The height feeds the colour ramp AND `dFdx(height)`/`dFdy(height)`, which is the relief gradient the
+		// normal leans by — so a step in the height flips the shading of every slope it crosses, along the
+		// locus where the count changes. Seen on Luna, where the ground is grey and the shading is all there is;
+		// Earth's ramp hides it.
+		weight += amplitude * fade;
+		amplitude *= gain;
+		frequency *= lacunarity;
+		feature /= lacunarity;
+	}
+	return sum / max(weight, 1.0e-6);
+}
+
+
+float surface_ridged3(vec3 p, int seed, int octaves, float gain, float lacunarity) {
+	return surface_ridged3_banded(p, seed, octaves, gain, lacunarity, 0.0);
+}
+
+
+// **The field.** `unit` must be a unit vector; the return is the field's own value, about ±1.
+//
+// **`footprint` is the angle one pixel spans, and it is what lets this be the ground's ONLY height source**: every
+// octave is faded where a pixel can no longer resolve it, so the same function serves a 20-pixel moon and the ground
+// at walking height, at a cost that follows what is resolvable rather than what is stored. **`0.0` means no limit**,
+// which is what the bake passes — its raster is its own resolution. Evert, 2026-10-28: *"I would like to stop having
+// a raster at all."* Before this, the height came from a baked map with a quadtree of tiles over the cap the eye could
+// see, and the raster's own texel grid decided where a coastline was.
+float surface_height(vec3 unit, SurfacePlan plan, float footprint) {
+	// **The domain warp, as a vec3**: three samples of one generator through three different swizzles of
+	// the same position, which decorrelates them without a second generator (Planet 3D's trick). A scalar
+	// warp displaces everything along one direction and looks extruded. This is also what makes the plate
+	// cells irregular without jittering their centres.
+	vec3 warp = vec3(
+		fnl_fbm3_banded(unit.yzx, plan.seed + 101, plan.warp_frequency, plan.warp_octaves,
+			plan.gain, plan.lacunarity, plan.warp_bounding, footprint),
+		fnl_fbm3_banded(unit.zxy, plan.seed + 211, plan.warp_frequency, plan.warp_octaves,
+			plan.gain, plan.lacunarity, plan.warp_bounding, footprint),
+		fnl_fbm3_banded(unit.xyz, plan.seed + 307, plan.warp_frequency, plan.warp_octaves,
+			plan.gain, plan.lacunarity, plan.warp_bounding, footprint)
+	);
+	// Back onto the sphere, because the field is a function of *direction* and nothing else may shift.
+	vec3 q = normalize(unit + plan.warp_strength * warp);
+
+	float level;
+	float belt;
+	surface_plates(q, plan.plate_phase, plan.belt_width, level, belt);
+
+	// **The region term: what makes one continent stand higher than another, and one basin sit deeper.**
+	// Evert, 2026-10-19: *"the noise is far too uniform. It needs an extra slow octave to make higher and
+	// lower peaks, as well as create flat areas."* Nothing in the field was slower than a plate, so every
+	// continent had the same relief budget and the same grain — a planet of one place repeated.
+	//
+	// **Multiplied into the level rather than added to it**, because the property asked for is a *scaling* of
+	// ground that is already flat: a standing plate stands higher where the region is high and lower where it
+	// is low, a sagging plate floods deeper somewhere than elsewhere, and the interior of a plate stays flat
+	// while a slow field varies across it. An additive term would tilt those interiors instead of scaling
+	// them, which is the opposite of a plain.
+	float region = fnl_fbm3_banded(
+		q, plan.seed + 733, plan.region_frequency, plan.region_octaves,
+		plan.gain, plan.lacunarity, plan.region_bounding, footprint
+	);
+	float standing = level * (1.0 + plan.region_share * region);
+
+	// **How much texture this ground is allowed.** `surface_plates` gives a plate a *constant* level, so a
+	// plate interior has no shape of its own at all — `variation` is its whole character, and it was laid over
+	// every plate at one strength. Evert, 2026-10-19: *"for most of the planet the mottling should be much
+	// less, so we have some flat plains too... it stretches all the way to the coast, so it needs to be less at
+	// low altitudes."* So the low ground gets a fraction of it and the uplands keep the grain.
+	//
+	// **The proxy is the plate level, deliberately, and NOT the sea level.** Sea level is a *percentile of this
+	// field*, measured after the bake, so attenuating by it would be circular — the attenuation would move the
+	// percentile that decided the attenuation, and a second bake would be needed to settle it. Plate level is
+	// causal, needs nothing measured, and already means "this ground is low".
+	float mottle = mix(plan.mottle_plain_gain, 1.0, smoothstep(-0.5, 0.5, level));
+
+	// **Structure within a plate**: the broad shape inside a continent, not the continents themselves —
+	// those are the plate levels, and a low-frequency fbm big enough to make its own continents would
+	// fight them and produce a planet that is neither.
+	float variation = fnl_fbm3_banded(
+		q, plan.seed + 577, plan.continent_frequency, plan.continent_octaves,
+		plan.gain, plan.lacunarity, plan.continent_bounding, footprint
+	);
+	// The `ridge_frequency` scaling moves into the footprint too: octave 0 of the ridged sum has a feature of
+	// `1/ridge_frequency` radians, not one radian.
+	float mountains = surface_ridged3_banded(
+		q * plan.ridge_frequency, plan.seed + 991, plan.ridge_octaves, plan.gain, plan.lacunarity,
+		footprint * plan.ridge_frequency
+	);
+	// Squared, so a belt is a *chain* with a crest rather than a wide band of hills.
+	float crest = belt * belt;
+
+	// **The ridges are not scaled by `mottle`**: they are already gated to plate boundaries by `crest`, and a
+	// belt that vanished over a low plate would leave a plain with no edge, which is the one place a plain
+	// should have relief.
+	return plan.plate_bias_share * standing
+		+ plan.continent_share * mottle * variation
+		+ plan.ridge_strength * mountains * crest;
+}

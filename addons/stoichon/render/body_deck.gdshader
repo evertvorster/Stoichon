@@ -1,0 +1,378 @@
+shader_type spatial;
+// **`cull_disabled` is not a detail, it is the whole of "a deck seen from underneath".** A spherical shell
+// shows FRONT faces from outside and BACK faces from inside, so Godot's default `cull_back` draws the deck
+// from above and **deletes it from below** — the mesh is there, the map is there, and there is nothing to
+// rasterise. That is exactly the fault Evert reported twice and photographed: drawn at 4.7 km from above,
+// absent at 696 m from below. The line was designed, written down in this file's own reasoning, and then
+// left out of the file — so every version of this shader until 2026-10-20 had it missing.
+//
+// `blend_mix` because a deck occludes rather than adds (the air adds; a cloud is something you look *at*),
+// `depth_draw_always` because it writes depth where it has cloud and `discard`s where it has none — which is
+// what lets the air pass end its march at the first thing drawn — and `specular_disabled` because a cloud's
+// highlight is not a specular lobe.
+render_mode blend_mix, cull_disabled, depth_draw_always, specular_disabled;
+
+// **The far regime's cloud: a baked coverage map on a shell, with its thickness as shading.**
+//
+// A deck is the body's own patch mesh, scaled — not a second mesh and not a second walk — so its triangles
+// are the planet's by construction and the two cannot disagree about where the surface is. What is drawn
+// here is a picture of a field that was already computed: `StoichonCloudField` baked it, `StoichonCloudMaps`
+// measured its percentile threshold and its mean exceedance, and this shader's whole job is to place the map
+// on the sphere, turn it into a slab, and let the air pass dim it.
+//
+// ---------------------------------------------------------------- THE MAPPING
+//
+// **This must be the exact inverse of `StoichonCloudField.bake`, or the bands land mirrored or off by a
+// hemisphere** — a bug that reads as bad geography rather than as an error. The bake walks
+// `longitude = (u − 0.5)·TAU`, `latitude = PI/2 − v·PI`, and builds
+// `direction = (cos lat cos lon, sin lat, cos lat sin lon)`; so:
+//
+//     u = 0.5 + atan2(z, x) / TAU
+//     v = 0.5 - asin(y) / PI
+//
+// with `v = 0` the north pole, which is the map's top row. **The two are one fact in two languages.**
+//
+// `repeat_enable` on `u` is deliberate: at `u = 1.0` exactly, which the seam produces, a clamped sampler
+// would pick the wrong edge.
+uniform sampler2D cover : filter_linear_mipmap, repeat_enable;
+// **The map's width**, which is what turns its uv rectangle into its own texel size — the quantity the reconstruction
+// is measured in. Published with the map, so a refinement moves both together.
+uniform int cover_width = 512;
+
+// Where the layer's coverage puts the threshold, as a percentile of the map — from
+// `StoichonCloudMaps.threshold_for()`, so the drawn coverage is the one that was asked for.
+uniform float threshold : hint_range(0.0, 1.0) = 0.0;
+// The width of a cloud's edge, in field units. One number drives the coverage and nothing else: the deck has
+// no separate alpha channel, because a cloud's boundary being soft and being thin are the same fact.
+uniform float softness : hint_range(0.001, 0.5) = 0.05;
+// ===== THE SECOND BAND SCALE, AND ONLY A HAZE HAS ONE ==============================
+//
+// **Jupiter bands twice**: the fine cream and brown bands are the circulation cells, and the broad diffuse WHITE
+// zones cover several of them at once (Evert, 2026-10-17, again 2026-11-03: *"I was expecting a third deck with
+// white bands in it"*). The white is a **layer**, not a change to the band term — a diffuse, low-tau veil whose
+// opacity varies over a broad latitude envelope.
+//
+// So the envelope is here, on the veil's own material, and `envelope_lobes = 0` is every ordinary deck: the field
+// keeps ONE scale. `envelope_lobes` is how many broad cells a hemisphere holds (`cells / BROAD_DIVISOR`), and the
+// shape is the same cosine-per-cell the circulation uses, counted over several of them.
+uniform float envelope_lobes : hint_range(0.0, 64.0) = 0.0;
+// The multiplier in a broad BELT, 0..1 — 1.0 would make the second scale invisible, 0 erases the veil there.
+uniform float envelope_floor : hint_range(0.0, 1.0) = 1.0;
+// From the body's own seed, so two bodies' zones are not in the same places.
+uniform float envelope_phase = 0.0;
+
+// **For a deck with no map to threshold.** A `FEATURELESS` body has no map because there is no noise to bake,
+// and a uniform field cannot express partial *area* coverage — every texel would land on the same side of
+// the threshold. So the coverage comes in here and the result is a veil, which is the honest picture of a
+// hazy world rather than an absent one. 1.0 on a mapped deck.
+uniform float veil : hint_range(0.0, 1.0) = 1.0;
+// **Linear, and already scaled to the deck's own albedo by the host** — the hue only. The reflectance is
+// `ramp_gain`, because what a texel draws is `ALBEDO * ALPHA` and the mean of that has to be the calibrated
+// albedo. See `ramp_gain`.
+uniform vec3 cloud_color = vec3(1.0);
+
+// **One reflectance, as near white as the light budget allows.** Thin cloud is *both* less reflective and
+// more transparent, so the variation lives in the alpha and the brightness does not have to vary:
+//
+//     ALPHA  = covered * veil * thickness          (or the slab law below)
+//     ALBEDO = cloud_color * ramp_gain
+//
+// and the host sets `ramp_gain = target / mean(thickness)` from the map's own measured distribution, so the
+// deck's average drawn reflectance is the calibrated albedo exactly and the field's *shape* can only
+// redistribute the whiteness. Measured when this was last built: 0.419 over the area, 0.746 at the tops.
+uniform float ramp_gain : hint_range(0.0, 1.0) = 1.0;
+
+// **The layer's optical depth at full thickness, or 0 to keep the ramp path.** With a tau the deck is drawn
+// as a slab: `ALPHA = 1 − exp(−tau · thickness / mu)` with `mu` the view cosine, so the same cloud is
+// *thicker at the limb* because the line of sight through it is longer. That is the difference between a
+// deck that is transparent because a number said so and one that is transparent because it is thin.
+// **The vertical optical depth of a full column**, from the host — `StoichonSystemScene._deck_tau_full`. The
+// shader multiplies it by the thickness it samples, so opacity and the base's transmittance are the same law
+// from the same texel.
+uniform float tau_full = 0.0;
+// **The light a base shows that did not come straight through**: multiple scattering inside the slab, which
+// has no model here. Enough that a thick cloud reads as the underside of a cloud rather than as a hole.
+// A GUESS: the light a base shows that did not come straight through, standing in for the multiple scattering
+// inside the slab that nothing here models. Settled by a multiple-scattering term.
+const float UNDERSIDE_FLOOR = 0.12;
+
+// ===== THE SLAB, AND ITS TWO SIDES ==================================================
+//
+// **A shell has no thickness, so its thickness is a place to SAMPLE from instead of a volume to march.**
+// The layer's base is a derived condensation level and its top is `base + thickness`, so both radii are
+// real and the shader can ask what the same eye ray sees at each:
+//
+//   * eye above the top  — sample at the shell: the TOPS, lit by the star;
+//   * eye below the base — sample where the ray crosses the BASE sphere, which is genuine parallax of
+//                          thickness rather than a fudge, and light the fragment by what got THROUGH the
+//                          slab;
+//   * eye inside it      — everything is cloud, because it is.
+//
+
+// ===== THE BASE'S LIGHT =============================================================
+//
+// **What "lit from behind" is, mathematically** — `Cloud Decks Plan` §D6, and the law itself is
+// `StoichonCloudBand.two_flux`, `henyey_greenstein` and `sky_radiance`, tested headlessly. The shader carries
+// the arithmetic, as it does for the band laws.
+//
+// A cloud scatters conservatively, so its two faces are **complements**: `R(tau) + T(tau) = 1`. The top's
+// reflectance saturates while the base's transmittance falls to nothing, at the same tau — which is why one
+// texture serves both faces, and why the thick centres darken by exactly the amount the tops whiten.
+//
+// **No light of its own, deliberately, and the plumbing for one is gone (2026-10-21).** This shader drew a base's
+// radiance for a while — the sky's Rayleigh/Mie single-scatter in closed form, a sunward lobe, the cloud's own
+// multiply-scattered grey — and every version of it needed an input the model does not carry. The last of it was
+// written every frame and read by nothing once the base became the pass's cross-section, so it is deleted rather
+// than left as an unread uniform. The arithmetic survives in `StoichonCloudBand` (`two_flux`,
+// `henyey_greenstein`, `sky_radiance`), tested, as the route back if droplet size and absorption ever exist.
+// The eye's offset from the body's centre, **in top radii and in model space** — divided on the host, where
+// the numbers are doubles. Its length picks which of the three cases above this fragment is in.
+uniform vec3 eye_local = vec3(0.0, 0.0, 2.0);
+// The body's own radius, in metres. **Declared here and not in the star include**, because the land and the
+// sea already declare it and a uniform declared twice in one program is a redefinition error — the same trap
+// the archive's air include recorded. It is what places a cloud's own horizon (`star_transmission`) and the
+// air column above it.
+uniform float planet_radius = 1.0;
+// **The origin the vertices are measured from**, which is what turns `VERTEX` into a direction: the mesh is the
+// GROUND's lattice, in metres from a near-eye point, so `VERTEX + patch_origin` is this fragment's offset from the
+// body's centre. Published with the transform it belongs to, so the two cannot describe different builds.
+//
+// **At zero the two agree**, which is the honest default: a missed publish then draws a deck whose directions are its
+// own model-space positions — wrong by the origin, and visible rather than silent, because a deck that sampled the
+// wrong directions would show the map sliding as it is rebuilt.
+uniform vec3 patch_origin = vec3(0.0);
+
+// ===== THE DETAIL BELOW THE MAP =====================================================
+//
+// **The map is a sample of a field that is still a formula**, and this reads the same generator beneath the
+// map's own resolution. It cannot come from the map: 8,192 wide is 4.9 km a texel on Earth, so from low
+// altitude the visible cap is a hundred texels of flat colour.
+//
+// **Same generator, not a second kind of weather.** `noise.gdshaderinc` is the FastNoiseLite the field was
+// baked from, so the detail belongs to the same spectrum. It declares no `shared` memory, which is what makes
+// it legal in a fragment shader — the field's vortex stack is why *that* file stays compute-only.
+//
+// **Band-limited by the PIXEL FOOTPRINT, never by distance.** Each octave fades out where the pixel is too
+// big to resolve it; an unfiltered octave would not be "more detail", it would be sparkle and moiré, because
+// detail finer than the sampling rate is a mathematical defect and not a visual style. It is also what makes
+// a distant deck free: the fade kills every octave long before the fragment does the work.
+//
+// **Zero-mean, and small.** `fnl_os2s3` is already centred on zero, so the ladder adds the same amount either
+// side of the map's value. That matters because the threshold is a percentile of the *map's* distribution and
+// `ramp_gain` is fitted to its mean: a biased term would move the drawn coverage and the average with it.
+// **The coarsest detail feature, in radians on the unit sphere** — two texels of the map *in hand*, set on
+// every publish, so the ladder starts exactly where the map stops and can never duplicate it.
+
+// **The star, and what the air leaves of it.** A cloud is a reflector like the ground: the light that wakes it
+// has crossed the air on the way in, and at the limb that path is thousands of kilometres long — so a cloud
+// on the far side of a lit planet is dim and orange, never a bright spot. Evert, 2026-10-25: *"you should
+// never see bright spots for these clouds from the far side of the planet."*
+//
+// **And the star's own occlusion above it**, which is what makes the light die at the horizon of the cloud's
+// own altitude rather than at the ground's — a deck at 1.4 km stays lit 1.2° after the ground beside it has
+// gone dark, and the transmittance is what decides how red it is while it does.
+#include "res://addons/stoichon/render/star_transmission.gdshaderinc"
+// **The coverage, reconstructed rather than interpolated** — shared with the ground shadow, so the shadow is the
+// image of the same cloud.
+#include "res://addons/stoichon/render/cloud_coverage.gdshaderinc"
+// **The shared shadow law, for the sun's crossing of this same map.** Evert, 2026-11-03: *"One idea I had was to
+// apply the shadow map the clouds make over the clouds from below… that might be a cheap trick to get the same
+// effect?"* It is the right instinct and it is cheaper than a second expression: `deck_column_path()` already
+// walks the star's ray to the crossing, reconstructs the coverage with the deck's own kernel and divides by the
+// sun's zenith — so the base and the shadow on the water are the same cloud at the same texel, by construction.
+//
+// **`deck_transmittance()` is not used, and this is why**: it returns `exp(-x)·(1 + x)`, the BEAM/diffuse ratio
+// struck for specular — it is above 1 for a thin slab, which is right for a reflection and wrong for a base.
+// A base is a diffuse source, so what it shows is plain `exp(-x)`, monotone in tau.
+#include "res://addons/stoichon/render/deck_shadow.gdshaderinc"
+
+// **The offset from the body's centre, in PLANET RADII** — captured in `vertex()` because **`VERTEX` inside
+// `fragment()` is in VIEW space**.
+//
+// **In radii rather than metres, and that is the precision.** The mesh is the ground's lattice, in metres from a
+// near-eye origin, so a model position reaches 10^7 and a `float` varying resolves it at ~1 m — which is the size of a
+// pixel up close, exactly where a footprint is measured. Divided by the radius it is a unit-magnitude vector at the
+// surface, as the old unit sphere was: the varying keeps its resolution, and `fwidth` of it is already an angle.
+varying vec3 local_position;
+
+
+vec2 cloud_map_uv(vec3 p) {
+	return vec2(0.5 + atan(p.z, p.x) / TAU, 0.5 - asin(clamp(p.y, -1.0, 1.0)) / PI);
+}
+
+
+void vertex() {
+	local_position = (VERTEX + patch_origin) / max(planet_radius, 1.0);
+}
+
+
+void fragment() {
+	// **The direction, from the ground's own lattice origin.** The mesh is the surface's, in metres, so `VERTEX` alone
+	// is an offset from a near-eye point rather than a direction — `patch_origin` is what turns it back into one, and
+	// the `vertex()` stage is where that has to happen. Normalising a vector of length ~1 is exact.
+	vec3 p = normalize(local_position);
+	// **The deck's sphere is the only boundary this surface has**, since the node is scaled to its BASE — and which
+	// side of it a fragment is on is `FRONT_FACING`, not the eye's radius. See the underside branch below.
+	vec3 to_eye = normalize(eye_local - p);
+
+	// **ONE SAMPLE, ON ONE SPHERE, ALWAYS** — and since 2026-10-21 that sphere is at the deck's BASE. Evert:
+	// *"rather than put the split and render on the top part of the cloud shell, we put it at the bottom."* A
+	// condensation level IS a level, so the base is geometrically true for every column at once, while the tops
+	// vary and are not. From altitude the 1.6 km move is invisible in a 6,374 km radius; from underneath it is the
+	// difference between the cloud's real underside and a sheet at the height of the tallest column in the map.
+	//
+	// So there is no base-sphere projection and no crossfade: **the mesh is a sphere at the deck's BASE** — the
+	// node is scaled to it, and it is the only boundary this surface has — and the map is painted on it, which is
+	// all this ever was. Above the deck you see the outside of that sphere;
+	// below it you see the inside of the same sphere, which is why the pattern is mirrored and stretched toward
+	// the horizon — the parallax a painted surface has, and no attempt is made to hide it.
+	//
+	// Two things went with the stripping: the base crossing (which displaced the sample to the slab's OTHER
+	// face, and is how the deck came to be base-mapped from below) and the blend across the slab (which averaged
+	// two decorrelated samplings into a featureless wash — visible as the smooth mid-slab frame). Both are in
+	// the history if the mapping ever needs to be revisited; neither is here.
+	// **One measurement of what a pixel spans**, used by the star's own occlusion: a star narrower than a pixel must
+	// be drawn as the step it averages to, not sampled. The varying is in planet radii, so this is already the angle
+	// the star include compares against — and the unit the map's own texel is measured in when the coverage edge is
+	// reconstructed.
+	float deck_footprint = length(fwidth(local_position));
+	// **Reconstructed, not interpolated** — see `cloud_coverage.gdshaderinc`. The map is 2:1, so its texel is `(1/w, 2/w)`.
+	vec2 cover_texel = vec2(1.0, 2.0) / float(max(cover_width, 1));
+	// **The mip is chosen from the FOOTPRINT, never from the uv's derivative.** `u` comes from `atan(z, x)`, so it
+	// passes 1 -> 0 inside one pixel at the antimeridian; `texture()` would read that as "everything is sub-pixel"
+	// and draw ONE column from the coarsest mip — a one-pixel vertical line at every distance, which is exactly what
+	// was reported (Evert, 2026-11-03). `deck_footprint` is already the pixel's angular size for the star's own
+	// occlusion, and it is a direction rather than a wrapping number, so it is continuous everywhere.
+	float field = cloud_coverage(
+		cover, cloud_map_uv(p), cover_texel,
+		cloud_uv_lod(p, deck_footprint, float(max(cover_width, 1)))
+	);
+	// **No noise ladder**, for the reason the ground lost its own: the ladder was not the texture, it was a stand-in
+	// for structure the field already has. A rung at 2-4 px added to a coverage field is the steepest thing here, and
+	// it is where the banding and the extra noise came from.
+	//
+	// **This is only half of what the ground got**, and that is deliberate: there, the ladder was deleted *and* the
+	// field's own plate belts and crests were continued below the map in the same breath. A cloud continuation is the
+	// same idea — `StoichonCloudField.fine_for()`: the same seed, frequency 16, gain 0.8, sampled at the *physical*
+	// direction — but it needs the field's zonal stretch in the fragment stage, so it is its own step. Until then the
+	// deck draws its map, which refines by the same width law the ground's does.
+
+	// **The percentile as a step, softened**, then the thickness above it. `threshold = 0` makes the whole
+	// field cloud, which is what a body the model calls FEATURELESS should be and what a one-texel white map
+	// produces.
+	float covered = smoothstep(threshold - softness, threshold + softness, field);
+	float thickness = clamp((field - threshold) / max(1.0 - threshold, 1.0e-4), 0.0, 1.0);
+
+	// **The slant path, and it must be the UNSIGNED cosine.** `to_eye` is the direction from this point to the
+	// eye, so from outside the slab `dot(p, to_eye)` is the cosine of the view zenith — but from INSIDE the
+	// sphere the surface being drawn is the far side, `to_eye` points back inward, and the dot product is
+	// negative. Clamped at 0.03 that drove every texel to full opacity and the deck became a smooth white slab
+	// with the map's structure invisible inside it — Evert's two screenshots, top and bottom of one cloud.
+	// The slab is crossed at the same angle from either face, so the magnitude is the right cosine.
+	float mu = clamp(abs(dot(p, to_eye)), 0.03, 1.0);
+	// **Opacity is `R(tau)`, the complement of what the base transmits**, and the transmittance is **Beer–Lambert**
+	// rather than the diffusion approximation `1/(1 + tau)`.
+	//
+	// Evert, 2026-11-03: *"at full cloud thickness, I can still see the glare of the sun poking through."* He could,
+	// and by exactly the amount the approximation says: Earth's authored `opacity = 0.9` is `tau = 2.30`, and
+	// `1/(1 + 2.30)` leaves **30%** of whatever is behind the deck — the star's own disc and its glow among it —
+	// drawn through a layer the same content calls 0.9 opaque. `exp(-tau)` gives 0.10, which is the number the layer
+	// stated.
+	//
+	// **The complement relation survives** (`alpha + transmit = 1`) — what changes is which transmittance: this face
+	// composites what is *behind* it, and what is behind it is a beam (the star's own light), not the diffuse flux
+	// through a scattering slab. The project already draws that distinction explicitly for specular — *"a specular
+	// highlight is a BEAM, not a diffuse one"* — and this is the same quantity.
+	float column_tau = tau_full * thickness / mu;
+	float transmit = exp(-max(column_tau, 0.0));
+	// **The veil's second scale**, and a no-op on every ordinary deck: `envelope_lobes = 0` skips it entirely.
+	// It multiplies the ALPHA and not the albedo — a zone is more *opaque* white sheet over several bands, not a
+	// brighter paint — which is what makes the cream and brown bands read through it.
+	float envelope = 1.0;
+	if (envelope_lobes > 0.0) {
+		float envelope_span = (PI * 0.5) / envelope_lobes;
+		float envelope_turn = PI * abs(asin(clamp(p.y, -1.0, 1.0))) / envelope_span + envelope_phase;
+		envelope = envelope_floor + (1.0 - envelope_floor) * (1.0 + cos(envelope_turn)) * 0.5;
+	}
+	float alpha = covered * veil * envelope * (1.0 - transmit);
+	// **The inside-the-slab branch is GONE, and deleting it is what removes the flash at the deck's top.** It
+	// used to set `alpha = covered` for an eye between the base and the top — a step by construction, where
+	// what should change continuously is the cross-section of cloud along the ray. Evert saw it as "at 3k
+	// altitude there is a flash again" (2026-10-20), 3,040 m being this deck's top exactly: the shell's own
+	// alpha jumped from `covered * thickness` to `covered` on the way in. The inside case is now the pass's,
+	// which integrates the cross-section instead of switching pictures.
+
+	// **The two things that decide how much star reaches this texel**: whether the body is in front of it at
+	// all, and what the air then took. Composed by multiplication — one is a geometric occlusion at the
+	// star's own angular width, the other a per-channel filter — and neither double-counts the other.
+	vec3 air_through = star_air_transmittance(p, body_sun, air_altitude, planet_radius);
+	vec3 radiance = cloud_color * ramp_gain * air_through
+		* star_transmission(p, body_sun, deck_footprint);
+
+	// ===== THE BASE SEES THE SLAB TRANSMITTED, NOT REFLECTED ==========================================
+	//
+	// **A slab has two radiating faces and they move in OPPOSITE directions as it thickens.** The top
+	// (reflection) saturates white — extra depth only attenuates what comes back. The base (transmission)
+	// DARKENS: what it shows is the light that got *through*, so `base ≈ cloud · exp(−τ/μ_sun)`, which is
+	// brightest where the cloud is thin and goes to nothing where it is thick.
+	//
+	// Evert, 2026-11-03: *"we did discuss and plan to draw the cloud texture from below differently, with thinner
+	// areas towards the light in bright white, and thicker areas darker. Of course, where the cloud cover is
+	// nothing, it still needs to be transparent."* Both halves fall out of one expression: the thin rim transmits
+	// nearly all of it and is bright; the thick centre transmits nothing and is dark; and where there is no cloud
+	// at all `alpha` is zero, so none of this is drawn.
+	//
+	// **`mu_sun` is clamped rather than floored at zero**: a base is by definition looking away from the star, and
+	// a hard `max(dot, 0)` would make the whole underside black at every sun angle that is not near the limb.
+	// **`UNDERSIDE_FLOOR` stands in for multiple scattering** — the light that arrives at the base after bouncing
+	// inside the slab, which this project has no model for and which is what keeps a thick cloud from reading as a
+	// hole in the sky.
+	// **Which face this is, per FRAGMENT and not per eye.** Evert, 2026-11-03: *"When above the bottom of the cloud
+	// deck, looking at the horizon the cloud deck curves down, and you can see the top side of the near clouds, and
+	// the bottom of the far clouds. The far clouds render as black where they should be white."*
+	//
+	// That is one picture showing both faces at once, and the test here was the eye's position (`eye_radius < 1`),
+	// which is the same answer for every fragment in the frame: inside the band it said "top" everywhere, so the far
+	// clouds — whose undersides are what you actually see — got a top face's light, which is the engine's `NdotL`
+	// against a normal pointing away from the star. Black.
+	//
+	// `FRONT_FACING` is the honest test and the geometry already carries it: a front face is seen from outside (the
+	// top), a back face from inside (the base). With `cull_disabled` both are drawn, so this is exactly the
+	// distinction that was missing — and it is the same one `cull_front` makes for the air's shell by drawing only
+	// one of them.
+	bool underside = !FRONT_FACING;
+	if (underside) {
+		float sun_path = deck_column_path(p, body_sun, planet_radius, true, deck_footprint);
+		float sun_through = sun_path < 0.0 ? 1.0 : exp(-max(deck_tau * sun_path, 0.0));
+		radiance = cloud_color * ramp_gain * air_through * (sun_through + UNDERSIDE_FLOOR);
+	}
+
+	// **Both faces draw the same way otherwise**: the same alpha, the same engine light. What differs is which
+	// light reaches each — reflection above, transmission below — and that is the whole of the difference.
+	ALBEDO = radiance;
+	ALPHA = alpha;
+	ROUGHNESS = 0.9;
+	// **The normal flips at the sphere's surface, wherever that sphere is** — the top when it was the top, the
+	// base now. Evert, 2026-10-21: *"that flip needs to occur as we cross the upper bound, as I now see no clouds
+	// from below at any altitude."* The rule is "inside the sphere means back faces", which is what the test
+	// below says and what makes it independent of which radius the sphere is at.
+	//
+	// It used to flip at the BASE, which is a radius with no surface on it — so it stepped the lighting at 1,436 m
+	// and was still wrong everywhere else. Inside the sphere every fragment is a BACK face whose normal points
+	// away from the viewer, and without the flip the underside is lit as though it faced away and goes black.
+	// Crossing the sphere is exactly when that starts, so that is where the flip belongs.
+	// **The same test flips the normal**, for the same reason: inside the sphere every fragment is a BACK face whose
+	// normal points away from the viewer, and without the flip the underside is lit as though it faced away and goes
+	// black. Using the eye's position here had the identical fault as the radiance above — one answer for a frame
+	// that contains both faces.
+	if (underside) {
+		NORMAL = -NORMAL;
+	}
+	// **Depth is written where there IS cloud, and nowhere else.** The air pass clips its march at the first
+	// thing drawn, so a gap that wrote depth would lose the air that is properly above the ground; this
+	// discard is what keeps the gaps honest. It also stops the sphere blending its own far side through its
+	// near side, because the near side's depth then rejects it.
+	if (alpha < 0.004) {
+		discard;
+	}
+}

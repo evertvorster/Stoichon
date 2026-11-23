@@ -21,9 +21,9 @@ func run(h, _root: Node) -> void:
 ## **The table is the interface, and it is 65 numbers.** A band edge between two of them is a lerp rather than an
 ## assumption, and the count is also what the host publishes as a `PackedFloat32Array`.
 func _test_the_quantile_table(h) -> void:
-	h.check(SpacesimSurfaceDistribution.QUANTILES == 65, "the table has 65 entries")
-	var linear := SpacesimSurfaceDistribution.linear_quantiles()
-	h.check(linear.size() == SpacesimSurfaceDistribution.QUANTILES, "and `linear_quantiles` fills them")
+	h.check(StoichonSurfaceDistribution.QUANTILES == 65, "the table has 65 entries")
+	var linear := StoichonSurfaceDistribution.linear_quantiles()
+	h.check(linear.size() == StoichonSurfaceDistribution.QUANTILES, "and `linear_quantiles` fills them")
 	h.check_near(linear[0], -1.0, "a linear placeholder starts at -1", 1.0e-6)
 	h.check_near(linear[linear.size() - 1], 1.0, "and ends at 1", 1.0e-6)
 	# **A placeholder, not a measurement** — it is what a material is built with before the bake lands, so a monotone
@@ -40,9 +40,9 @@ func _test_the_histogram(h) -> void:
 	for column in 256:
 		var value := lerpf(-1.0, 1.0, float(column) / 255.0)
 		image.set_pixel(column, 0, Color(value, 0.0, 0.0, 1.0))
-	var table := SpacesimSurfaceDistribution.quantiles_of(image)
-	h.check(table.size() == SpacesimSurfaceDistribution.QUANTILES,
-		"the table has %d entries" % SpacesimSurfaceDistribution.QUANTILES)
+	var table := StoichonSurfaceDistribution.quantiles_of(image)
+	h.check(table.size() == StoichonSurfaceDistribution.QUANTILES,
+		"the table has %d entries" % StoichonSurfaceDistribution.QUANTILES)
 
 	var worst := 0.0
 	var monotone := true
@@ -58,13 +58,13 @@ func _test_the_histogram(h) -> void:
 
 	# **The sea level for an ocean fraction**, which is what a coastline is made of: 70.8 % under water on a
 	# uniform field is the 70.8th percentile, i.e. a value near 0.416.
-	h.check_near(SpacesimSurfaceDistribution.value_at(table, 0.708), 0.416,
-		"70.8 %% of a uniform field lies below %.3f" % SpacesimSurfaceDistribution.value_at(table, 0.708), 0.02)
+	h.check_near(StoichonSurfaceDistribution.value_at(table, 0.708), 0.416,
+		"70.8 %% of a uniform field lies below %.3f" % StoichonSurfaceDistribution.value_at(table, 0.708), 0.02)
 	# Clamped at both ends rather than extrapolated.
-	h.check_near(SpacesimSurfaceDistribution.value_at(table, -1.0), table[0], "a share below zero clamps", 1.0e-9)
-	h.check_near(SpacesimSurfaceDistribution.value_at(table, 2.0), table[table.size() - 1],
+	h.check_near(StoichonSurfaceDistribution.value_at(table, -1.0), table[0], "a share below zero clamps", 1.0e-9)
+	h.check_near(StoichonSurfaceDistribution.value_at(table, 2.0), table[table.size() - 1],
 		"and one above one clamps", 1.0e-9)
-	h.check_near(SpacesimSurfaceDistribution.value_at(PackedFloat32Array(), 0.5), 0.0,
+	h.check_near(StoichonSurfaceDistribution.value_at(PackedFloat32Array(), 0.5), 0.0,
 		"an empty table answers the datum rather than a NaN", 1.0e-9)
 
 	# **The trap this test was written into, and out of.** A linear ramp over exactly `-1 .. 1` cannot tell
@@ -76,16 +76,16 @@ func _test_the_histogram(h) -> void:
 	for column in 256:
 		var value := lerpf(-0.6, 1.0, float(column) / 255.0)
 		skewed.set_pixel(column, 0, Color(value, 0.0, 0.0, 1.0))
-	var skewed_table := SpacesimSurfaceDistribution.quantiles_of(skewed)
+	var skewed_table := StoichonSurfaceDistribution.quantiles_of(skewed)
 	h.check_near(skewed_table[0], -0.6, "an asymmetric field's lowest quantile is its own minimum", 0.01)
 	h.check_near(skewed_table[skewed_table.size() - 1], 1.0,
 		"and its highest is its own maximum", 0.01)
-	h.check_near(SpacesimSurfaceDistribution.value_at(skewed_table, 0.5), 0.2,
+	h.check_near(StoichonSurfaceDistribution.value_at(skewed_table, 0.5), 0.2,
 		"a distribution from -0.6 to 1.0 has its median at 0.2", 0.02)
 	# **The invariant the picture rests on**: the value at an ocean fraction puts that fraction below it.
 	var fractions := [0.25, 0.5, 0.708, 0.9]
 	for share in fractions:
-		var level := SpacesimSurfaceDistribution.value_at(skewed_table, share)
+		var level := StoichonSurfaceDistribution.value_at(skewed_table, share)
 		var below := 0
 		for column in 256:
 			if skewed.get_pixel(column, 0).r < level:
@@ -94,7 +94,7 @@ func _test_the_histogram(h) -> void:
 			"%.1f %% of the field lies below value_at(%.3f)" % [share * 100.0, share], 0.02)
 
 	# The placeholder a material is built with, before any map exists.
-	var linear := SpacesimSurfaceDistribution.linear_quantiles()
+	var linear := StoichonSurfaceDistribution.linear_quantiles()
 	h.check_near(linear[0], -1.0, "the linear placeholder starts at the field's floor", 1.0e-6)
 	h.check_near(linear[linear.size() - 1], 1.0, "and ends at its ceiling", 1.0e-6)
 
@@ -105,9 +105,9 @@ func _test_the_ramp(h) -> void:
 		{"material": "ocean", "from": 0.0, "to": 0.708, "color": Color(0.02, 0.06, 0.15, 1.0)},
 		{"material": "regolith", "from": 0.708, "to": 1.0, "color": Color(0.4, 0.36, 0.3, 1.0)},
 	]
-	var quantiles := SpacesimSurfaceDistribution.linear_quantiles()
-	var image := SpacesimBodyRenderer.ramp_image(bands, quantiles, Color.BLACK)
-	var width := SpacesimBodyRenderer.RAMP_WIDTH
+	var quantiles := StoichonSurfaceDistribution.linear_quantiles()
+	var image := StoichonBodyRenderer.ramp_image(bands, quantiles, Color.BLACK)
+	var width := StoichonBodyRenderer.RAMP_WIDTH
 	h.check(image.get_width() == width and image.get_height() == 1,
 		"the ramp is one row of %d texels" % width)
 
@@ -126,7 +126,7 @@ func _test_the_ramp(h) -> void:
 
 	# **A body with no bands keeps its own colour**, which is a gas giant whose visible surface is its deck.
 	# **`RGBA8` is 8 bits**, so a colour round-trips to within a level rather than exactly.
-	var flat := SpacesimBodyRenderer.ramp_image([], quantiles, Color(0.5, 0.4, 0.3, 1.0))
+	var flat := StoichonBodyRenderer.ramp_image([], quantiles, Color(0.5, 0.4, 0.3, 1.0))
 	var tolerance := 2.0 / 255.0
 	var bottom := flat.get_pixel(0, 0)
 	var top := flat.get_pixel(width - 1, 0)

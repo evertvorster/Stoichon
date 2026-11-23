@@ -1,7 +1,7 @@
 extends RefCounted
 ## **The GPU bake against the CPU bake.** Not a look: a byte comparison, with a declared tolerance.
 ##
-## The GLSL in `cloud_field.gdshaderinc` is a transcription of `SpacesimCloudField.intensity_at()`, and a
+## The GLSL in `cloud_field.gdshaderinc` is a transcription of `StoichonCloudField.intensity_at()`, and a
 ## transcription is a second copy — the one thing this project keeps punishing. So the claim "the two
 ## paths bake the same field" is asserted rather than believed, at the only place it can be: on the same
 ## map, texel by texel.
@@ -35,7 +35,7 @@ const MAX_DIFFERING_PERCENT := 5.0
 
 func run(h, _root: Node) -> void:
 	print("  cloud field on the GPU")
-	var gpu := SpacesimCloudGpu.new()
+	var gpu := StoichonCloudGpu.new()
 	if not gpu.open():
 		# Headless, or an OpenGL run. The absence must be *reported*, not silent: a bake that quietly
 		# falls back is a bake whose GPU path is never exercised.
@@ -55,9 +55,9 @@ func run(h, _root: Node) -> void:
 
 ## **A uniform field has no arithmetic in it**, so there is nothing to round: both paths must agree to the
 ## byte. It is the cheapest way to tell "the paths agree" from "the tolerance covers a difference".
-func _test_a_featureless_body_is_exact(h, gpu: SpacesimCloudGpu) -> void:
-	var morphology := _morphology(SpacesimCloudModel.Banding.FEATURELESS, 0.104)
-	var cpu := SpacesimCloudField.bake(4242, morphology, SIZE, HEIGHT)
+func _test_a_featureless_body_is_exact(h, gpu: StoichonCloudGpu) -> void:
+	var morphology := _morphology(StoichonCloudModel.Banding.FEATURELESS, 0.104)
+	var cpu := StoichonCloudField.bake(4242, morphology, SIZE, HEIGHT)
 	var gpu_image := gpu.bake(4242, morphology, SIZE, HEIGHT)
 	h.check(gpu_image != null, "a featureless body bakes on the GPU (%s)" % gpu.error())
 	if gpu_image == null:
@@ -68,13 +68,13 @@ func _test_a_featureless_body_is_exact(h, gpu: SpacesimCloudGpu) -> void:
 
 
 ## The field proper: noise, bands, meander, the vortex stack and the soft ceiling, all of it.
-func _test_a_baked_field_agrees(h, gpu: SpacesimCloudGpu) -> void:
-	for banding in [SpacesimCloudModel.Banding.SHREDDED, SpacesimCloudModel.Banding.BANDED]:
+func _test_a_baked_field_agrees(h, gpu: StoichonCloudGpu) -> void:
+	for banding in [StoichonCloudModel.Banding.SHREDDED, StoichonCloudModel.Banding.BANDED]:
 		# Three ratios: a derived wavenumber, a different one, and none at all — which is the branch where
 		# the bands stop meandering.
 		for ratio in [0.104, 0.045, 0.0]:
 			var morphology := _morphology(banding, ratio)
-			var cpu := SpacesimCloudField.bake(12345, morphology, SIZE, HEIGHT).get_data()
+			var cpu := StoichonCloudField.bake(12345, morphology, SIZE, HEIGHT).get_data()
 			var gpu_image := gpu.bake(12345, morphology, SIZE, HEIGHT)
 			h.check(gpu_image != null, "banding %d ratio %f bakes (%s)" % [banding, ratio, gpu.error()])
 			if gpu_image == null:
@@ -109,11 +109,11 @@ func _test_a_baked_field_agrees(h, gpu: SpacesimCloudGpu) -> void:
 ## **A window is a second copy of the `(u, v)` mapping**, and the two copies live in different languages —
 ## the kernel's own line for it, and `bake()`'s `uv_origin`/`uv_size`. A window baked by the GPU is
 ## therefore compared against the CPU's window, not against the CPU's whole map.
-func _test_a_window_agrees(h, gpu: SpacesimCloudGpu) -> void:
-	var morphology := _morphology(SpacesimCloudModel.Banding.SHREDDED, 0.104)
+func _test_a_window_agrees(h, gpu: StoichonCloudGpu) -> void:
+	var morphology := _morphology(StoichonCloudModel.Banding.SHREDDED, 0.104)
 	var origin := Vector2(0.25, 0.5)
 	var size := Vector2(0.125, 0.25)
-	var cpu := SpacesimCloudField.bake(999, morphology, 16, 16, null, origin, size).get_data()
+	var cpu := StoichonCloudField.bake(999, morphology, 16, 16, null, origin, size).get_data()
 	var gpu_image := gpu.bake(999, morphology, 16, 16, origin, size)
 	h.check(gpu_image != null, "a window bakes on the GPU (%s)" % gpu.error())
 	if gpu_image == null:
@@ -127,22 +127,22 @@ func _test_a_window_agrees(h, gpu: SpacesimCloudGpu) -> void:
 ## **The FLOW map against the CPU's advection** — the half of the field that is baked and *sampled*, so it is the half
 ## where a transcription could drift unnoticed.
 ##
-## `bake_flow()` writes the carried direction at each texel; `SpacesimCloudField.advect()` computes the same thing in
+## `bake_flow()` writes the carried direction at each texel; `StoichonCloudField.advect()` computes the same thing in
 ## GDScript, exactly. What is asserted is the **angle** between them, because a direction's error is an angle and
 ## nothing else — and the tolerance is the half-float one, since the map is `rgba16f` (10 bits of mantissa, ~0.06°).
 ##
 ## **The second check matters as much as the first**: a map that returned its input direction would pass nothing here —
 ## but only if the stack were empty, and the stack is not. So the twist is measured too, and a flow map that had
 ## somehow baked the *identity* would fail on it rather than sail through the comparison.
-func _test_the_flow_agrees(h, gpu: SpacesimCloudGpu) -> void:
-	var morphology := _morphology(SpacesimCloudModel.Banding.SHREDDED, 0.104)
+func _test_the_flow_agrees(h, gpu: StoichonCloudGpu) -> void:
+	var morphology := _morphology(StoichonCloudModel.Banding.SHREDDED, 0.104)
 	var width := 64
 	var height := 32
 	var image := gpu.bake_flow(999, morphology, width, height)
 	h.check(image != null, "the flow bakes on the GPU (%s)" % gpu.error())
 	if image == null:
 		return
-	var planned := SpacesimCloudField.plan(999, morphology)
+	var planned := StoichonCloudField.plan(999, morphology)
 	var worst := 0.0
 	var twist := 0.0
 	for row in height:
@@ -154,7 +154,7 @@ func _test_the_flow_agrees(h, gpu: SpacesimCloudGpu) -> void:
 			var direction := Vector3(
 				cos(latitude) * cos(longitude), sin(latitude), cos(latitude) * sin(longitude)
 			)
-			var exact := SpacesimCloudField.advect(direction, planned.stack)
+			var exact := StoichonCloudField.advect(direction, planned.stack)
 			var pixel := image.get_pixel(column, row)
 			var carried := Vector3(pixel.r, pixel.g, pixel.b)
 			worst = maxf(worst, rad_to_deg(exact.angle_to(carried.normalized())))
@@ -175,16 +175,16 @@ func _test_the_flow_agrees(h, gpu: SpacesimCloudGpu) -> void:
 ## derived here rather than typed into the shader, so it is worth knowing that it *is* the generator's
 ## normaliser: at gain 0 and 1 the sum is 1 and `octaves`, and the octave's own noise is bounded by 1.
 func _test_the_fbm_normaliser(h) -> void:
-	h.check_near(SpacesimCloudField.fractal_bounding(1, 0.5), 1.0,
+	h.check_near(StoichonCloudField.fractal_bounding(1, 0.5), 1.0,
 		"one octave is not normalised at all", 1.0e-12)
-	h.check_near(SpacesimCloudField.fractal_bounding(4, 1.0), 0.25,
+	h.check_near(StoichonCloudField.fractal_bounding(4, 1.0), 0.25,
 		"four octaves at unit gain divide by four", 1.0e-12)
-	h.check_near(SpacesimCloudField.fractal_bounding(4, 0.8), 1.0 / 2.952,
+	h.check_near(StoichonCloudField.fractal_bounding(4, 0.8), 1.0 / 2.952,
 		"and at the field's own gain by the sum of the geometric series", 1.0e-12)
 
 
-func _morphology(banding: int, ratio: float) -> SpacesimCloudModel.Morphology:
-	var morphology := SpacesimCloudModel.Morphology.new()
+func _morphology(banding: int, ratio: float) -> StoichonCloudModel.Morphology:
+	var morphology := StoichonCloudModel.Morphology.new()
 	morphology.banding = banding
 	morphology.cells = 6.0
 	morphology.ratio = ratio
@@ -196,7 +196,7 @@ func _morphology(banding: int, ratio: float) -> SpacesimCloudModel.Morphology:
 ## a substitution that is wired in but unreachable reads exactly like one that works, which is the shape of
 ## every "the path is dead" bug this project has had.
 func _test_the_cache_bakes_on_the_gpu(h) -> void:
-	var maps := SpacesimCloudMaps.new()
+	var maps := StoichonCloudMaps.new()
 	# **The GPU is what a cache bakes on by default**, because 47 ms against 26.8 s at 8192x4096 is the
 	# difference between a refinement that arrives while it is wanted and one that lands below the altitude it
 	# was baked for. Headless runs fall back to the CPU by construction — `create_local_rendering_device()` is
@@ -207,7 +207,7 @@ func _test_the_cache_bakes_on_the_gpu(h) -> void:
 	h.check(not maps.gpu_available(), "and keeps to the CPU when told to, which is how the two are compared")
 	maps.gpu_allowed = true
 	maps.map("planet:earth", 0, 6.371e6, 0.6, 20000.0e3,
-		_morphology(SpacesimCloudModel.Banding.SHREDDED, 0.104))
+		_morphology(StoichonCloudModel.Banding.SHREDDED, 0.104))
 	h.check(maps.bakes() >= 1, "the cache baked a floor (%d bakes)" % maps.bakes())
 	h.check(maps.gpu_bakes() >= 1,
 		"and it came off the GPU (%d of %d)" % [maps.gpu_bakes(), maps.bakes()])
@@ -223,5 +223,5 @@ func _test_the_cache_bakes_on_the_gpu(h) -> void:
 
 
 # The cache's device is private, so the check reads the count through the cache's own GPU handle.
-func _gpu_live_rids(maps: SpacesimCloudMaps) -> int:
+func _gpu_live_rids(maps: StoichonCloudMaps) -> int:
 	return maps.gpu_live_rids()

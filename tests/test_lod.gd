@@ -32,7 +32,7 @@ func run(h, root: Node) -> void:
 
 func _test_the_law(h) -> void:
 
-	var p := SpacesimLod.pixel_angle(FOV, RENDER_HEIGHT)
+	var p := StoichonLod.pixel_angle(FOV, RENDER_HEIGHT)
 
 	# --- the pixel, which is the law's unit ---------------------------------------------------------
 	# **The plan wrote 1.13e-3 rad, 0.065 degrees, and that is the frame's AVERAGE pixel angle** — `fov/H`
@@ -45,7 +45,7 @@ func _test_the_law(h) -> void:
 		"a pixel at the centre of a 1080p 70-degree frame is %.4f degrees" % rad_to_deg(p), 1.0e-9)
 	h.check(rad_to_deg(p) > 0.07 and rad_to_deg(p) < 0.08,
 		"which is the centre pixel and NOT the 0.0648-degree frame average the plan first recorded")
-	h.check(SpacesimLod.pixel_angle(FOV, 0.0) == 0.0,
+	h.check(StoichonLod.pixel_angle(FOV, 0.0) == 0.0,
 		"and a frame with no height has no pixels rather than a division by nothing")
 
 	# --- the plan's worked table, recomputed --------------------------------------------------------
@@ -54,34 +54,34 @@ func _test_the_law(h) -> void:
 	# 0.033 this gives. That row is the one the plan's own argument rests on — "a body at 1 au is 0.073
 	# px across and still gets 16,384 triangles" — and it holds either way, since the level is 0 well
 	# below a pixel. So this is a correction to the table, not to the conclusion.
-	var at_one_au := SpacesimLod.angular_radius(EARTH_RADIUS, AU)
+	var at_one_au := StoichonLod.angular_radius(EARTH_RADIUS, AU)
 	h.check_near(at_one_au, 4.2588e-5, "Earth at one au subtends %.6f degrees of radius"
 		% rad_to_deg(at_one_au), 1.0e-9)
-	var one_au_px := SpacesimLod.screen_radius_pixels(at_one_au, p)
+	var one_au_px := StoichonLod.screen_radius_pixels(at_one_au, p)
 	h.check(one_au_px < 0.1,
 		"which is %.4f px of radius — %.4f px across, against the plan's 0.073 px column, and the "
 			% [one_au_px, one_au_px * 2.0]
 			+ "difference is the two pixel angles, not a disagreement about the body")
 
-	var orbit := SpacesimLod.angular_radius(EARTH_RADIUS, 1.0e8)
+	var orbit := StoichonLod.angular_radius(EARTH_RADIUS, 1.0e8)
 	h.check_near(rad_to_deg(orbit), 3.6533, "Earth at 100,000 km subtends 0.0638 rad of radius", 1.0e-3)
-	var orbit_px := SpacesimLod.screen_radius_pixels(orbit, p)
+	var orbit_px := StoichonLod.screen_radius_pixels(orbit, p)
 	h.check(orbit_px > 45.0 and orbit_px < 55.0,
 		"which is %.1f px — the plan's 57 px at its own pixel angle" % orbit_px)
 
-	var close := SpacesimLod.angular_radius(EARTH_RADIUS, 1.0e7)
-	var close_px := SpacesimLod.screen_radius_pixels(close, p)
+	var close := StoichonLod.angular_radius(EARTH_RADIUS, 1.0e7)
+	var close_px := StoichonLod.screen_radius_pixels(close, p)
 	h.check(close_px > 600.0 and close_px < 700.0,
 		"and at 10,000 km %.0f px, against the plan's 611 — the projection it linearised" % close_px)
 
 	# Deep space, as the game's own default start is: the numbers phase 0 measured.
-	var deep := SpacesimLod.screen_radius_pixels(SpacesimLod.angular_radius(EARTH_RADIUS, 9.95e9), p)
+	var deep := StoichonLod.screen_radius_pixels(StoichonLod.angular_radius(EARTH_RADIUS, 9.95e9), p)
 	h.check(deep > 0.4 and deep < 0.6,
 		"from 9.95 Gm — where the game begins — a planet is %.2f px" % deep)
 
 	# Degenerate inputs, which the projection meets every frame for every body.
-	h.check(SpacesimLod.screen_radius_pixels(0.5, 0.0) == 0.0, "a frame with no pixels is zero pixels")
-	h.check(SpacesimLod.angular_radius(EARTH_RADIUS, 1.0e3) == PI * 0.5,
+	h.check(StoichonLod.screen_radius_pixels(0.5, 0.0) == 0.0, "a frame with no pixels is zero pixels")
+	h.check(StoichonLod.angular_radius(EARTH_RADIUS, 1.0e3) == PI * 0.5,
 		"an observer inside the body is at the horizon, clamped rather than NaN")
 
 
@@ -92,11 +92,11 @@ func _test_the_law(h) -> void:
 ## whether a **scaled unit mesh renders correctly under the double-precision vertex emulation** — that is
 ## a render, and it is the one thing this phase owes Evert's eyes.
 func _test_the_scene_applies_it(h, root: Node) -> void:
-	var sol: SpacesimSolarSystem = load(SOL_PATH)
+	var sol: StoichonSolarSystem = load(SOL_PATH)
 	h.check(sol != null, "Sol loads for the scene half")
 	if sol == null:
 		return
-	var scene := SpacesimSystemScene.from_content(sol)
+	var scene := StoichonSystemScene.from_content(sol)
 	h.check(scene != null, "a scene wraps it")
 	if scene == null:
 		return
@@ -116,7 +116,7 @@ func _test_the_scene_applies_it(h, root: Node) -> void:
 		h.check(false, "a camera in a tree has a render target to measure")
 		camera.queue_free()
 		return
-	var pixel := SpacesimLod.pixel_angle(camera.fov, float(viewport.size.y))
+	var pixel := StoichonLod.pixel_angle(camera.fov, float(viewport.size.y))
 	h.check(pixel > 0.0, "and the pixel angle comes from that render target")
 
 	# **The surface is a PATCH TREE now, not one shared mesh per level.** Evert, 2026-10-17: *"it
@@ -135,7 +135,7 @@ func _test_the_scene_applies_it(h, root: Node) -> void:
 	var mesh := earth.mesh
 	h.check(mesh.mesh is ArrayMesh, "the body draws its own patch mesh")
 	# **Unscaled, because the vertices are already metres** measured from the node's own origin — a basis carrying the
-	# radius is what rounded them at 0.76 m and made the ground wave. See `SpacesimPatches.rebase`.
+	# radius is what rounded them at 0.76 m and made the ground wave. See `StoichonPatches.rebase`.
 	h.check(mesh.scale.is_equal_approx(Vector3.ONE),
 		"unscaled — the vertices carry the metres, and the basis stays identity")
 	h.check(not (mesh.mesh is SphereMesh), "and no lat-long sphere is left in the tree")
@@ -143,7 +143,7 @@ func _test_the_scene_applies_it(h, root: Node) -> void:
 	# **The budget in force, not the default.** `update_lod` reads `lod.error_budget`, so a scene test
 	# that asserted 4.0 would fail the moment anyone trimmed it by flying — which is the point of the
 	# trim, and exactly what happened the first time this test ran.
-	var budget := float(SpacesimSettings.get_value("lod.error_budget"))
+	var budget := float(StoichonSettings.get_value("lod.error_budget"))
 	_place_at_screen_radius(camera, earth, to_earth, 200.0, pixel)
 	scene.update_lod(camera)
 	scene.await_patch_builds()
@@ -167,7 +167,7 @@ func _test_the_scene_applies_it(h, root: Node) -> void:
 	var drawn := 0
 	for body in scene.bodies:
 		if body.point != null and body.point.visible:
-			drawn += SpacesimBodyRenderer.POINT_TRIANGLES
+			drawn += StoichonBodyRenderer.POINT_TRIANGLES
 		if body.mesh != null and body.mesh.visible and body.mesh.mesh != null:
 			# **The patches the body is actually drawn with**, counted off its own mesh — a surface has no
 			# level any more, so this is the only honest place to read the number.
@@ -203,14 +203,14 @@ func _test_the_scene_applies_it(h, root: Node) -> void:
 
 	# Just under the threshold: no geometry, a splat, and the splat is the size of the disc it replaces.
 	_place_at_screen_radius(camera, luna, to_star_from_luna,
-		SpacesimLod.POINT_TIER_SCREEN_RADIUS * 0.9, pixel)
+		StoichonLod.POINT_TIER_SCREEN_RADIUS * 0.9, pixel)
 	scene.update_lod(camera)
 	scene.await_patch_builds()
 	h.check(not luna.mesh.visible, "under the threshold a body's mesh is not drawn")
 	h.check(luna.point.visible, "and its point of light is")
 	var luna_distance := camera.global_position.distance_to(luna.node.global_position)
 	var expected_size := 2.0 * luna_distance * tan(
-		SpacesimLod.angular_radius(luna.radius, luna_distance))
+		StoichonLod.angular_radius(luna.radius, luna_distance))
 	h.check_near(luna.point.scale.x, expected_size,
 		"sized to the disc it would have had, so a body is one continuous object across the handoff",
 		expected_size * 1.0e-4)
@@ -236,7 +236,7 @@ func _test_the_scene_applies_it(h, root: Node) -> void:
 
 	# Over the threshold the other way round, and the body is still a body the overlay can find.
 	_place_at_screen_radius(camera, luna, to_star_from_luna,
-		SpacesimLod.POINT_TIER_SCREEN_RADIUS * 10.0, pixel)
+		StoichonLod.POINT_TIER_SCREEN_RADIUS * 10.0, pixel)
 	scene.update_lod(camera)
 	scene.await_patch_builds()
 	h.check(luna.mesh.visible, "over the threshold the mesh comes back")
@@ -271,7 +271,7 @@ func _test_the_scene_applies_it(h, root: Node) -> void:
 	if mars != null and mars.point != null:
 		var to_star := (star_node.node.global_position - mars.node.global_position).normalized()
 		_place_at_screen_radius(camera, mars, to_star,
-			SpacesimLod.POINT_TIER_SCREEN_RADIUS * 0.5, pixel)
+			StoichonLod.POINT_TIER_SCREEN_RADIUS * 0.5, pixel)
 		scene.update_lod(camera)
 		scene.await_patch_builds()
 		h.check(mars.point.visible, "a planet small enough is a point too")
@@ -280,10 +280,10 @@ func _test_the_scene_applies_it(h, root: Node) -> void:
 		# material declares `uniform vec4 albedo : source_color` (`scene/resources/material.cpp`).
 		var spot := (mars.point.material_override as StandardMaterial3D).albedo_color
 		var decoded := spot.srgb_to_linear()
-		# **In the frame's currency**, which carries `SpacesimRadiance.GAIN` — the lift that keeps a faint
+		# **In the frame's currency**, which carries `StoichonRadiance.GAIN` — the lift that keeps a faint
 		# splat inside the 16-bit buffer's normal range.
 		var expected_radiance := scene.body_luminance(mars, camera.global_position,
-			star_node.node.global_position) * SpacesimRadiance.GAIN / SpacesimBodyRenderer.UNIT_LUX_PER_SR
+			star_node.node.global_position) * StoichonRadiance.GAIN / StoichonBodyRenderer.UNIT_LUX_PER_SR
 		h.check_near(decoded.get_luminance(), expected_radiance,
 			"what arrives in the shader is the body's radiance, unchanged by the tint or the encode",
 			maxf(expected_radiance * 0.02, 1.0e-6))
@@ -330,7 +330,7 @@ func _test_the_scene_applies_it(h, root: Node) -> void:
 	# `exposure_multiplier` by hand — and found by flight test, flying toward Venus with Sol entering and
 	# leaving the frame stepped the whole sky up and down while the splat stayed put (Evert, 2026-10-15).
 	#
-	# Since `SpacesimExposurePass` scales the **finished frame**, every path is scaled once, by construction,
+	# Since `StoichonExposurePass` scales the **finished frame**, every path is scaled once, by construction,
 	# and **no material may apply the camera's exposure itself** — that would be a second application. So the
 	# property worth pinning now is the independence: the splat does not move when `exposure_multiplier`
 	# does, because the pass moves it with everything else.
@@ -345,7 +345,7 @@ func _test_the_scene_applies_it(h, root: Node) -> void:
 		camera.attributes = attributes
 		attributes.exposure_multiplier = 1.0
 		_place_at_screen_radius(camera, venus, to_star_from_luna,
-			SpacesimLod.POINT_TIER_SCREEN_RADIUS * 0.5, pixel)
+			StoichonLod.POINT_TIER_SCREEN_RADIUS * 0.5, pixel)
 		scene.update_lod(camera)
 		scene.await_patch_builds()
 		# Decoded, because the stored value is sRGB-encoded — see `point_colour`.
@@ -396,7 +396,7 @@ func _test_the_scene_applies_it(h, root: Node) -> void:
 ## twice over — the deferred request's `wireframe = true` was read at publish, so a LINES mesh was built from solid
 ## arrays, and the staleness check compared the newest request with itself, so a stale build was judged fresh.
 func _test_a_publish_describes_its_own_build(
-	h, scene: SpacesimSystemScene, camera: Camera3D, earth: SpacesimSceneBody, pixel: float
+	h, scene: StoichonSystemScene, camera: Camera3D, earth: StoichonSceneBody, pixel: float
 ) -> void:
 	if earth == null or earth.mesh == null:
 		h.check(false, "a body with a mesh to publish onto")
@@ -437,9 +437,9 @@ func _test_a_publish_describes_its_own_build(
 	# witness, and it is pinned EXACTLY: one chunk fewer is `CHUNK_TRIANGLES` fewer, and a `< ` would be satisfied by
 	# the mutant's LINES mesh, which reports half of the same index array (`/6` instead of `/3`) — measured, and it
 	# fooled the first version of this check.
-	h.check(earth.patch_triangles == finer - SpacesimPatches.CHUNK_TRIANGLES,
+	h.check(earth.patch_triangles == finer - StoichonPatches.CHUNK_TRIANGLES,
 		"and the stale build was seen as stale: the coarser selection replaced the finer mesh (%d -> %d, wanted %d)"
-			% [finer, earth.patch_triangles, finer - SpacesimPatches.CHUNK_TRIANGLES])
+			% [finer, earth.patch_triangles, finer - StoichonPatches.CHUNK_TRIANGLES])
 	# The picture, not only the fields: a LINES mesh built from solid arrays is the visible half of the fault.
 	var surface := (earth.mesh.mesh as ArrayMesh).surface_get_primitive_type(0)
 	h.check(surface == Mesh.PRIMITIVE_TRIANGLES,
@@ -447,7 +447,7 @@ func _test_a_publish_describes_its_own_build(
 
 
 func _place_at_screen_radius(
-	camera: Camera3D, body: SpacesimSceneBody, direction: Vector3, screen_radius: float, pixel: float
+	camera: Camera3D, body: StoichonSceneBody, direction: Vector3, screen_radius: float, pixel: float
 ) -> void:
 	var angular := atan(screen_radius * pixel)
 	var distance := body.radius / maxf(sin(angular), 1.0e-9)
@@ -463,7 +463,7 @@ func _place_at_screen_radius(
 ## that the triangles there get smaller, so that is the quantity.
 static func _finest_under_eye(distance: float, radius: float, to_eye: Vector3, pixel: float, epsilon: float) -> float:
 	var finest := 1.0
-	for leaf in SpacesimPatches.triangles_of(SpacesimPatches.select(distance, to_eye, radius, pixel, epsilon)):
+	for leaf in StoichonPatches.triangles_of(StoichonPatches.select(distance, to_eye, radius, pixel, epsilon)):
 		var centre: Vector3 = (leaf[0] + leaf[1] + leaf[2]).normalized()
 		if centre.dot(to_eye) > 0.95:
 			finest = minf(finest, maxf(
@@ -480,7 +480,7 @@ static func _finest_under_eye(distance: float, radius: float, to_eye: Vector3, p
 ##
 ## A descent that rebuilds on every frame, which is what flying does, with a census of the engine's own
 ## object counts: a leaked RID is a leaked Object or Resource before it is anything else.
-func _leak(h, scene: SpacesimSystemScene, camera: Camera3D, earth: SpacesimSceneBody, pixel: float) -> void:
+func _leak(h, scene: StoichonSystemScene, camera: Camera3D, earth: StoichonSceneBody, pixel: float) -> void:
 	var start_resources := Performance.get_monitor(Performance.OBJECT_RESOURCE_COUNT)
 	var start_objects := Performance.get_monitor(Performance.OBJECT_COUNT)
 	var samples := []
@@ -503,7 +503,7 @@ func _leak(h, scene: SpacesimSystemScene, camera: Camera3D, earth: SpacesimScene
 ## has to leave a mesh that belongs to the new one, not the previous regime's. What is observable headlessly
 ## is that the transition pays for the build: no task is left in flight when `update_lod` returns.
 func _test_a_frame_change_pays_for_its_geometry(
-	h, scene: SpacesimSystemScene, camera: Camera3D, earth: SpacesimSceneBody, pixel: float
+	h, scene: StoichonSystemScene, camera: Camera3D, earth: StoichonSceneBody, pixel: float
 ) -> void:
 	var surface := earth.surface
 	if surface == null:
@@ -529,11 +529,11 @@ func _test_a_frame_change_pays_for_its_geometry(
 		"and it is stable — a second frame at the same viewpoint draws the same mesh")
 
 
-## **An eye inside a body is a real answer, not a failure.** `SpacesimPatches.select` refuses a sphere it
+## **An eye inside a body is a real answer, not a failure.** `StoichonPatches.select` refuses a sphere it
 ## cannot see round, so the selection is empty — and an empty *mesh* is an error from the rendering server
 ## (`array_len == 0`, logged every frame it is asked). The body has to draw nothing instead, and it has to
 ## stop asking: a body whose answer is "nothing" must not re-walk every frame.
-func _test_the_eye_inside_a_body(h, scene: SpacesimSystemScene, camera: Camera3D, pixel: float) -> void:
+func _test_the_eye_inside_a_body(h, scene: StoichonSystemScene, camera: Camera3D, pixel: float) -> void:
 	var earth := scene.body_by_id("planet:earth")
 	if earth == null:
 		return
@@ -564,13 +564,13 @@ func _test_the_eye_inside_a_body(h, scene: SpacesimSystemScene, camera: Camera3D
 
 
 ## Triangles in the mesh the body is drawn with. Kept for the report, not for the law.
-static func _triangles_under_eye(body: SpacesimSceneBody, to_eye: Vector3) -> int:
+static func _triangles_under_eye(body: StoichonSceneBody, to_eye: Vector3) -> int:
 	var arrays: Array = (body.mesh.mesh as ArrayMesh).surface_get_arrays(0)
 	# **Non-indexed**: every triangle carries its own three vertices, so the soup is read three at a time
 	# and there is no index array to walk.
 	var points: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 	# **The vertices are metres from the node's own origin**, not points on a unit sphere, so a direction is measured
-	# from the body's centre — which means adding the origin back before normalising. See `SpacesimPatches.rebase`.
+	# from the body's centre — which means adding the origin back before normalising. See `StoichonPatches.rebase`.
 	var origin := body.mesh.position
 	var count := 0
 	for i in range(0, points.size() - 2, 3):
@@ -587,17 +587,17 @@ static func _triangles_under_eye(body: SpacesimSceneBody, to_eye: Vector3) -> in
 ## see a little splat for the asteroid much earlier... The eye can resolve light long before shape."*
 func _test_a_splat_carries_its_flux(h) -> void:
 	var floor := 0.05
-	h.check_near(SpacesimBodyRenderer.splat_fade(1.0, floor), 1.0,
+	h.check_near(StoichonBodyRenderer.splat_fade(1.0, floor), 1.0,
 		"a splat that covers the disc carries the whole radiance", 1.0e-9)
-	h.check_near(SpacesimBodyRenderer.splat_fade(0.4, floor), PI * 0.16,
+	h.check_near(StoichonBodyRenderer.splat_fade(0.4, floor), PI * 0.16,
 		"and at 0.4 px it carries pi*r^2 = 0.50", 1.0e-9)
 	# The cap: a splat covers the disc at 1/sqrt(pi) = 0.564 px of radius, and past that the law is 1.
-	h.check_near(SpacesimBodyRenderer.splat_fade(0.5642, floor), 1.0, "while the cap is reached at 0.564 px", 1.0e-3)
+	h.check_near(StoichonBodyRenderer.splat_fade(0.5642, floor), 1.0, "while the cap is reached at 0.564 px", 1.0e-3)
 	# A tenth of a pixel of radius: pi * 0.01 = 0.031, under the floor.
-	h.check_near(SpacesimBodyRenderer.splat_fade(0.1, floor), floor,
+	h.check_near(StoichonBodyRenderer.splat_fade(0.1, floor), floor,
 		"below the floor a splat keeps a findable dot", 1.0e-9)
 	# At 0.14 px the law gives pi * 0.0196 = 0.0616, above it: the law wins.
-	h.check_near(SpacesimBodyRenderer.splat_fade(0.14, floor), PI * 0.14 * 0.14,
+	h.check_near(StoichonBodyRenderer.splat_fade(0.14, floor), PI * 0.14 * 0.14,
 		"above the floor the law is what is drawn", 1.0e-9)
-	h.check_near(SpacesimBodyRenderer.splat_fade(0.0, 0.0), 0.0,
+	h.check_near(StoichonBodyRenderer.splat_fade(0.0, 0.0), 0.0,
 		"and with no floor, a body with no disc delivers nothing", 1.0e-9)

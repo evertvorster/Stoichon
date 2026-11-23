@@ -1,17 +1,17 @@
 extends RefCounted
 ## Bindings, and the staged edits behind the settings screen.
 
-const Settings := preload("res://addons/spacesim/settings/settings.gd")
-const Edit := preload("res://addons/spacesim/settings/settings_edit.gd")
-const Binding := preload("res://addons/spacesim/input/binding.gd")
-const Actions := preload("res://addons/spacesim/input/actions.gd")
+const Settings := preload("res://addons/stoichon/settings/settings.gd")
+const Edit := preload("res://addons/stoichon/settings/settings_edit.gd")
+const Binding := preload("res://addons/stoichon/input/binding.gd")
+const Actions := preload("res://addons/stoichon/input/actions.gd")
 const Ui := preload("res://tests/ui_fixture.gd")
-const Devices := preload("res://addons/spacesim/input/devices.gd")
-const AxisProfile := preload("res://addons/spacesim/input/axis_profile.gd")
-const AxisBar := preload("res://addons/spacesim/ui/axis_bar.gd")
-const Store := preload("res://addons/spacesim/input/bindings_store.gd")
-const Controls := preload("res://addons/spacesim/input/controls.gd")
-const SettingsPanel := preload("res://addons/spacesim/settings/settings_panel.gd")
+const Devices := preload("res://addons/stoichon/input/devices.gd")
+const AxisProfile := preload("res://addons/stoichon/input/axis_profile.gd")
+const AxisBar := preload("res://addons/stoichon/ui/axis_bar.gd")
+const Store := preload("res://addons/stoichon/input/bindings_store.gd")
+const Controls := preload("res://addons/stoichon/input/controls.gd")
+const SettingsPanel := preload("res://addons/stoichon/settings/settings_panel.gd")
 
 const Fixture := preload("res://tests/settings_fixture.gd")
 
@@ -549,7 +549,7 @@ func _test_the_devices_tab(h, root: Node) -> void:
 		panel._refresh_devices()
 		var device := int(pads[0])
 		var raw: float = Devices.axis(device, 0)
-		var profile: SpacesimAxisProfile = panel._profile_of(device, 0)
+		var profile: StoichonAxisProfile = panel._profile_of(device, 0)
 		var value_label: Label = rows[0][3]
 		h.check(
 			value_label.text == "%+.2f" % profile.shape(raw),
@@ -619,7 +619,7 @@ func _test_the_devices_tab(h, root: Node) -> void:
 		band.text = "0.200"
 		band.text_changed.emit("0.200")
 		panel._apply_button.pressed.emit()
-		var saved: SpacesimAxisProfile = _fixture.bindings().axis_profile(
+		var saved: StoichonAxisProfile = _fixture.bindings().axis_profile(
 			Devices.name_of(device), Devices.AXIS_NAMES[0]
 		)
 		h.check(

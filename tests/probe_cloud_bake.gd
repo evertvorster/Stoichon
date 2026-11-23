@@ -23,14 +23,14 @@ const DEFAULT_SIZES := "256,1024,2048,4096,8192"
 
 
 func _initialize() -> void:
-	var morphology := SpacesimCloudModel.Morphology.new()
-	morphology.banding = SpacesimCloudModel.Banding.SHREDDED
+	var morphology := StoichonCloudModel.Morphology.new()
+	morphology.banding = StoichonCloudModel.Banding.SHREDDED
 	morphology.cells = 6.0
 	morphology.ratio = 0.104
 	morphology.eddy_angular_scale = 0.021
-	var seed := SpacesimCloudField.seed_for("planet:earth", 0)
+	var seed := StoichonCloudField.seed_for("planet:earth", 0)
 
-	var gpu := SpacesimCloudGpu.new()
+	var gpu := StoichonCloudGpu.new()
 	var gpu_open := gpu.open()
 	if not gpu_open:
 		print("GPU unavailable: ", gpu.error())
@@ -41,7 +41,7 @@ func _initialize() -> void:
 	if gpu_open:
 		gpu.bake(seed, morphology, 64, 32)
 	if cpu_wanted:
-		SpacesimCloudField.bake(seed, morphology, 64, 32)
+		StoichonCloudField.bake(seed, morphology, 64, 32)
 
 	print("")
 	print("%10s %12s %12s %10s" % ["width", "cpu ms", "gpu ms", "ratio"])
@@ -57,7 +57,7 @@ func _initialize() -> void:
 		var cpu_usec := 0
 		if cpu_wanted:
 			var cpu_start := Time.get_ticks_usec()
-			SpacesimCloudField.bake(seed, morphology, width, height)
+			StoichonCloudField.bake(seed, morphology, width, height)
 			cpu_usec = Time.get_ticks_usec() - cpu_start
 		var gpu_usec := 0
 		if gpu_open:

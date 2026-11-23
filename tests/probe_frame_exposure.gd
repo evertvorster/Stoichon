@@ -7,7 +7,7 @@ extends SceneTree
 ##
 ## That probe proved the *mechanism* — a GDScript `CompositorEffect` fires, reaches the colour texture, and
 ## writing it changes the frame — but it ran on a scene of its own with a shader of its own. This one runs
-## **the game**, with the game's camera, and asks whether `SpacesimExposurePass` is attached, running, and
+## **the game**, with the game's camera, and asks whether `StoichonExposurePass` is attached, running, and
 ## changing what is drawn.
 ##
 ## **The A/B is inside one run**, using the effect's inherited `enabled` flag, so nothing about the tree

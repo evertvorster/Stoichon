@@ -1,9 +1,9 @@
 extends RefCounted
 ## The travel unit: how close the nearest significant thing is decides how fast you move.
 
-const TravelScale := preload("res://addons/spacesim/travel/travel_scale.gd")
-const Proximity := preload("res://addons/spacesim/travel/proximity.gd")
-const ScaleBody := preload("res://addons/spacesim/travel/scale_body.gd")
+const TravelScale := preload("res://addons/stoichon/travel/travel_scale.gd")
+const Proximity := preload("res://addons/stoichon/travel/proximity.gd")
+const ScaleBody := preload("res://addons/stoichon/travel/scale_body.gd")
 
 const BAND_MIN := 1.0e3
 const BAND_MAX := 1.0e9
@@ -136,7 +136,7 @@ func _test_nearest_of_several(h, root: Node) -> void:
 	near_node.position = Vector3(5000.0, 0.0, 0.0)
 	container.add_child(near_node)
 
-	var bodies: Array[SpacesimScaleBody] = [
+	var bodies: Array[StoichonScaleBody] = [
 		ScaleBody.new(far_node, 100.0),
 		ScaleBody.new(near_node, 100.0),
 	]
@@ -147,7 +147,7 @@ func _test_nearest_of_several(h, root: Node) -> void:
 	var nearest := Proximity.nearest_body(probe, bodies)
 	h.check(nearest != null and nearest.node == near_node, "and the nearest body is reported")
 
-	var empty: Array[SpacesimScaleBody] = []
+	var empty: Array[StoichonScaleBody] = []
 	h.check(
 		is_inf(Proximity.nearest_surface_distance(probe, empty)),
 		"nothing near enough reads as infinite distance, not zero"
@@ -166,7 +166,7 @@ func _test_handover_is_continuous(h, root: Node) -> void:
 	b.position = Vector3(1000.0, 0.0, 0.0)
 	container.add_child(b)
 
-	var bodies: Array[SpacesimScaleBody] = [ScaleBody.new(a, 100.0), ScaleBody.new(b, 100.0)]
+	var bodies: Array[StoichonScaleBody] = [ScaleBody.new(a, 100.0), ScaleBody.new(b, 100.0)]
 
 	var worst_distance_step := 0.0
 	var worst_speed_step := 0.0

@@ -16,7 +16,7 @@ const RADIUS := 1.0
 func _initialize() -> void:
 	for resolution in [48, 64, 96]:
 		var started := Time.get_ticks_usec()
-		var mesh := SpacesimBlobShape.mesh(hash("spike:cost"), RADIUS, resolution)
+		var mesh := StoichonBlobShape.mesh(hash("spike:cost"), RADIUS, resolution)
 		var elapsed := float(Time.get_ticks_usec() - started) / 1000.0
 		var triangles := 0
 		if mesh != null:
@@ -25,7 +25,7 @@ func _initialize() -> void:
 
 	for index in 6:
 		var seed_value := hash("spike:blob:%d" % index)
-		_report_mesh(index, SpacesimBlobShape.mesh(seed_value, RADIUS, 64))
+		_report_mesh(index, StoichonBlobShape.mesh(seed_value, RADIUS, 64))
 	quit()
 
 

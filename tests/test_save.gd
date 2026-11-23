@@ -4,21 +4,21 @@ extends RefCounted
 ## These run against a **real git repository in a temp directory**, so they exercise git itself
 ## rather than a mock. The numbers in the save plan came from the same kind of exercise.
 
-const Git := preload("res://addons/spacesim/save/git.gd")
-const Repo := preload("res://addons/spacesim/save/world_repo.gd")
-const Player := preload("res://addons/spacesim/player/player.gd")
-const Location := preload("res://addons/spacesim/coordinate/location.gd")
-const Frame := preload("res://addons/spacesim/coordinate/frame.gd")
+const Git := preload("res://addons/stoichon/save/git.gd")
+const Repo := preload("res://addons/stoichon/save/world_repo.gd")
+const Player := preload("res://addons/stoichon/player/player.gd")
+const Location := preload("res://addons/stoichon/coordinate/location.gd")
+const Frame := preload("res://addons/stoichon/coordinate/frame.gd")
 
 const SYSTEM_PATH := "res://systems/playground.tres"
-const TEST_ROOT := "/tmp/spacesim-save-test"
+const TEST_ROOT := "/tmp/stoichon-save-test"
 
 
 func run(h, root: Node) -> void:
 	print("  saves")
 	_clean()
 	# Git is asked about branch names, and `-C` needs somewhere to point.
-	SpacesimXdg.ensure_directory(TEST_ROOT)
+	StoichonXdg.ensure_directory(TEST_ROOT)
 	_test_slug_survives_git(h)
 	_test_history_names(h)
 	_test_save_and_list(h)
@@ -69,7 +69,7 @@ func _test_slug_survives_git(h) -> void:
 
 func _test_history_names(h) -> void:
 	var repo := _fresh_repo(h)
-	SpacesimXdg.ensure_directory(TEST_ROOT)
+	StoichonXdg.ensure_directory(TEST_ROOT)
 	h.check(repo.create({"world": "playground"})["ok"], "a repository is created with its trunk")
 	h.check(repo.current_history() == Repo.TRUNK, "and starts on the trunk")
 
@@ -230,7 +230,7 @@ func _test_state_round_trip(h) -> void:
 
 
 func _test_reading_a_location(h, root: Node) -> void:
-	var system := SpacesimSystemScene.from_file(SYSTEM_PATH)
+	var system := StoichonSystemScene.from_file(SYSTEM_PATH)
 	if system == null:
 		h.check(false, "the playground system loads")
 		return
@@ -262,16 +262,16 @@ func _test_reading_a_location(h, root: Node) -> void:
 		"and something inside a base names the base and where the base is"
 	)
 
-	h.check(SpacesimWorldTime.format(0.0) == "0-01-01 00:00", "the world's epoch reads as year 0")
-	h.check(SpacesimWorldTime.format(86400.0) == "0-01-02 00:00", "and a day later is a day later")
+	h.check(StoichonWorldTime.format(0.0) == "0-01-01 00:00", "the world's epoch reads as year 0")
+	h.check(StoichonWorldTime.format(86400.0) == "0-01-02 00:00", "and a day later is a day later")
 	# Not an exact year: the Terran year is 365.2425 days, so half a millennium of seconds lands on or
 	# beside 500-01-01. What matters is that it is there at all, and that it grows.
-	var later := SpacesimWorldTime.format(31556952.0 * 500.0)
+	var later := StoichonWorldTime.format(31556952.0 * 500.0)
 	h.check(int(later.split("-")[0]) >= 499, "and half a millennium later reads as a year near 500 ('%s')" % later)
 
 	# **The strip's number: seconds since the Big Bang, grouped by the thousand.** From the Bang rather
 	# than from the world's year zero, because at 13.8 Gyr a calendar date is five digits of noise.
-	var bang := SpacesimWorldTime.since_bang(0)
+	var bang := StoichonWorldTime.since_bang(0)
 	h.check(
 		bang > 13.7e9 * 365.25 * 86400.0 and bang < 13.9e9 * 365.25 * 86400.0,
 		"the world's epoch sits at the age of the universe (%d s)" % bang
@@ -281,28 +281,28 @@ func _test_reading_a_location(h, root: Node) -> void:
 	# the price of counting from the Bang in seconds, and it is worth nothing at this scale.
 	# **Exactly**, because both the epoch and the elapsed part are integers now: a second is a second.
 	h.check(
-		SpacesimWorldTime.since_bang(3600) - bang == 3600,
+		StoichonWorldTime.since_bang(3600) - bang == 3600,
 		"and an hour into a history is exactly an hour later"
 	)
-	h.check(SpacesimWorldTime.grouped(0) == "0", "grouping leaves nothing to group alone")
-	h.check(SpacesimWorldTime.grouped(999) == "999", "three digits need no separator")
-	h.check(SpacesimWorldTime.grouped(1000) == "1,000", "four digits get one")
+	h.check(StoichonWorldTime.grouped(0) == "0", "grouping leaves nothing to group alone")
+	h.check(StoichonWorldTime.grouped(999) == "999", "three digits need no separator")
+	h.check(StoichonWorldTime.grouped(1000) == "1,000", "four digits get one")
 	h.check(
-		SpacesimWorldTime.grouped(159000000) == "159,000,000",
-		"every three digits thereafter (%s)" % SpacesimWorldTime.grouped(159000000)
+		StoichonWorldTime.grouped(159000000) == "159,000,000",
+		"every three digits thereafter (%s)" % StoichonWorldTime.grouped(159000000)
 	)
 	h.check(
-		SpacesimWorldTime.grouped(SpacesimWorldTime.since_bang(0)).length()
+		StoichonWorldTime.grouped(StoichonWorldTime.since_bang(0)).length()
 			== str(bang).length() + 5,
 		"and the age of the universe gains five commas"
 	)
-	h.check(SpacesimWorldTime.grouped(-4500) == "-4,500", "a clock before the epoch keeps its sign")
+	h.check(StoichonWorldTime.grouped(-4500) == "-4,500", "a clock before the epoch keeps its sign")
 	system.container.free()
 
 
 # --- plumbing ------------------------------------------------------------------------------------
 
-func _fresh_repo(h) -> SpacesimWorldRepo:
+func _fresh_repo(h) -> StoichonWorldRepo:
 	_clean()
 	var repo := Repo.new(TEST_ROOT)
 	return repo

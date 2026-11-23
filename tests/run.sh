@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run the SpaceSim test suite, and smoke-load the demo scene.
+# Run the Stoichon test suite, and smoke-load the demo scene.
 #
 # Two holes this closes that a plain `godot ... res://tests/run_tests.tscn` does not:
 #

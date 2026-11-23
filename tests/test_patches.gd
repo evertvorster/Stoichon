@@ -1,7 +1,7 @@
 extends RefCounted
 ## The patch quadtree: refinement where the eye is, coarse elsewhere, bounded by the law alone.
 ##
-## **This is the mechanism the whole LOD story was missing** — `SpacesimIcosphere` draws a body at one
+## **This is the mechanism the whole LOD story was missing** — `StoichonIcosphere` draws a body at one
 ## level for the whole sphere, so approaching it refines everything equally. Evert's report, 2026-10-17:
 ## *"it suddenly switches to a higher density of triangles, but once only, and for the whole sphere."*
 ##
@@ -11,7 +11,7 @@ extends RefCounted
 ## that the walk is monotone in distance, that the horizon is exact, and that the law bounds it.
 
 const EARTH_RADIUS := 6.371e6
-## A 1080-line frame at 70 degrees vertical, which is the number `SpacesimLod` works in.
+## A 1080-line frame at 70 degrees vertical, which is the number `StoichonLod` works in.
 const PIXEL_ANGLE := 1.2967e-3
 
 
@@ -38,14 +38,14 @@ func run(h, root: Node) -> void:
 func _test_the_roots(h) -> void:
 	# **Not all twenty**: the walk culls over the limb, and from 1e9 m nearly a hemisphere is behind it, so
 	# a root or two goes. What the test is for is that the tree IS its roots and not a subdivision.
-	var chunks := SpacesimPatches.select(
+	var chunks := StoichonPatches.select(
 		1.0e9, Vector3.UP, EARTH_RADIUS, PIXEL_ANGLE, 4.0
 	)
 	h.check(chunks.size() <= 20 and chunks.size() >= 15,
 		"from far enough out the tree is its twenty roots, less the limb (%d chunks)" % chunks.size())
 	var area := 0.0
 	var unit := true
-	for leaf in SpacesimPatches.triangles_of(chunks):
+	for leaf in StoichonPatches.triangles_of(chunks):
 		for point in leaf:
 			if absf((point as Vector3).length() - 1.0) > 1.0e-9:
 				unit = false
@@ -59,12 +59,12 @@ func _test_the_roots(h) -> void:
 ## must be finer than the ones on the far side — which cannot happen to a whole-sphere level.
 func _test_the_eye_side_is_finer(h) -> void:
 	var distance := EARTH_RADIUS + 2.0e5
-	var chunks := SpacesimPatches.select(distance, Vector3.UP, EARTH_RADIUS, PIXEL_ANGLE, 1.0)
+	var chunks := StoichonPatches.select(distance, Vector3.UP, EARTH_RADIUS, PIXEL_ANGLE, 1.0)
 	var horizon := acos(EARTH_RADIUS / distance)
 	var near_edge := 0.0
 	var limb_edge := 0.0
 	var limb_patches := 0
-	for leaf in SpacesimPatches.triangles_of(chunks):
+	for leaf in StoichonPatches.triangles_of(chunks):
 		var centre: Vector3 = (leaf[0] + leaf[1] + leaf[2]).normalized()
 		var edge: float = maxf(
 			(leaf[0] as Vector3).angle_to(leaf[1]),
@@ -93,7 +93,7 @@ func _test_it_is_monotone_in_distance(h) -> void:
 	var monotone := true
 	for altitude: float in [1.0e8, 1.0e7, 1.0e6, 1.0e5]:
 		var finest := 1.0
-		for leaf in SpacesimPatches.triangles_of(SpacesimPatches.select(
+		for leaf in StoichonPatches.triangles_of(StoichonPatches.select(
 			EARTH_RADIUS + altitude, Vector3.UP, EARTH_RADIUS, PIXEL_ANGLE, 2.0
 		)):
 			var centre: Vector3 = (leaf[0] + leaf[1] + leaf[2]).normalized()
@@ -113,7 +113,7 @@ func _test_it_is_monotone_in_distance(h) -> void:
 ## is over the edge of the world. From just above the ground most of the sphere is not visible at all.
 func _test_the_horizon_is_exact(h) -> void:
 	var distance := EARTH_RADIUS + 1.0e4
-	var chunks := SpacesimPatches.select(distance, Vector3.UP, EARTH_RADIUS, PIXEL_ANGLE, 2.0)
+	var chunks := StoichonPatches.select(distance, Vector3.UP, EARTH_RADIUS, PIXEL_ANGLE, 2.0)
 	var horizon := acos(EARTH_RADIUS / distance)
 	var over_the_limb := 0
 	var worst := 0.0
@@ -125,7 +125,7 @@ func _test_the_horizon_is_exact(h) -> void:
 	# **The centre is the chunk's, not a triangle's.** Testing each triangle against its own extent asserts
 	# something the mechanism deliberately does not do, and it fails on a *correct* walk.
 	for chunk in chunks:
-		var triangles := SpacesimPatches.triangles_of([chunk])
+		var triangles := StoichonPatches.triangles_of([chunk])
 		var extent := 0.0
 		var centre := Vector3.ZERO
 		for leaf in triangles:
@@ -137,7 +137,7 @@ func _test_the_horizon_is_exact(h) -> void:
 		var middle := (centre / maxf(float(triangles.size()), 1.0)).normalized()
 		# **The chunk's own width, which is `2^s` leaf widths** — the triangles inside it are that much
 		# smaller than the patch the walk judged.
-		var chunk_extent := extent * float(1 << SpacesimPatches.CHUNK_SUBDIVISIONS)
+		var chunk_extent := extent * float(1 << StoichonPatches.CHUNK_SUBDIVISIONS)
 		var past := acos(clampf(middle.dot(Vector3.UP), -1.0, 1.0)) - horizon
 		if past > chunk_extent:
 			over_the_limb += 1
@@ -152,7 +152,7 @@ func _test_the_horizon_is_exact(h) -> void:
 	#
 	# **Counted in TRIANGLES, not chunks, because a chunk is `4^s` of them**: the bound used to be 20,000 chunks, which
 	# is 320,000 triangles at `s = 2`, and stating it that way means it does not move when the chunk size does.
-	var drawn := SpacesimPatches.triangle_count(chunks)
+	var drawn := StoichonPatches.triangle_count(chunks)
 	h.check(chunks.size() > 0 and drawn < 320000,
 		"and the far side really is gone rather than merely coarse (%d chunks, %d triangles)"
 			% [chunks.size(), drawn])
@@ -171,10 +171,10 @@ func _test_the_cover_reaches_the_topmost_layer(h) -> void:
 	var distance := EARTH_RADIUS + altitude
 	var deck := EARTH_RADIUS + 1400.0
 	h.check(is_equal_approx(
-		SpacesimPatches.cover_angle(distance, EARTH_RADIUS, EARTH_RADIUS),
+		StoichonPatches.cover_angle(distance, EARTH_RADIUS, EARTH_RADIUS),
 		acos(EARTH_RADIUS / distance)
 	), "with no layer above the eye, the cover is the surface's own horizon")
-	var cover := SpacesimPatches.cover_angle(distance, EARTH_RADIUS, deck)
+	var cover := StoichonPatches.cover_angle(distance, EARTH_RADIUS, deck)
 	h.check(cover > 1.0 * PI / 180.0 and cover < 1.5 * PI / 180.0,
 		"and a 1.4 km deck at 2 m is visible to about 1.25 degrees (%.5f rad, %.1f km)" % [
 			cover, cover * EARTH_RADIUS / 1000.0
@@ -195,8 +195,8 @@ func _test_the_cover_reaches_the_topmost_layer(h) -> void:
 		"and one outside it is, so the cap is the boundary and not a guess")
 	# **The selection is a superset**, not a different walk: the ground's chunks are all still there, so a deck and
 	# the surface under it remain one tessellation wherever they overlap.
-	var narrow := SpacesimPatches.select(distance, Vector3.UP, EARTH_RADIUS, PIXEL_ANGLE, 2.0)
-	var wide := SpacesimPatches.select(
+	var narrow := StoichonPatches.select(distance, Vector3.UP, EARTH_RADIUS, PIXEL_ANGLE, 2.0)
+	var wide := StoichonPatches.select(
 		distance, Vector3.UP, EARTH_RADIUS, PIXEL_ANGLE, 2.0, cover
 	)
 	var keys := {}
@@ -215,12 +215,12 @@ func _test_the_cover_reaches_the_topmost_layer(h) -> void:
 	# on 2026-11-01 (a black band at the edge of a dredged basin). A smaller sphere's horizon is at a larger centre-angle
 	# from the same eye, so `cover_angle` must return the layer's own answer and the caller must max over layers — folding
 	# the body's radius into it would answer with the ground's cap for every layer and re-open exactly that hole.
-	var basin := SpacesimPatches.cover_angle(distance, EARTH_RADIUS, EARTH_RADIUS - 10000.0)
-	var ground_cap := SpacesimPatches.cover_angle(distance, EARTH_RADIUS, EARTH_RADIUS)
+	var basin := StoichonPatches.cover_angle(distance, EARTH_RADIUS, EARTH_RADIUS - 10000.0)
+	var ground_cap := StoichonPatches.cover_angle(distance, EARTH_RADIUS, EARTH_RADIUS)
 	h.check(basin > ground_cap,
 		"a layer ten kilometres BELOW the datum has a wider visible cap than the sphere (%.4f against %.4f rad)"
 			% [basin, ground_cap])
-	var deep := SpacesimPatches.select(
+	var deep := StoichonPatches.select(
 		distance, Vector3.UP, EARTH_RADIUS, PIXEL_ANGLE, 2.0, basin
 	)
 	h.check(deep.size() > narrow.size(),
@@ -239,10 +239,10 @@ func _segment_misses_planet(eye: Vector3, point: Vector3, planet: float) -> bool
 
 func _test_the_law_bounds_the_walk(h) -> void:
 	# **At 100 km**, where the apparent-size limit and the sagitta limit are within a factor of two of each other.
-	var chunks := SpacesimPatches.select(
+	var chunks := StoichonPatches.select(
 		EARTH_RADIUS + 1.0e5, Vector3.UP, EARTH_RADIUS, PIXEL_ANGLE, 0.5
 	)
-	var triangles := SpacesimPatches.triangle_count(chunks)
+	var triangles := StoichonPatches.triangle_count(chunks)
 	h.check(chunks.size() > 2 and triangles > 0,
 		"a walk at 100 km answers with a real selection (%d chunks, %d triangles)"
 			% [chunks.size(), triangles])
@@ -251,23 +251,23 @@ func _test_the_law_bounds_the_walk(h) -> void:
 	var deepest := 0
 	for chunk in chunks:
 		deepest = maxi(deepest, int(chunk[2]))
-	var finest := SpacesimPatches.finest_edge_angle(
+	var finest := StoichonPatches.finest_edge_angle(
 		EARTH_RADIUS + 1.0e5, PIXEL_ANGLE, 0.5, EARTH_RADIUS
 	)
-	h.check(finest <= SpacesimPatches.FACET_ANGLE * (1.0e5 / EARTH_RADIUS) * 1.001,
+	h.check(finest <= StoichonPatches.FACET_ANGLE * (1.0e5 / EARTH_RADIUS) * 1.001,
 		"with the finest patch no wider than 2 degrees of view")
 ## The mesh, and the two properties a renderer needs: every triangle is on the sphere, and the winding is
 ## the same one the level meshes use — measured against the level meshes rather than reasoned about.
 func _test_the_mesh(h) -> void:
-	var chunks := SpacesimPatches.select(
+	var chunks := StoichonPatches.select(
 		EARTH_RADIUS + 5.0e4, Vector3.UP, EARTH_RADIUS, PIXEL_ANGLE, 2.0
 	)
-	# **Measured from the ground under the eye**, which is where the node's origin goes — see `SpacesimPatches.rebase`.
+	# **Measured from the ground under the eye**, which is where the node's origin goes — see `StoichonPatches.rebase`.
 	# The ground under the eye the walk was given, which is `Vector3.UP` here.
 	var origin := Vector3.UP * EARTH_RADIUS
-	var arrays := SpacesimPatches.arrays_of(chunks, EARTH_RADIUS, origin)
+	var arrays := StoichonPatches.arrays_of(chunks, EARTH_RADIUS, origin)
 	var points: PackedVector3Array = arrays[0]
-	var expected := SpacesimPatches.triangle_count(chunks)
+	var expected := StoichonPatches.triangle_count(chunks)
 	var indices: PackedInt32Array = arrays[1]
 	# **Shared vertices, indexed triangles** — Evert, 2026-10-28: *"all the triangles are connected together with
 	# shared vertices, there can never be a gap."* So the mesh carries one vertex per POINT and the index array is
@@ -306,7 +306,7 @@ func _test_the_mesh(h) -> void:
 	# **The surface carries no index array**: every triangle has its own three vertices, so an index would
 	# be the identity range — and building sixty thousand of those in GDScript is the cost chunking exists
 	# to remove. Asserted, because a renderer that changes it back would be re-adding that cost silently.
-	var mesh := SpacesimPatches.mesh_from(arrays)
+	var mesh := StoichonPatches.mesh_from(arrays)
 	var surface := mesh.surface_get_arrays(0)
 	h.check(surface[Mesh.ARRAY_INDEX] != null, "and the mesh IS indexed, which is what makes the sharing count")
 	# **The winding as an outward normal per triangle**, not a signed volume: the mesh is an open shell
@@ -316,7 +316,7 @@ func _test_the_mesh(h) -> void:
 	# triangle points at the centre — which is the opposite of the intuitive test, and the reason `_build`
 	# documents its single flip. Comparing signs with a known-good mesh cannot be argued with.
 	var patch_side := _winding_side(points, indices, origin)
-	var level: ArrayMesh = SpacesimIcosphere.mesh_at(1)
+	var level: ArrayMesh = StoichonIcosphere.mesh_at(1)
 	var level_points: PackedVector3Array = level.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
 	var level_indices: PackedInt32Array = level.surface_get_arrays(0)[Mesh.ARRAY_INDEX]
 	var level_side := _winding_side(level_points, level_indices)
@@ -328,7 +328,7 @@ func _test_the_mesh(h) -> void:
 	# ε, so a skirt is geometry on top of a problem the budget has already bounded.
 	h.check(indices.size() % 3 == 0,
 		"and no skirt geometry — three indices a triangle, nothing else (%d)" % indices.size())
-	var lines := SpacesimPatches.lines_mesh_from(SpacesimPatches.lines_of(chunks))
+	var lines := StoichonPatches.lines_mesh_from(StoichonPatches.lines_of(chunks))
 	h.check(lines.surface_get_primitive_type(0) == Mesh.PRIMITIVE_LINES,
 		"while the wireframe view is lines")
 	var line_arrays: Array = lines.surface_get_arrays(0)
@@ -345,13 +345,13 @@ func _test_the_mesh(h) -> void:
 ## **The tint is only paid for when it is asked for** — a regression guard: the colour array was built for every
 ## rebuild and never passed to `arrays_of` from the scene, so the setting could not have worked.
 func _test_the_tint_costs_nothing_until_asked(h) -> void:
-	var chunks := SpacesimPatches.select(
+	var chunks := StoichonPatches.select(
 		EARTH_RADIUS + 5.0e4, Vector3.UP, EARTH_RADIUS, PIXEL_ANGLE, 2.0
 	)
-	var plain := SpacesimPatches.arrays_of(chunks)
+	var plain := StoichonPatches.arrays_of(chunks)
 	h.check(plain.size() == 2,
 		"an untinted merge is vertices and indices, and no colour (%d arrays)" % plain.size())
-	var tinted := SpacesimPatches.arrays_of(chunks, 1.0, Vector3.ZERO, true)
+	var tinted := StoichonPatches.arrays_of(chunks, 1.0, Vector3.ZERO, true)
 	h.check(tinted.size() == 3 and (tinted[2] as PackedColorArray).size() == (tinted[0] as PackedVector3Array).size(),
 		"and a tinted one carries a colour per vertex (%d colours for %d vertices)"
 			% [(tinted[2] as PackedColorArray).size(), (tinted[0] as PackedVector3Array).size()])
@@ -365,28 +365,28 @@ func _test_the_tint_costs_nothing_until_asked(h) -> void:
 ## not a smoke test.
 func _test_the_lattice_merge_matches_a_rebuild(h) -> void:
 	var origin := Vector3.UP * EARTH_RADIUS
-	var lattice := SpacesimPatches.Lattice.new()
-	var chunks := SpacesimPatches.select(
+	var lattice := StoichonPatches.Lattice.new()
+	var chunks := StoichonPatches.select(
 		EARTH_RADIUS + 5.0e4, Vector3.UP, EARTH_RADIUS, PIXEL_ANGLE, 2.0
 	)
-	var first := SpacesimPatches.arrays_of(chunks, EARTH_RADIUS, origin, false, lattice)
+	var first := StoichonPatches.arrays_of(chunks, EARTH_RADIUS, origin, false, lattice)
 	h.check(_triangle_set(first) == _triangle_set(
-			SpacesimPatches.arrays_of(chunks, EARTH_RADIUS, origin)),
+			StoichonPatches.arrays_of(chunks, EARTH_RADIUS, origin)),
 		"a cold lattice merge draws exactly the triangles a rebuild does (%d triangles)"
 			% (_triangle_set(first).size()))
 
 	# **Then move the eye**, so the selection changes on both sides of the walk — added chunks and discarded ones — and
 	# the lattice has to stay truthful about which slots are which.
 	var moved := (Vector3.UP * (EARTH_RADIUS + 5.0e4) + Vector3.RIGHT * 60.0e3).normalized()
-	var next := SpacesimPatches.select(
+	var next := StoichonPatches.select(
 		EARTH_RADIUS + 5.0e4, moved, EARTH_RADIUS, PIXEL_ANGLE, 2.0
 	)
 	h.check(next.size() != chunks.size() or next != chunks,
 		"the moved selection really is a different one (%d against %d chunks)"
 			% [next.size(), chunks.size()])
-	var warm := SpacesimPatches.arrays_of(next, EARTH_RADIUS, moved * EARTH_RADIUS, false, lattice)
+	var warm := StoichonPatches.arrays_of(next, EARTH_RADIUS, moved * EARTH_RADIUS, false, lattice)
 	h.check(_triangle_set(warm) == _triangle_set(
-			SpacesimPatches.arrays_of(next, EARTH_RADIUS, moved * EARTH_RADIUS)),
+			StoichonPatches.arrays_of(next, EARTH_RADIUS, moved * EARTH_RADIUS)),
 		"and an incremental merge over a changed selection still matches a rebuild (%d triangles)"
 			% _triangle_set(warm).size())
 	# **The buffer keeps points whose chunks are gone**, which is the price of not rebuilding. Counted as slots
@@ -406,7 +406,7 @@ func _test_the_lattice_merge_matches_a_rebuild(h) -> void:
 	lattice.points = PackedVector3Array()
 	lattice.slot = {}
 	lattice.blocks = {}
-	var compacted := SpacesimPatches.arrays_of(next, EARTH_RADIUS, moved * EARTH_RADIUS, false, lattice)
+	var compacted := StoichonPatches.arrays_of(next, EARTH_RADIUS, moved * EARTH_RADIUS, false, lattice)
 	h.check(_triangle_set(compacted) == _triangle_set(warm),
 		"and compacting it changes no triangle it draws")
 
@@ -436,17 +436,17 @@ static func _triangle_set(arrays: Array) -> Dictionary:
 ## **A rebuild is cache lookups, not geometry** — the claim chunking exists to make, stated as counts
 ## rather than as a stopwatch, because a headless rig can say that without flaking.
 func _test_the_cache_makes_a_rebuild_cheap(h) -> void:
-	SpacesimPatches.clear_cache()
-	var chunks := SpacesimPatches.select(
+	StoichonPatches.clear_cache()
+	var chunks := StoichonPatches.select(
 		EARTH_RADIUS + 5.0e4, Vector3.UP, EARTH_RADIUS, PIXEL_ANGLE, 2.0
 	)
-	h.check(SpacesimPatches.cached_chunks() == 0, "the cache starts empty")
-	var first := SpacesimPatches.arrays_of(chunks)
-	var after_first := SpacesimPatches.cached_chunks()
+	h.check(StoichonPatches.cached_chunks() == 0, "the cache starts empty")
+	var first := StoichonPatches.arrays_of(chunks)
+	var after_first := StoichonPatches.cached_chunks()
 	h.check(after_first == chunks.size(),
 		"a first build fills it, one entry a chunk (%d chunks, %d entries)" % [chunks.size(), after_first])
-	var second := SpacesimPatches.arrays_of(chunks)
-	h.check(SpacesimPatches.cached_chunks() == after_first,
+	var second := StoichonPatches.arrays_of(chunks)
+	h.check(StoichonPatches.cached_chunks() == after_first,
 		"and a second identical build adds nothing — the geometry is built once")
 	h.check(second[0] == first[0] and second[1] == first[1],
 		"the arrays it returns are the cached ones, byte for byte")
@@ -464,7 +464,7 @@ func _test_the_drawn_triangle_is_inside_the_law(h) -> void:
 	var altitude := distance - EARTH_RADIUS
 	var worst := 0.0
 	var drawn := 0
-	for leaf in SpacesimPatches.triangles_of(SpacesimPatches.select(
+	for leaf in StoichonPatches.triangles_of(StoichonPatches.select(
 		distance, Vector3.UP, EARTH_RADIUS, PIXEL_ANGLE, epsilon
 	)):
 		var a: Vector3 = leaf[0]
@@ -496,19 +496,19 @@ func _test_the_walk_is_gated(h) -> void:
 	var distance := EARTH_RADIUS + 2.0e5
 	var epsilon := 2.0
 	var up := Vector3.UP
-	h.check(SpacesimPatches.walk_is_due(
+	h.check(StoichonPatches.walk_is_due(
 		0.0, Vector3.ZERO, distance, up, PIXEL_ANGLE, epsilon, EARTH_RADIUS, -1.0),
 		"a body that has never been walked is always due")
-	h.check(not SpacesimPatches.walk_is_due(
+	h.check(not StoichonPatches.walk_is_due(
 		distance, up, distance, up, PIXEL_ANGLE, epsilon, EARTH_RADIUS, epsilon),
 		"and an unmoved eye asks for nothing")
 	# **At a distance where the distance *is* the altitude** — far out, `d - R ≈ d` — so this is really a
 	# test of the dead band. Near the ground the two quantities part company, and that is the case below.
 	var far_out := EARTH_RADIUS * 30.0
-	h.check(not SpacesimPatches.walk_is_due(
+	h.check(not StoichonPatches.walk_is_due(
 		far_out, up, far_out * 1.005, up, PIXEL_ANGLE, epsilon, EARTH_RADIUS, epsilon),
 		"a half-percent change is inside the dead band")
-	h.check(SpacesimPatches.walk_is_due(
+	h.check(StoichonPatches.walk_is_due(
 		distance, up, distance * 1.02, up, PIXEL_ANGLE, epsilon, EARTH_RADIUS, epsilon),
 		"a 2% one is not")
 	# **The descent, and it is the trap this gate exists to not repeat.** From 60 km to 300 m is 0.94% of
@@ -519,22 +519,22 @@ func _test_the_walk_is_gated(h) -> void:
 	# the scenario has to begin under that or the distance term answers and the altitude term is never exercised.
 	var high := EARTH_RADIUS + 6.0e4
 	var low := EARTH_RADIUS + 300.0
-	h.check(absf(log(high / low)) < SpacesimPatches.LOG_GATE,
+	h.check(absf(log(high / low)) < StoichonPatches.LOG_GATE,
 		"the distance from 60 km to 300 m is inside the dead band, so a distance gate sees nothing")
-	h.check(SpacesimPatches.walk_is_due(
+	h.check(StoichonPatches.walk_is_due(
 		high, up, low, up, PIXEL_ANGLE, epsilon, EARTH_RADIUS, epsilon),
 		"and the walk is due anyway, because the altitude has changed by orders of magnitude")
-	h.check(SpacesimPatches.walk_is_due(
+	h.check(StoichonPatches.walk_is_due(
 		distance, up, distance, up, PIXEL_ANGLE, epsilon * 2.0, EARTH_RADIUS, epsilon),
 		"and a new error budget is a new answer")
-	var finest := SpacesimPatches.finest_edge_angle(distance, PIXEL_ANGLE, epsilon, EARTH_RADIUS)
+	var finest := StoichonPatches.finest_edge_angle(distance, PIXEL_ANGLE, epsilon, EARTH_RADIUS)
 	h.check(finest > 0.0 and finest < 0.1,
 		"the finest patch under the eye is %.4f rad at 200 km" % finest)
-	h.check(not SpacesimPatches.walk_is_due(
+	h.check(not StoichonPatches.walk_is_due(
 		distance, up, distance, up.rotated(Vector3.RIGHT, finest * 0.1),
 		PIXEL_ANGLE, epsilon, EARTH_RADIUS, epsilon),
 		"a swing well under half a patch cannot change the chunk under the eye")
-	h.check(SpacesimPatches.walk_is_due(
+	h.check(StoichonPatches.walk_is_due(
 		distance, up, distance, up.rotated(Vector3.RIGHT, finest * 2.0),
 		PIXEL_ANGLE, epsilon, EARTH_RADIUS, epsilon),
 		"a swing of two patches across the eye does")
@@ -582,13 +582,13 @@ func _test_the_limb_is_not_subdivided_as_though_it_faced_the_eye(h) -> void:
 	# however flat `centre · up` looks.
 	for altitude: float in [2.0e4, 1.0e7]:
 		var distance := EARTH_RADIUS + altitude
-		var chunks := SpacesimPatches.select(distance, Vector3.UP, EARTH_RADIUS, PIXEL_ANGLE, 2.0)
+		var chunks := StoichonPatches.select(distance, Vector3.UP, EARTH_RADIUS, PIXEL_ANGLE, 2.0)
 		var camera := Vector3.UP * distance
 		var altitude_floor := distance - EARTH_RADIUS
 		var beyond := 0
 		var shallow := 0
 		for chunk in chunks:
-			var arrays := SpacesimPatches.chunk_arrays(chunk)
+			var arrays := StoichonPatches.chunk_arrays(chunk)
 			var points: PackedVector3Array = arrays[0]
 			var indices: PackedInt32Array = arrays[1]
 			if points.is_empty() or indices.is_empty():
@@ -621,7 +621,7 @@ func _test_the_limb_is_not_subdivided_as_though_it_faced_the_eye(h) -> void:
 			# **The unprojected allowance for a TRIANGLE**, which is the unloosened limit: the walk loosens by
 			# `CHUNK_TRIANGLES` because a chunk carries `4^s` finer triangles, so a chunk edge against the
 			# loosened limit is the same statement as a triangle edge against the limit itself.
-			var unprojected := SpacesimPatches.FACET_ANGLE * SpacesimPatches.FACET_ANGLE \
+			var unprojected := StoichonPatches.FACET_ANGLE * StoichonPatches.FACET_ANGLE \
 				* (to_patch / EARTH_RADIUS) * (to_patch / EARTH_RADIUS)
 			if edge_squared > unprojected * 1.5:
 				beyond += 1
@@ -643,14 +643,14 @@ func _test_no_t_junctions_survive(h) -> void:
 	# A real walk: the seam only exists where the subdivision changes depth, which a synthetic pair of chunks would
 	# have to be invented for. Two altitudes, because the mismatch is a function of where the eye is.
 	var radius := 6.371e6
-	var pixel := SpacesimLod.pixel_angle(70.0, 1080.0)
+	var pixel := StoichonLod.pixel_angle(70.0, 1080.0)
 	for altitude in [1.0e3, 5.0e4]:
 		var distance: float = radius + altitude
-		var chunks: Array = SpacesimPatches.select(distance, Vector3.UP, radius, pixel, 0.5)
+		var chunks: Array = StoichonPatches.select(distance, Vector3.UP, radius, pixel, 0.5)
 		h.check(not chunks.is_empty(), "the walk answers at %.0f m altitude (%d chunks)" % [altitude, chunks.size()])
 		if chunks.is_empty():
 			continue
-		var array := SpacesimPatches.arrays_of(chunks, 1.0, Vector3.ZERO)
+		var array := StoichonPatches.arrays_of(chunks, 1.0, Vector3.ZERO)
 		var points: PackedVector3Array = array[0]
 		var indices: PackedInt32Array = array[1]
 		# **The same edge census `stitch` makes**, so the test and the fix cannot disagree about what an edge is.

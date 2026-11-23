@@ -2,15 +2,15 @@ extends RefCounted
 ## The action registry and the binding text format: what a player can do, and how a way of doing it is
 ## written down. No runtime, no store, no consumers — this suite is about the two declarations.
 
-const Actions := preload("res://addons/spacesim/input/actions.gd")
-const Binding := preload("res://addons/spacesim/input/binding.gd")
-const Store := preload("res://addons/spacesim/input/bindings_store.gd")
-const InputMapScript := preload("res://addons/spacesim/input/input_map.gd")
-const Profile := preload("res://addons/spacesim/input/axis_profile.gd")
-const Devices := preload("res://addons/spacesim/input/devices.gd")
-const Controls := preload("res://addons/spacesim/input/controls.gd")
+const Actions := preload("res://addons/stoichon/input/actions.gd")
+const Binding := preload("res://addons/stoichon/input/binding.gd")
+const Store := preload("res://addons/stoichon/input/bindings_store.gd")
+const InputMapScript := preload("res://addons/stoichon/input/input_map.gd")
+const Profile := preload("res://addons/stoichon/input/axis_profile.gd")
+const Devices := preload("res://addons/stoichon/input/devices.gd")
+const Controls := preload("res://addons/stoichon/input/controls.gd")
 
-const TEST_DIR := "/tmp/spacesim-input-test"
+const TEST_DIR := "/tmp/stoichon-input-test"
 
 
 func run(h, _root: Node) -> void:
@@ -165,7 +165,7 @@ func _test_what_is_not_a_binding(h) -> void:
 	h.check(accepted.is_empty(), "nonsense is not a binding%s" % _detail(accepted))
 
 	# **A joypad form names a control Godot knows**, so an unknown name is not a binding — and the names
-	# come from `SpacesimDevices`, the only place the engine's own vocabulary exists.
+	# come from `StoichonDevices`, the only place the engine's own vocabulary exists.
 	var pad := Binding.parse("Joy:PS4 Controller/Button:A")
 	h.check(
 		String(pad.get("device", "")) == "joypad" and String(pad.get("pad", "")) == "PS4 Controller",
@@ -294,7 +294,7 @@ func _test_the_legacy_import(h) -> void:
 	legacy.set_value("bindings", "bodies_toggle", "W")
 	legacy.set_value("bindings", "cycle_target", "Nonsense")
 	legacy.set_value("video", "mode", "windowed")
-	SpacesimXdg.ensure_directory(TEST_DIR)
+	StoichonXdg.ensure_directory(TEST_DIR)
 	legacy.save(settings_path)
 
 	var store := Store.new()

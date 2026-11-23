@@ -6,11 +6,11 @@ extends SceneTree
 ##
 ##     godot-double-mono --headless --path . --script res://tests/probe_add_row.gd
 
-const SettingsPanel := preload("res://addons/spacesim/settings/settings_panel.gd")
-const Settings := preload("res://addons/spacesim/settings/settings.gd")
-const Store := preload("res://addons/spacesim/input/bindings_store.gd")
+const SettingsPanel := preload("res://addons/stoichon/settings/settings_panel.gd")
+const Settings := preload("res://addons/stoichon/settings/settings.gd")
+const Store := preload("res://addons/stoichon/input/bindings_store.gd")
 
-var _panel: SpacesimSettingsPanel
+var _panel: StoichonSettingsPanel
 var _frame := 0
 
 

@@ -15,13 +15,13 @@ func run(h, _root: Node) -> void:
 
 
 func _test_plan(h) -> void:
-	var earth := SpacesimSurfaceField.plan("planet:earth", 6.371e6)
-	var again := SpacesimSurfaceField.plan("planet:earth", 6.371e6)
+	var earth := StoichonSurfaceField.plan("planet:earth", 6.371e6)
+	var again := StoichonSurfaceField.plan("planet:earth", 6.371e6)
 	h.check(earth.seed == again.seed and earth.plate_phase == again.plate_phase,
 		"a body's plan is the same twice (%d)" % earth.seed)
 
 	# **The address, not a counter**: two bodies in one system must not be one continent repeated.
-	var luna := SpacesimSurfaceField.plan("moon:luna", 1.7374e6)
+	var luna := StoichonSurfaceField.plan("moon:luna", 1.7374e6)
 	h.check(earth.seed != luna.seed, "and another body gets another seed")
 	h.check(absf(earth.plate_phase - luna.plate_phase) > 1.0e-6,
 		"with its plate lattice turned elsewhere (%.3f against %.3f)" % [earth.plate_phase, luna.plate_phase])
@@ -30,7 +30,7 @@ func _test_plan(h) -> void:
 	# crust populations. It used to be 0.14 % of the radius because the field's unit was a half-range about a mean; with
 	# the whole range now spanned by real crust levels, one unit of field covers the same 8.9 km of land that it used to
 	# cover in 1.55. What matters is not the constant but the product: the land's measured span times this.
-	h.check_near(earth.amplitude, 6.371e6 * SpacesimSurfaceField.RELIEF_FRACTION,
+	h.check_near(earth.amplitude, 6.371e6 * StoichonSurfaceField.RELIEF_FRACTION,
 		"Earth's scale is %.0f m per field unit, 0.10 %% of its radius" % earth.amplitude, 1.0)
 	h.check(earth.amplitude > 5000.0 and earth.amplitude < 8000.0,
 		"which puts nine kilometres of land inside the field's own span")
@@ -75,8 +75,8 @@ func _test_plan(h) -> void:
 	# headless can compile a shader, so what is asserted here is the ASSEMBLY: the shared block is placed before either
 	# kernel, both kernels use it, and each carries its own bindings and nothing of the other's. The behaviour — that a
 	# heights dispatch agrees with a baked texel — is `tests/test_surface_gpu.gd`'s, where a device exists.
-	var bake_source := SpacesimSurfaceField.source()
-	var heights_source := SpacesimSurfaceField.source_for_heights()
+	var bake_source := StoichonSurfaceField.source()
+	var heights_source := StoichonSurfaceField.source_for_heights()
 	h.check(
 		bake_source.begins_with("#version 450")
 			and heights_source.begins_with("#version 450"),
@@ -123,7 +123,7 @@ func _test_plan(h) -> void:
 	var amplitude := 8919.0
 	var heights := PackedFloat32Array([sea, sea, -1.0, 1.0])
 	var before := points.duplicate()
-	SpacesimSystemScene.offset_vertices(points, directions, heights, sea, amplitude)
+	StoichonSystemScene.offset_vertices(points, directions, heights, sea, amplitude)
 	# **A centimetre, not a micron**: the heights are a `PackedFloat32Array` — the kernel writes floats — so 0.825
 	# arrives as 0.82499998 and an 8.9 km amplitude turns that into 1e-4 m. The law is exact; the input is float32.
 	h.check_near(points[0].length(), 6.371e6,
@@ -152,7 +152,7 @@ func _test_plan(h) -> void:
 	var barren := before.duplicate()
 	var floor := -1.0
 	var field_heights := PackedFloat32Array([floor, floor, -0.5, 0.5])
-	SpacesimSystemScene.offset_vertices(barren, directions, field_heights, floor, amplitude)
+	StoichonSystemScene.offset_vertices(barren, directions, field_heights, floor, amplitude)
 	h.check_near(barren[0].length(), 6.371e6,
 		"on a barren body the lowest ground sits ON the datum, unclamped", 0.01)
 	h.check_near(barren[2].length(), 6.371e6 + 0.5 * amplitude,

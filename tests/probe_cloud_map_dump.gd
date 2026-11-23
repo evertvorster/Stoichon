@@ -15,26 +15,26 @@ const OUT := "/tmp"
 
 
 func _ready() -> void:
-	var sol: SpacesimSolarSystem = load(SOL_PATH)
-	var scene := SpacesimSystemScene.from_content(sol)
+	var sol: StoichonSolarSystem = load(SOL_PATH)
+	var scene := StoichonSystemScene.from_content(sol)
 	scene.build(self)
-	var materials := SpacesimMaterialTable.engine_table()
-	var luminosity := SpacesimStarModel.luminosity(scene.star().content)
+	var materials := StoichonMaterialTable.engine_table()
+	var luminosity := StoichonStarModel.luminosity(scene.star().content)
 	for id in BODIES:
 		var body := scene.body_by_id(id)
 		if body == null:
 			continue
-		var morphology := SpacesimCloudModel.morphology(
+		var morphology := StoichonCloudModel.morphology(
 			body.content, materials, luminosity, body.position.distance_to(scene.star().position)
 		)
-		var image := SpacesimCloudField.bake(
-			SpacesimCloudField.seed_for(id, 0), morphology, WIDTH, WIDTH / 2
+		var image := StoichonCloudField.bake(
+			StoichonCloudField.seed_for(id, 0), morphology, WIDTH, WIDTH / 2
 		)
 		var path := "%s/%s.png" % [OUT, id.replace(":", "_")]
 		image.save_png(path)
 		print("%s -> %s (%dx%d)" % [id, path, image.get_width(), image.get_height()])
 		_seams(image, id)
-	# No cache and no cache-close here: nothing in this probe bakes through `SpacesimCloudMaps`, so there is
+	# No cache and no cache-close here: nothing in this probe bakes through `StoichonCloudMaps`, so there is
 	# no task in flight and no `RenderingDevice` to free. `checkpoint` is reached either way.
 	scene.container.free()
 	get_tree().quit()

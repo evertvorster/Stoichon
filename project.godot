@@ -10,18 +10,18 @@ config_version=5
 
 [application]
 
-config/name="SpaceSim"
+config/name="Stoichon"
 run/main_scene="res://game/main.tscn"
 config/features=PackedStringArray("4.7", "Double Precision", "Forward Plus")
 
 [autoload]
 
-SpacesimSettings="*res://addons/spacesim/settings/settings.gd"
-SpacesimDisplay="*res://addons/spacesim/settings/display.gd"
+StoichonSettings="*res://addons/stoichon/settings/settings.gd"
+StoichonDisplay="*res://addons/stoichon/settings/display.gd"
 
 [dotnet]
 
-project/assembly_name="SpaceSim"
+project/assembly_name="Stoichon"
 
 [physics]
 

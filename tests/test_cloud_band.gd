@@ -25,18 +25,18 @@ const SOL_PATH := "res://systems/sol.tres"
 
 func run(h, root: Node) -> void:
 	print("  cloud band")
-	var sol: SpacesimSolarSystem = load(SOL_PATH)
+	var sol: StoichonSolarSystem = load(SOL_PATH)
 	h.check(sol != null, "Sol loads")
 	if sol == null:
 		return
-	var scene := SpacesimSystemScene.from_content(sol)
+	var scene := StoichonSystemScene.from_content(sol)
 	h.check(scene != null, "a scene wraps it")
 	if scene == null:
 		return
 	scene.build(root)
 
-	var materials := SpacesimMaterialTable.engine_table()
-	var luminosity := SpacesimStarModel.luminosity(scene.star().content)
+	var materials := StoichonMaterialTable.engine_table()
+	var luminosity := StoichonStarModel.luminosity(scene.star().content)
 
 	_test_column_top(h)
 	_test_extinction(h)
@@ -56,19 +56,19 @@ func run(h, root: Node) -> void:
 ## its chord falls to zero by arithmetic. "No cloud here" is then a gap rather than a special case, and the
 ## lateral edge is a taper instead of a cut.
 func _test_column_top(h) -> void:
-	h.check_near(SpacesimCloudBand.column_top(1.0, 0.4, 2000.0), 2000.0,
+	h.check_near(StoichonCloudBand.column_top(1.0, 0.4, 2000.0), 2000.0,
 		"an opaque column is the layer's full depth", 1.0e-9)
-	h.check_near(SpacesimCloudBand.column_top(0.4, 0.4, 2000.0), 0.0,
+	h.check_near(StoichonCloudBand.column_top(0.4, 0.4, 2000.0), 0.0,
 		"and a column at the threshold has no cloud in it", 1.0e-9)
-	h.check_near(SpacesimCloudBand.column_top(0.2, 0.4, 2000.0), 0.0,
+	h.check_near(StoichonCloudBand.column_top(0.2, 0.4, 2000.0), 0.0,
 		"nor does one below it", 1.0e-9)
-	h.check_near(SpacesimCloudBand.column_top(0.7, 0.4, 2000.0), 1000.0,
+	h.check_near(StoichonCloudBand.column_top(0.7, 0.4, 2000.0), 1000.0,
 		"half way through the range is half the depth", 1.0e-9)
 	# The degenerate inputs a shader will eventually hand it: no depth, or a threshold of 1 where the
 	# denominator vanishes. A division by zero here is an infinity that becomes a black pixel.
-	h.check_near(SpacesimCloudBand.column_top(1.0, 0.4, 0.0), 0.0,
+	h.check_near(StoichonCloudBand.column_top(1.0, 0.4, 0.0), 0.0,
 		"a layer with no derived thickness has no column", 1.0e-9)
-	h.check_near(SpacesimCloudBand.column_top(1.0, 1.0, 2000.0), 0.0,
+	h.check_near(StoichonCloudBand.column_top(1.0, 1.0, 2000.0), 0.0,
 		"and a threshold of 1 does not divide by zero", 1.0e-9)
 
 
@@ -78,20 +78,20 @@ func _test_column_top(h) -> void:
 ## consequence is checked in `_test_the_chord`.
 func _test_extinction(h) -> void:
 	var air := 8400.0
-	h.check_near(SpacesimCloudBand.extinction(0.0, air), 1.0 / 4200.0,
+	h.check_near(StoichonCloudBand.extinction(0.0, air), 1.0 / 4200.0,
 		"an unstated optical depth gives one e-fold per half scale height", 1.0e-12)
-	h.check_near(SpacesimCloudBand.extinction(4.0, air), 4.0 / 4200.0,
+	h.check_near(StoichonCloudBand.extinction(4.0, air), 4.0 / 4200.0,
 		"and a stated one is that tau over half a scale height", 1.0e-12)
 	# The factor of two in the design: a column one full scale height deep is 2*tau, not tau.
-	h.check_near(SpacesimCloudBand.extinction(4.0, air) * air, 8.0,
+	h.check_near(StoichonCloudBand.extinction(4.0, air) * air, 8.0,
 		"so a full-scale-height column of it comes to 2*tau", 1.0e-12)
-	h.check_near(SpacesimCloudBand.extinction(4.0, 0.0), 0.0,
+	h.check_near(StoichonCloudBand.extinction(4.0, 0.0), 0.0,
 		"a body with no air has a clear deck, not an infinite one", 1.0e-12)
 
 
 ## **The geometry, and the ratio that forbids a single step budget.** Earth's own derived numbers: a 1.6 km
 ## condensate deck on a 6,371 km body.
-func _test_the_chord(h, scene: SpacesimSystemScene) -> void:
+func _test_the_chord(h, scene: StoichonSystemScene) -> void:
 	var earth := scene.body_by_id("planet:earth")
 	# The deck the doc above describes: the 1.6 km condensate deck, which is now the LOWER of Earth's two.
 	var deck := _deepest_deck(h, earth, "Earth")
@@ -103,10 +103,10 @@ func _test_the_chord(h, scene: SpacesimSystemScene) -> void:
 	print("    (Earth's deck: %.0f m base, %.0f m deep, %.0f m radius)"
 		% [deck.height, deck.thickness, earth.radius])
 
-	h.check_near(SpacesimCloudBand.chord(outer, base, 0.0), depth,
+	h.check_near(StoichonCloudBand.chord(outer, base, 0.0), depth,
 		"straight down, the chord is exactly the slab's thickness", 1.0e-3)
 
-	var limb := SpacesimCloudBand.chord(outer, base, base)
+	var limb := StoichonCloudBand.chord(outer, base, base)
 	var expected_limb := 2.0 * sqrt(outer * outer - base * base)
 	h.check_near(limb, expected_limb,
 		"seen edge-on, it is 2*sqrt(outer^2 - base^2)  (%.1f km)" % (limb / 1000.0), 1.0e-3)
@@ -122,11 +122,11 @@ func _test_the_chord(h, scene: SpacesimSystemScene) -> void:
 	# passes through the band on both sides; a ray that reaches the ground is stopped by it after one crossing.
 	# So the chord halves — not doubles — as the closest approach passes inside the base, and the grazing value
 	# is the maximum the chord ever reaches.
-	var grazing := SpacesimCloudBand.chord(outer, base, base)
-	h.check(SpacesimCloudBand.chord(outer, base, base - 1.0) < grazing * 0.51,
+	var grazing := StoichonCloudBand.chord(outer, base, base)
+	h.check(StoichonCloudBand.chord(outer, base, base - 1.0) < grazing * 0.51,
 		"a ray that reaches the ground crosses the band once, so it sees half the grazing chord")
 
-	h.check_near(SpacesimCloudBand.chord(outer, base, outer * 1.001), 0.0,
+	h.check_near(StoichonCloudBand.chord(outer, base, outer * 1.001), 0.0,
 		"a ray that misses the band has no chord", 1.0e-9)
 
 	# Swept properties rather than single values, because a sign or an argument-order slip survives any one
@@ -134,7 +134,7 @@ func _test_the_chord(h, scene: SpacesimSystemScene) -> void:
 	var rising_to_the_limb := true
 	var before := 0.0
 	for i in 21:
-		var value := SpacesimCloudBand.chord(outer, base, base * float(i) / 20.0)
+		var value := StoichonCloudBand.chord(outer, base, base * float(i) / 20.0)
 		if value < before - 1.0e-3:
 			rising_to_the_limb = false
 		before = value
@@ -144,13 +144,13 @@ func _test_the_chord(h, scene: SpacesimSystemScene) -> void:
 	var falling_past_the_limb := true
 	before = grazing
 	for i in 21:
-		var value := SpacesimCloudBand.chord(outer, base, base + (outer - base) * float(i + 1) / 21.0)
+		var value := StoichonCloudBand.chord(outer, base, base + (outer - base) * float(i + 1) / 21.0)
 		if value > before + 1.0e-3:
 			falling_past_the_limb = false
 		before = value
 	h.check(falling_past_the_limb, "and falls to nothing as the ray moves out past the top of the band")
 
-	h.check_near(SpacesimCloudBand.chord(base, base, 0.0), 0.0,
+	h.check_near(StoichonCloudBand.chord(base, base, 0.0), 0.0,
 		"a band of zero thickness has no chord at all", 1.0e-9)
 
 
@@ -163,28 +163,28 @@ func _test_the_spans(h) -> void:
 	var top := base + 1604.0
 
 	# Below the base, looking down: nothing. This is the case that put haze on the ground.
-	var down := SpacesimCloudBand.spans(planet + 500.0, -1.0, top, base)
+	var down := StoichonCloudBand.spans(planet + 500.0, -1.0, top, base)
 	h.check_near(_ahead(down, planet + 500.0), 0.0,
 		"an eye below the base looking down meets no cloud at all", 1.0e-6)
 
 	# Below the base, looking up: the whole slab, from the base overhead to its top.
-	var up := SpacesimCloudBand.spans(planet + 500.0, 1.0, top, base)
+	var up := StoichonCloudBand.spans(planet + 500.0, 1.0, top, base)
 	h.check_near(_ahead(up, 1.0e12), 1604.0,
 		"and looking up it meets the whole slab (%.0f m)" % _ahead(up, 1.0e12), 1.0e-3)
 
 	# Inside the slab, looking down: only the part below the eye — which is why the ground reads through.
-	h.check_near(_ahead(SpacesimCloudBand.spans(planet + 2000.0, -1.0, top, base), planet + 2000.0), 564.0,
+	h.check_near(_ahead(StoichonCloudBand.spans(planet + 2000.0, -1.0, top, base), planet + 2000.0), 564.0,
 		"inside the slab looking down, only the column below the eye", 1.0e-3)
-	h.check_near(_ahead(SpacesimCloudBand.spans(planet + 2000.0, 1.0, top, base), 1.0e12), 1040.0,
+	h.check_near(_ahead(StoichonCloudBand.spans(planet + 2000.0, 1.0, top, base), 1.0e12), 1040.0,
 		"and looking up, only the column above it", 1.0e-3)
 
 	# Above the top: the whole slab, and the far side of it is beyond the planet.
-	h.check_near(_ahead(SpacesimCloudBand.spans(planet + 10000.0, -1.0, top, base), planet + 10000.0), 1604.0,
+	h.check_near(_ahead(StoichonCloudBand.spans(planet + 10000.0, -1.0, top, base), planet + 10000.0), 1604.0,
 		"from above, the whole slab and no more", 1.0e-3)
 
 	# `along = 0` is a ray perpendicular to the position vector, so its closest approach IS the eye's radius —
 	# twice the band's, and the ray passes over it entirely.
-	h.check_near(_ahead(SpacesimCloudBand.spans(top * 2.0, 0.0, top, base), 1.0e12), 0.0,
+	h.check_near(_ahead(StoichonCloudBand.spans(top * 2.0, 0.0, top, base), 1.0e12), 0.0,
 		"and a ray that passes over the band meets nothing", 1.0e-6)
 
 
@@ -198,15 +198,15 @@ func _ahead(spans: PackedFloat32Array, end: float) -> float:
 
 ## The count is a consequence, not a choice: a sample may not advance more than a sixth of an e-fold.
 func _test_the_samples(h) -> void:
-	h.check(SpacesimCloudBand.samples(0.0, 0.238e-3) == 1,
+	h.check(StoichonCloudBand.samples(0.0, 0.238e-3) == 1,
 		"a ray that misses the band asks for one sample, not zero")
-	h.check(SpacesimCloudBand.samples(5000.0, 0.0) == 1,
+	h.check(StoichonCloudBand.samples(5000.0, 0.0) == 1,
 		"and a clear column asks for one as well")
 
 	var rising_with_chord := true
 	var previous := -1
 	for i in 13:
-		var count := SpacesimCloudBand.samples(1000.0 * float(i + 1), 0.238e-3)
+		var count := StoichonCloudBand.samples(1000.0 * float(i + 1), 0.238e-3)
 		if count < previous:
 			rising_with_chord = false
 		previous = count
@@ -215,7 +215,7 @@ func _test_the_samples(h) -> void:
 	var rising_with_extinction := true
 	previous = -1
 	for i in 13:
-		var count := SpacesimCloudBand.samples(300000.0, 0.05e-3 * float(i + 1))
+		var count := StoichonCloudBand.samples(300000.0, 0.05e-3 * float(i + 1))
 		if count < previous:
 			rising_with_extinction = false
 		previous = count
@@ -223,14 +223,14 @@ func _test_the_samples(h) -> void:
 
 	# One exact case, so the formula is pinned rather than merely monotone: 1 km at 0.5/km is tau 0.5, which
 	# is three samples at six per e-fold.
-	h.check(SpacesimCloudBand.samples(1000.0, 0.5e-3) == 3,
+	h.check(StoichonCloudBand.samples(1000.0, 0.5e-3) == 3,
 		"a chord of one optical depth less a bit comes to three samples")
 
 
 ## **A cloud's two faces are complements** (`Cloud Decks Plan` §D6). If this fails, one texture cannot serve
 ## both faces and the underside needs a second source it does not have.
 func _test_the_two_faces(h) -> void:
-	var faces := SpacesimCloudBand.two_flux(0.0)
+	var faces := StoichonCloudBand.two_flux(0.0)
 	h.check_near(faces.x, 0.0, "a slab of no depth reflects nothing", 1.0e-9)
 	h.check_near(faces.y, 1.0, "and transmits everything, so its base is the sky", 1.0e-9)
 
@@ -241,7 +241,7 @@ func _test_the_two_faces(h) -> void:
 	var previous_r := -1.0
 	for i in 40:
 		var tau := 0.05 * float(i + 1)
-		var pair := SpacesimCloudBand.two_flux(tau)
+		var pair := StoichonCloudBand.two_flux(tau)
 		if absf(pair.x + pair.y - 1.0) > 1.0e-9:
 			sums_hold = false
 		if pair.y > previous_t:
@@ -255,17 +255,17 @@ func _test_the_two_faces(h) -> void:
 	h.check(top_rises, "while the top brightens — the two faces move in opposite directions")
 
 	# The failure this law exists to replace: the beam. It must be strictly darker than the diffuse base.
-	h.check(SpacesimCloudBand.two_flux(3.0).y > exp(-3.0),
+	h.check(StoichonCloudBand.two_flux(3.0).y > exp(-3.0),
 		"and the diffuse base is brighter than a beam of the same depth would leave")
 
 
 ## **The light arriving from above**, which is derived rather than authored: the colour has to come out of the
 ## Rayleigh ratio, and the lobe has to point at the star.
-func _test_the_skylight(h, scene: SpacesimSystemScene) -> void:
-	h.check_near(SpacesimCloudBand.henyey_greenstein(0.0, 0.0), 1.0 / (4.0 * PI),
+func _test_the_skylight(h, scene: StoichonSystemScene) -> void:
+	h.check_near(StoichonCloudBand.henyey_greenstein(0.0, 0.0), 1.0 / (4.0 * PI),
 		"an isotropic lobe is 1/4pi", 1.0e-12)
-	var forward := SpacesimCloudBand.henyey_greenstein(1.0, 0.8)
-	var backward := SpacesimCloudBand.henyey_greenstein(-1.0, 0.8)
+	var forward := StoichonCloudBand.henyey_greenstein(1.0, 0.8)
+	var backward := StoichonCloudBand.henyey_greenstein(-1.0, 0.8)
 	h.check(forward > backward * 10.0,
 		"and a forward lobe at g=0.8 is far brighter looking THROUGH the slab at the star (%.3f against %.3f)"
 			% [forward, backward])
@@ -285,18 +285,18 @@ func _test_the_skylight(h, scene: SpacesimSystemScene) -> void:
 			% [rayleigh_tau.z, rayleigh_tau.x])
 
 	# The colour is not chosen: away from the star the sky is blue, and the Mie term washes it toward white.
-	var sky_only := SpacesimCloudBand.sky_radiance(-0.5, rayleigh_tau, 0.0, intensity, anisotropy)
-	var with_mie := SpacesimCloudBand.sky_radiance(-0.5, rayleigh_tau, mie_tau, intensity, anisotropy)
+	var sky_only := StoichonCloudBand.sky_radiance(-0.5, rayleigh_tau, 0.0, intensity, anisotropy)
+	var with_mie := StoichonCloudBand.sky_radiance(-0.5, rayleigh_tau, mie_tau, intensity, anisotropy)
 	h.check(sky_only.z > sky_only.x * 2.0, "so the skylight is blue with no aerosol in it")
 	h.check(with_mie.z / maxf(with_mie.x, 1.0e-9) < sky_only.z / maxf(sky_only.x, 1.0e-9),
 		"and adding the aerosol term washes it toward white, which is what a cloud base transmits")
-	var sunward := SpacesimCloudBand.sky_radiance(1.0, rayleigh_tau, mie_tau, intensity, anisotropy)
-	var away := SpacesimCloudBand.sky_radiance(-1.0, rayleigh_tau, mie_tau, intensity, anisotropy)
+	var sunward := StoichonCloudBand.sky_radiance(1.0, rayleigh_tau, mie_tau, intensity, anisotropy)
+	var away := StoichonCloudBand.sky_radiance(-1.0, rayleigh_tau, mie_tau, intensity, anisotropy)
 	h.check(_luminance(sunward) > _luminance(away) * 2.0,
 		"with far more of it toward the star than away from it")
 
 	# And the base a full column transmits is darker than the sky it transmits — the whole point of §D6.
-	var faces := SpacesimCloudBand.two_flux(rayleigh_tau.z * 0.0 + 1.5)
+	var faces := StoichonCloudBand.two_flux(rayleigh_tau.z * 0.0 + 1.5)
 	h.check(faces.y < 0.5, "a thick base transmits less than half the light arriving above it")
 
 
@@ -307,18 +307,18 @@ func _luminance(radiance: Vector3) -> float:
 
 ## The ceiling that makes the limb affordable: whatever the chord, the march stops.
 func _test_the_bound(h) -> void:
-	var derived := ceili(log(1.0 / SpacesimCloudBand.OPACITY_BOUND) / SpacesimCloudBand.TAU_PER_STEP)
-	h.check(SpacesimCloudBand.stop_steps() == derived,
+	var derived := ceili(log(1.0 / StoichonCloudBand.OPACITY_BOUND) / StoichonCloudBand.TAU_PER_STEP)
+	h.check(StoichonCloudBand.stop_steps() == derived,
 		"the stop is derived from the bound and the step: %d samples" % derived)
-	h.check(SpacesimCloudBand.stop_steps() == 28,
+	h.check(StoichonCloudBand.stop_steps() == 28,
 		"and lands on the 28 the design quotes, rather than being that number")
-	h.check(SpacesimCloudBand.TAU_PER_STEP * float(SpacesimCloudBand.stop_steps()) >= log(1.0 / SpacesimCloudBand.OPACITY_BOUND),
+	h.check(StoichonCloudBand.TAU_PER_STEP * float(StoichonCloudBand.stop_steps()) >= log(1.0 / StoichonCloudBand.OPACITY_BOUND),
 		"the steps reach the opacity bound rather than stopping short of it")
 
 
 ## **The test that would have caught the lid.** Earth's limb is tens of optical depths, so the naive
 ## exponential is astronomically small and the picture it produces is finished in the first sample.
-func _test_the_march(h, scene: SpacesimSystemScene, materials, luminosity) -> void:
+func _test_the_march(h, scene: StoichonSystemScene, materials, luminosity) -> void:
 	var earth := scene.body_by_id("planet:earth")
 	# **The deck that actually IS optically deep**, which since 2026-11-03 is not the first in the stack: Earth
 	# now draws a thin ice sheet at 7.7 km above its water deck, and this test's premise — that the limb is tens
@@ -330,39 +330,39 @@ func _test_the_march(h, scene: SpacesimSystemScene, materials, luminosity) -> vo
 	var scale_height := _scale_height(scene, earth, materials, luminosity)
 	h.check(scale_height > 1000.0,
 		"Earth's air scale height is derived, not assumed (%.0f m)" % scale_height)
-	var coefficient := SpacesimCloudBand.extinction(deck.optical_depth, scale_height)
+	var coefficient := StoichonCloudBand.extinction(deck.optical_depth, scale_height)
 	var base := earth.radius + deck.height
 	var outer := base + deck.thickness
 
 	# Thin enough to finish: the answer is the plain exponential, because the discretisation must not become
 	# the answer where the band is thin.
-	var down := SpacesimCloudBand.chord(outer, base, 0.0)
+	var down := StoichonCloudBand.chord(outer, base, 0.0)
 	var tau_down := down * coefficient
-	var reported_down := SpacesimCloudBand.marched_transmittance(down, coefficient)
+	var reported_down := StoichonCloudBand.marched_transmittance(down, coefficient)
 	h.check_near(reported_down, exp(-tau_down),
 		"straight down, a correctly stepped march reports exp(-tau) exactly (tau %.3f)" % tau_down, 1.0e-6)
 
 	# The limb: capped, and finite. This is the assertion the three rewrites were missing.
-	var limb := SpacesimCloudBand.chord(outer, base, base)
+	var limb := StoichonCloudBand.chord(outer, base, base)
 	var tau_limb := limb * coefficient
-	var reported := SpacesimCloudBand.marched_transmittance(limb, coefficient)
+	var reported := StoichonCloudBand.marched_transmittance(limb, coefficient)
 	var naive := exp(-tau_limb)
 	# `%e` does not exist in GDScript's formatter, and `%s` on 5e-30 reads as "0.0" — which would look like
 	# an underflow rather than the astronomical number it is, so the exponent is formatted by hand.
 	print("    (Earth's limb: tau %.1f, naive exp 1e%.1f, reported %.4f)"
 		% [tau_limb, log(naive) / log(10.0), reported])
-	h.check(tau_limb > float(SpacesimCloudBand.stop_steps()) * SpacesimCloudBand.TAU_PER_STEP,
+	h.check(tau_limb > float(StoichonCloudBand.stop_steps()) * StoichonCloudBand.TAU_PER_STEP,
 		"the limb is past the point a march can integrate")
 	h.check(reported > 1.0e-3,
 		"and the reported transmittance is finite and non-zero rather than astronomically small")
-	h.check(reported < SpacesimCloudBand.OPACITY_BOUND + 1.0e-4,
+	h.check(reported < StoichonCloudBand.OPACITY_BOUND + 1.0e-4,
 		"because it stopped where it should, just under the opacity bound")
 	h.check(naive < reported * 1.0e-6,
 		"while the uncapped exponential is the value that silences everything after the first sample")
 
 
 ## **Every deck on every body**, so the bound is reachable in general and not only for the planet we look at.
-func _test_every_deck_in_sol(h, scene: SpacesimSystemScene, materials, luminosity) -> void:
+func _test_every_deck_in_sol(h, scene: StoichonSystemScene, materials, luminosity) -> void:
 	var decks := 0
 	var all_stop := true
 	var all_finite := true
@@ -372,17 +372,17 @@ func _test_every_deck_in_sol(h, scene: SpacesimSystemScene, materials, luminosit
 		var scale_height := _scale_height(scene, body, materials, luminosity)
 		for deck in body.decks:
 			decks += 1
-			var coefficient := SpacesimCloudBand.extinction(deck.optical_depth, scale_height)
+			var coefficient := StoichonCloudBand.extinction(deck.optical_depth, scale_height)
 			var base: float = body.radius + deck.height
 			# A deck below the datum has a negative base; the band is still a real pair of radii, and the
 			# grazing chord is the worst case whatever its sign.
 			var outer := maxf(base + deck.thickness, base + 1.0)
-			var worst := SpacesimCloudBand.chord(outer, base, base)
-			var t := SpacesimCloudBand.marched_transmittance(worst, coefficient)
+			var worst := StoichonCloudBand.chord(outer, base, base)
+			var t := StoichonCloudBand.marched_transmittance(worst, coefficient)
 			if not (t > 0.0 and t <= 1.0):
 				all_finite = false
-			if SpacesimCloudBand.samples(worst, coefficient) > SpacesimCloudBand.stop_steps() \
-					and t > SpacesimCloudBand.OPACITY_BOUND + 1.0e-4:
+			if StoichonCloudBand.samples(worst, coefficient) > StoichonCloudBand.stop_steps() \
+					and t > StoichonCloudBand.OPACITY_BOUND + 1.0e-4:
 				all_stop = false
 	h.check(decks > 0, "Sol has decks to check (%d)" % decks)
 	h.check(all_finite, "every one of them marches to a transmittance in (0, 1]")
@@ -391,14 +391,14 @@ func _test_every_deck_in_sol(h, scene: SpacesimSystemScene, materials, luminosit
 
 ## The deck the picture is actually about: the highest layer, which is the one seen from outside.
 ## The deck with the most optical depth to its name — the one the limb arithmetic is about. A layer on the
-## reflectance ramp states no `optical_depth` and is read through [method SpacesimCloudBand.extinction]'s
+## reflectance ramp states no `optical_depth` and is read through [method StoichonCloudBand.extinction]'s
 ## fallback, which is what this test leaned on by accident before Earth had a second deck.
-func _deepest_deck(h, body: SpacesimSceneBody, who: String) -> SpacesimSceneBody.Deck:
+func _deepest_deck(h, body: StoichonSceneBody, who: String) -> StoichonSceneBody.Deck:
 	var ok: bool = body != null and body.decks.size() > 0
 	h.check(ok, "%s has a deck to do the band arithmetic on" % who)
 	if not ok:
 		return null
-	var deepest: SpacesimSceneBody.Deck = body.decks[0]
+	var deepest: StoichonSceneBody.Deck = body.decks[0]
 	for candidate in body.decks:
 		if candidate.tau > deepest.tau:
 			deepest = candidate
@@ -407,12 +407,12 @@ func _deepest_deck(h, body: SpacesimSceneBody, who: String) -> SpacesimSceneBody
 
 ## The air's own scale height, through the derivation rather than from it — the same three calls the scene
 ## makes when it publishes the sky's coefficients.
-func _scale_height(scene: SpacesimSystemScene, body: SpacesimSceneBody, materials, luminosity) -> float:
-	var gravity := SpacesimAtmosphereModel.surface_gravity(body.content)
+func _scale_height(scene: StoichonSystemScene, body: StoichonSceneBody, materials, luminosity) -> float:
+	var gravity := StoichonAtmosphereModel.surface_gravity(body.content)
 	var distance := body.position.distance_to(scene.star().position)
-	var temperature := SpacesimAtmosphereModel.reference_temperature(
+	var temperature := StoichonAtmosphereModel.reference_temperature(
 		body.content, materials, luminosity, distance
 	)
-	return SpacesimAtmosphereModel.scale_height(
+	return StoichonAtmosphereModel.scale_height(
 		body.content.atmosphere, materials, temperature, gravity
 	)

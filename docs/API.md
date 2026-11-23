@@ -1,17 +1,17 @@
-# SpaceSim Engine API
+# Stoichon Engine API
 
 > **This file documents the engine as it is.** Only interfaces that exist in the code are listed
 > here. Design, planning and bug-hunting notes live in the project notes (Obsidian,
-> `Notes/Projects/Programming/SpaceSim/`) — not in this repo.
+> `Notes/Projects/Programming/Stoichon/`) — not in this repo.
 
 **One row per section, in file order.** A section is a subsystem; a subsystem's *why* is in the vault, and
-that is what `Notes/Projects/Programming/SpaceSim/Where to read.md` maps.
+that is what `Notes/Projects/Programming/Stoichon/Where to read.md` maps.
 
 | Section | What is in it |
 |---|---|
 | [The addon](#the-addon) | `plugin.cfg`/`plugin.gd`, and why nothing depends on the plugin being on |
 | [Update rule](#update-rule) | this file changes in the same commit as the interface, and an on-disk format is interface |
-| [Coordinate frames](#coordinate-frames) | `SpacesimFrame`, the one-way transition rules, the frame tree |
+| [Coordinate frames](#coordinate-frames) | `StoichonFrame`, the one-way transition rules, the frame tree |
 | [Travel unit](#travel-unit) | speed derived from the distance to the nearest body, and the motion it is carried by |
 | [Solar system](#solar-system) | content, the built scene, the derivation, Kepler, populations, rings, the LOD walk |
 | [Lighting](#lighting) | the star as a physical light, the exposure window, the frame metre |
@@ -20,7 +20,7 @@ that is what `Notes/Projects/Programming/SpaceSim/Where to read.md` maps.
 | [Settings](#settings) | the registry, the file on disk, the store, the display and its three sizes |
 | [Screens](#screens) | the chrome every full-screen modal shares, actions, bindings, devices, the dialogs |
 | [Only names are editable](#only-names-are-editable) | what a player may type, and which button commits it |
-| [`SpacesimPlayer`](#spacesimplayer) | the player's own state and what a save holds |
+| [`StoichonPlayer`](#stoichonplayer) | the player's own state and what a save holds |
 | [Save and load](#save-and-load) | git-backed saves, histories, the session, the two clocks, locations |
 | [The game](#the-game) | what `game/` adds: input, the camera, the screens, the readout |
 | [Tests](#tests) | the headless suite, the shader check, the screenshot rig |
@@ -28,7 +28,7 @@ that is what `Notes/Projects/Programming/SpaceSim/Where to read.md` maps.
 
 ## The addon
 
-`addons/spacesim/plugin.cfg` and `plugin.gd` are the Godot plugin entry point, so Godot can enable
+`addons/stoichon/plugin.cfg` and `plugin.gd` are the Godot plugin entry point, so Godot can enable
 the addon in the editor. The engine's classes are global by `class_name`, so nothing in the game
 depends on the plugin being switched on.
 
@@ -39,13 +39,13 @@ format versions are part of the public interface.
 
 ## Coordinate frames
 
-`addons/spacesim/coordinate/` — compartmentalised coordinate spaces and the threshold rules that
+`addons/stoichon/coordinate/` — compartmentalised coordinate spaces and the threshold rules that
 move things between them. See the project notes for *why*.
 
 All frames use metres. There is no unit scaling between frames: an AU-scale system frame and a
 metre-scale surface frame differ only in how far their children sit from the origin.
 
-### `SpacesimFrame` — `Node3D`
+### `StoichonFrame` — `Node3D`
 
 A coordinate space with its own local origin. A frame's own transform is its origin and
 orientation expressed in its *parent* frame, so the frame chain is the chain of coordinate spaces
@@ -58,7 +58,7 @@ and a frame's children are what lives in that space.
 | `to_frame_position(outer_position) -> Vector3` | a position in the outermost space, expressed in this frame |
 | `to_outer_position(frame_position) -> Vector3` | the inverse |
 
-### `SpacesimTransitionRule` — `RefCounted`
+### `StoichonTransitionRule` — `RefCounted`
 
 A distance threshold that moves an observer between two frames. Rules are one-way and
 single-shot: an `ENTER` rule fires when the observer reaches its threshold altitude *and* is in
@@ -66,12 +66,12 @@ single-shot: an `ENTER` rule fires when the observer reaches its threshold altit
 rather than a special case.
 
 ```gdscript
-SpacesimTransitionRule.new(from_frame, to_frame, reference, reference_radius, altitude, direction)
+StoichonTransitionRule.new(from_frame, to_frame, reference, reference_radius, altitude, direction)
 ```
 
 | Member | |
 |---|---|
-| `from_frame`, `to_frame: SpacesimFrame` | |
+| `from_frame`, `to_frame: StoichonFrame` | |
 | `reference: Node3D` | body the altitude is measured from |
 | `reference_radius: float` | its radius, in metres |
 | `altitude: float` | threshold above that surface, in metres |
@@ -79,7 +79,7 @@ SpacesimTransitionRule.new(from_frame, to_frame, reference, reference_radius, al
 | `altitude_of(outer_position) -> float` | metres above the reference surface; negative inside |
 | `matches(outer_position) -> bool` | whether this rule wants a switch right now |
 
-### `SpacesimFrameTree` — `Node3D`
+### `StoichonFrameTree` — `Node3D`
 
 Owns the rules and moves an observer between frames as it crosses thresholds.
 
@@ -87,7 +87,7 @@ Owns the rules and moves an observer between frames as it crosses thresholds.
 |---|---|
 | `observer: Node3D` | the node whose frame membership is tracked |
 | `automatic: bool` | evaluate on every physics tick (default `true`) |
-| `active_frame: SpacesimFrame` | read-only in practice; set via `enter_frame()` |
+| `active_frame: StoichonFrame` | read-only in practice; set via `enter_frame()` |
 | `frame_changed(observer, from_frame, to_frame)` | emitted after a switch |
 | `add_rule(rule) -> void` | |
 | `enter_frame(frame) -> void` | move the observer into a frame without consulting rules (initial placement) |
@@ -99,12 +99,12 @@ its coordinate space changes.
 
 ## Travel unit
 
-`addons/spacesim/travel/` — how fast you move, given how close the nearest significant
+`addons/stoichon/travel/` — how fast you move, given how close the nearest significant
 thing is. Speed is never stored on the ship; motion is expressed in units of the local
 neighbourhood, so travelling fast in the void and slowly near a planet or a base falls out
 of the unit rather than being imposed on top of a flight model.
 
-### `SpacesimScaleBody` — `RefCounted`
+### `StoichonScaleBody` — `RefCounted`
 
 Something whose proximity sets the travel unit. Which bodies count as significant is content's
 decision — and **a fragment of an asteroid population counts from the moment it exists**, which
@@ -112,7 +112,7 @@ reverses the older rule here (*"a pebble should not slow you down"*): in an empt
 only thing there is, and slowing down is how you arrive somewhere instead of passing through it.
 
 ```gdscript
-SpacesimScaleBody.new(node: Node3D, radius: float)
+StoichonScaleBody.new(node: Node3D, radius: float)
 ```
 
 | Member | |
@@ -125,14 +125,14 @@ SpacesimScaleBody.new(node: Node3D, radius: float)
 | `surface_distance_to(position) -> float` | distance to the *surface*, never negative — the cheap comparison the proximity scan uses |
 | `surface_distance_mesh(position) -> float` | distance to the nearest *vertex* of a body's own mesh; the sphere when there is no mesh to ask |
 
-### `SpacesimProximity` — `RefCounted` (static)
+### `StoichonProximity` — `RefCounted` (static)
 
 | Member | |
 |---|---|
-| `nearest_body(position, bodies) -> SpacesimScaleBody` | nearest, or `null` |
+| `nearest_body(position, bodies) -> StoichonScaleBody` | nearest, or `null` |
 | `nearest_surface_distance(position, bodies) -> float` | or `INF` when nothing is near enough to matter |
 
-### `SpacesimTravelScale` — `RefCounted` (static)
+### `StoichonTravelScale` — `RefCounted` (static)
 
 | Member | |
 |---|---|
@@ -160,7 +160,7 @@ now drives the real integration both ways: the carried ship arrives, the uncarri
 
 ## Solar system
 
-`addons/spacesim/system/` — a solar system loaded from data, and the scene it builds, plus the
+`addons/stoichon/system/` — a solar system loaded from data, and the scene it builds, plus the
 **content classes** ([code]content/[/code]) the derivation will read. **Content, not engine:** the
 file says what exists; the engine builds the frames, geometry, scale bodies and transition rules
 from it. A different system file should not require engine changes.
@@ -177,19 +177,19 @@ worth flying to without being worth a label, and every rock in a belt is the lat
 
 | Class | |
 |---|---|
-| `SpacesimSolarSystem` | `content/solar_system.gd` — the system: `content_version`, `epoch`, `framing`, `start_body_id`, `start_altitude`, `start_direction`, `start_world_time`, `bodies`, `populations`. `system_name()` reads the primary star's name; `validate()` returns problems as prose |
-| `SpacesimPopulation` | `content/population.gd` — **a swarm of small bodies that is not a body**: the asteroid belt, a ring. `id`, `display_name`, `parent_id` (empty means the primary star, so a ring is the same type with a planet as its parent), `seed_value`, `composition`, `semi_major_axis` (Vector2, metres), `inclination` (Vector2, degrees — **this is the belt's thickness**, not a per-fragment tilt), `reference_size`, `count` (**fragments at or above `reference_size`** — Sol's published figure is 1.1 million above 1 km, and the addressable count at the 10 m floor follows from `size_index`), `size_index` (cumulative `N(>D) ∝ D^-index`, Dohnanyi's 2.5), `size_floor` (**the smallest fragment that exists at all**; below it the material is dust and part of no object) and `size_ceiling`. A population is a **distribution, not a list** — see `SpacesimPopulationField` |
-| `SpacesimSystemBody` | `content/system_body.gd` — one body: `id`, `display_name`, `kind`, `parent_id`, `primary`, `radius`, `mass`, `internal_heat_flux` (**W/m2 of radiogenic and primordial heat, added to the absorbed flux before the equilibrium temperature's fourth root** — Jupiter's 5.44 against 6.25 of sunlight takes it from 102 K to 120 K; **authored, because nothing in an orbit or an atmosphere yields it**, and zero for the rocky bodies), `rotation_period`, `axial_tilt`, `layers`, `orbit`, `fixed_position`, `atmosphere`, `surface`, `clouds`, `overrides`, `landable`, `significant` |
-| `SpacesimLayer` | `content/layer.gd` — `layer_name`, `radius` (outer boundary), `composition` |
-| `SpacesimOrbit` | `content/orbit.gd` — the six Keplerian elements, degrees. **`mean_anomaly_at_epoch = 0.0` means "derive it"**, the same convention `mass = 0.0` uses: the phase comes from the body's own address (a shift of one turn's fraction of the period), so a whole planet's moons are not on one straight line out of it and nothing is authored. The planets keep their real J2000 values, which is why the shift is conditional on the authored value being zero |
-| `SpacesimAtmosphere` | `content/atmosphere.gd` — `surface_pressure`, `species`, `variable_species`, and the two **dynamics** inputs `SpacesimCloudModel` cannot derive: `atmospheric_rotation_period` (seconds; **0 = the air turns with the body**, which is what `rotation_period` is then used for — Venus's air superrotates in ~4 days against a 243-day rotation, a factor of **61**) and `wind_speed` (**the velocity scale the band and eddy laws use**, m/s; **0 = not known**, and the model returns `UNKNOWN` rather than a verdict from a guessed wind) |
-| `SpacesimSurface` | `content/surface.gd` — `coverage` |
-| `SpacesimClouds` | `content/clouds.gd` — `fraction`, `albedo`, `color`, `opacity`, and `layers` of `SpacesimCloudLayer` (`species`, `coverage`, `albedo`, `color`, `opacity`, `optical_depth`, `solid_form` on the species, and **`haze`** — a diffuse veil with no condensation level of its own, placed at the top of the stack and drawn from the white texel with a broad latitude envelope; Jupiter's broad white zones are one, 2026-11-03). `is_haze(index)` is the accessor. **Authored for now, derived later.** On the body rather than in the atmosphere, because a gas giant's visible surface *is* its cloud deck — the deck is what a body *looks like*, not a property of its air, and the giants **do** carry atmospheres (four of them, 101,325 Pa each). **Nothing draws a deck at present, and the render method is being re-thought.** A deck was drawn twice and removed twice: first for standing `radius * 1.012` above the surface (76 km at Earth), which made it the outermost silhouette of every body, and again (`688005c`) because the **shape** was wrong — a shell carries no thickness, so it gives neither parallax within the deck nor a silver lining, and a 2D field over a sphere stretches without bound at grazing angles. The content stays and is still read: `bond_albedo` needs `fraction` and `albedo`, and `color` is what a body with no surface coverage is drawn in |
-| `SpacesimBodyOverrides` | `content/overrides.gd` — pinned derived values |
-| `SpacesimFraming` | `content/framing.gd` — the travel bands and thresholds |
-| `SpacesimMaterialTable`, `SpacesimSpecies` | `content/material_table.gd`, `content/species.gd` — the substances compositions name. `rayleigh`, `formed_from` (the reactants this species is **made from**, empty for an ordinary gas — see `condensation_levels`), **`solid_form`** (the `species_name` this gas **freezes into**, or empty where no solid phase is modelled here — stated rather than suffix-derived, because `water_vapour`'s sibling is `water_ice` and not `water_vapour_ice`; it is what gives Earth an ice deck at the top of its column), **`condensation_temperature`, which is the 1-ATMOSPHERE VAPOUR-PRESSURE REFERENCE** (the normal boiling point for a liquid, the sublimation point for a solid with no liquid phase at 1 atm — **not** a melting or triple point, which is what the table held for water until 2026-10-16 and which made its dew point 60 K too low), `latent_heat` (**J/mol**, what converts that 1-atm reference into a condensation temperature at the species' own partial pressure; **zero means not known**, and the 1-atm value is then used unchanged), `heat_capacity` (J/(kg·K)) and `greenhouse` (the grey infrared mass-absorption coefficient, or an explicit zero for a gas transparent in the infrared) are populated for every gas the authored atmospheres use **except water vapour's and ammonia's `rayleigh`**; `materials.tres` records where each number came from. **`melting_temperature`** (K) and **`triple_point_pressure`** (Pa) complete a phase: solid below the melting point, liquid between it and the 1-atm reference above, gas beyond — and **no liquid at all below the triple point**, which is why Mars has no liquid CO2 at 636 Pa whatever its temperature. Both are `0.0` where not known, and `SpacesimSurfaceModel.phase_of()` then answers `UNKNOWN` rather than guessing. **The bulk water entries (`ocean`, `ice_cap`, `water_ice`) carried water's *triple point* as their 1-atm reference until 2026-10-19**, which is a different quantity; they now carry 373.15 like `water_vapour`, and `tests/test_surface.gd` asserts all four agree |
+| `StoichonSolarSystem` | `content/solar_system.gd` — the system: `content_version`, `epoch`, `framing`, `start_body_id`, `start_altitude`, `start_direction`, `start_world_time`, `bodies`, `populations`. `system_name()` reads the primary star's name; `validate()` returns problems as prose |
+| `StoichonPopulation` | `content/population.gd` — **a swarm of small bodies that is not a body**: the asteroid belt, a ring. `id`, `display_name`, `parent_id` (empty means the primary star, so a ring is the same type with a planet as its parent), `seed_value`, `composition`, `semi_major_axis` (Vector2, metres), `inclination` (Vector2, degrees — **this is the belt's thickness**, not a per-fragment tilt), `reference_size`, `count` (**fragments at or above `reference_size`** — Sol's published figure is 1.1 million above 1 km, and the addressable count at the 10 m floor follows from `size_index`), `size_index` (cumulative `N(>D) ∝ D^-index`, Dohnanyi's 2.5), `size_floor` (**the smallest fragment that exists at all**; below it the material is dust and part of no object) and `size_ceiling`. A population is a **distribution, not a list** — see `StoichonPopulationField` |
+| `StoichonSystemBody` | `content/system_body.gd` — one body: `id`, `display_name`, `kind`, `parent_id`, `primary`, `radius`, `mass`, `internal_heat_flux` (**W/m2 of radiogenic and primordial heat, added to the absorbed flux before the equilibrium temperature's fourth root** — Jupiter's 5.44 against 6.25 of sunlight takes it from 102 K to 120 K; **authored, because nothing in an orbit or an atmosphere yields it**, and zero for the rocky bodies), `rotation_period`, `axial_tilt`, `layers`, `orbit`, `fixed_position`, `atmosphere`, `surface`, `clouds`, `overrides`, `landable`, `significant` |
+| `StoichonLayer` | `content/layer.gd` — `layer_name`, `radius` (outer boundary), `composition` |
+| `StoichonOrbit` | `content/orbit.gd` — the six Keplerian elements, degrees. **`mean_anomaly_at_epoch = 0.0` means "derive it"**, the same convention `mass = 0.0` uses: the phase comes from the body's own address (a shift of one turn's fraction of the period), so a whole planet's moons are not on one straight line out of it and nothing is authored. The planets keep their real J2000 values, which is why the shift is conditional on the authored value being zero |
+| `StoichonAtmosphere` | `content/atmosphere.gd` — `surface_pressure`, `species`, `variable_species`, and the two **dynamics** inputs `StoichonCloudModel` cannot derive: `atmospheric_rotation_period` (seconds; **0 = the air turns with the body**, which is what `rotation_period` is then used for — Venus's air superrotates in ~4 days against a 243-day rotation, a factor of **61**) and `wind_speed` (**the velocity scale the band and eddy laws use**, m/s; **0 = not known**, and the model returns `UNKNOWN` rather than a verdict from a guessed wind) |
+| `StoichonSurface` | `content/surface.gd` — `coverage` |
+| `StoichonClouds` | `content/clouds.gd` — `fraction`, `albedo`, `color`, `opacity`, and `layers` of `StoichonCloudLayer` (`species`, `coverage`, `albedo`, `color`, `opacity`, `optical_depth`, `solid_form` on the species, and **`haze`** — a diffuse veil with no condensation level of its own, placed at the top of the stack and drawn from the white texel with a broad latitude envelope; Jupiter's broad white zones are one, 2026-11-03). `is_haze(index)` is the accessor. **Authored for now, derived later.** On the body rather than in the atmosphere, because a gas giant's visible surface *is* its cloud deck — the deck is what a body *looks like*, not a property of its air, and the giants **do** carry atmospheres (four of them, 101,325 Pa each). **Nothing draws a deck at present, and the render method is being re-thought.** A deck was drawn twice and removed twice: first for standing `radius * 1.012` above the surface (76 km at Earth), which made it the outermost silhouette of every body, and again (`688005c`) because the **shape** was wrong — a shell carries no thickness, so it gives neither parallax within the deck nor a silver lining, and a 2D field over a sphere stretches without bound at grazing angles. The content stays and is still read: `bond_albedo` needs `fraction` and `albedo`, and `color` is what a body with no surface coverage is drawn in |
+| `StoichonBodyOverrides` | `content/overrides.gd` — pinned derived values |
+| `StoichonFraming` | `content/framing.gd` — the travel bands and thresholds |
+| `StoichonMaterialTable`, `StoichonSpecies` | `content/material_table.gd`, `content/species.gd` — the substances compositions name. `rayleigh`, `formed_from` (the reactants this species is **made from**, empty for an ordinary gas — see `condensation_levels`), **`solid_form`** (the `species_name` this gas **freezes into**, or empty where no solid phase is modelled here — stated rather than suffix-derived, because `water_vapour`'s sibling is `water_ice` and not `water_vapour_ice`; it is what gives Earth an ice deck at the top of its column), **`condensation_temperature`, which is the 1-ATMOSPHERE VAPOUR-PRESSURE REFERENCE** (the normal boiling point for a liquid, the sublimation point for a solid with no liquid phase at 1 atm — **not** a melting or triple point, which is what the table held for water until 2026-10-16 and which made its dew point 60 K too low), `latent_heat` (**J/mol**, what converts that 1-atm reference into a condensation temperature at the species' own partial pressure; **zero means not known**, and the 1-atm value is then used unchanged), `heat_capacity` (J/(kg·K)) and `greenhouse` (the grey infrared mass-absorption coefficient, or an explicit zero for a gas transparent in the infrared) are populated for every gas the authored atmospheres use **except water vapour's and ammonia's `rayleigh`**; `materials.tres` records where each number came from. **`melting_temperature`** (K) and **`triple_point_pressure`** (Pa) complete a phase: solid below the melting point, liquid between it and the 1-atm reference above, gas beyond — and **no liquid at all below the triple point**, which is why Mars has no liquid CO2 at 636 Pa whatever its temperature. Both are `0.0` where not known, and `StoichonSurfaceModel.phase_of()` then answers `UNKNOWN` rather than guessing. **The bulk water entries (`ocean`, `ice_cap`, `water_ice`) carried water's *triple point* as their 1-atm reference until 2026-10-19**, which is a different quantity; they now carry 373.15 like `water_vapour`, and `tests/test_surface.gd` asserts all four agree |
 
-Data files: `addons/spacesim/system/content/materials.tres` (the material table; ships with the
+Data files: `addons/stoichon/system/content/materials.tres` (the material table; ships with the
 engine) and `systems/sol.tres` (Sol — the **development and calibration** system, not shipped
 content, since every system in the game is generated).
 
@@ -212,33 +212,33 @@ perfectly good arrangement (a station, or a hand-placed placeholder such as ever
 playground), not an error. The primary star is the exception: it is the centre of the system and
 must not orbit anything.
 
-### `SpacesimSceneBody` — `RefCounted`
+### `StoichonSceneBody` — `RefCounted`
 
 One body's **built** half: the content it came from, and the nodes it was built into. The content
-lives in `SpacesimSystemBody`; a resource is cached and shared, so the nodes live here instead.
+lives in `StoichonSystemBody`; a resource is cached and shared, so the nodes live here instead.
 
 | Member | |
 |---|---|
-| `content: SpacesimSystemBody` | the authored body this was built from |
+| `content: StoichonSystemBody` | the authored body this was built from |
 | `id`, `name`, `kind: String` | |
 | `radius: float` | metres |
 | `position: Vector3` | in the system frame — fixed, or solved from the orbit |
 | `color: Color`, `landable: bool`, `significant: bool` | |
-| `parent_id: String`, `fixed_position: Vector3`, `orbit: SpacesimOrbit` | |
+| `parent_id: String`, `fixed_position: Vector3`, `orbit: StoichonOrbit` | |
 | `node: Node3D`, `mesh: MeshInstance3D` | built |
 | `decks: Array[Deck]` | **the cloud stack**, one deck per layer the model places a level for, highest first. Each is a `MeshInstance3D` on the body's own patch mesh, scaled to `radius + base + thickness`, with its own material, map and field seed; `Deck` carries the level, the two altitudes it was built from, the coverage and albedo the ramp gain is fitted to, and the width of the map currently published. Empty for a body with no air, no authored deck, or no condensable that forms a `LEVEL` |
 | `point: MeshInstance3D` | the **point of light** this body becomes once it is too small to be a disc: a camera-facing quad sized to the disc it would have had and coloured by its radiance. Hidden while the body is drawn as geometry |
-| `sky_top: float` | **how tall this body's air is**, metres — derived from the air's own scale height, floored by `SpacesimFraming.atmosphere_altitude`. **Nothing draws from it**: the shell that used to is gone and the march that will draw the air is not written. The camera's far plane reads it (`sky_reach()`); zero for a body with no air |
-| `atmosphere`, `surface: SpacesimFrame` | built when landable, null otherwise |
-| `scale_body: SpacesimScaleBody` | built |
-| `removals: Array` | **the chunks taken out of a body**, `[centre: Vector3, reach: float]` in body radii. The shape is the seed plus this list, so mining is state and not a mesh: `SpacesimIrregularBody.build` rebuilds the geometry from it and `radius_at` follows the new surface. Empty until mining exists — the generator takes it now so the day it lands is not a rewrite of every caller |
-| `irregular: bool` | **drawn by `SpacesimIrregularBody` instead of the planet path**, because its radius is below the potato radius. Set once at build and never cleared; it is what keeps `update_lod` from asking for a patch walk for a body whose mesh is generated and final |
+| `sky_top: float` | **how tall this body's air is**, metres — derived from the air's own scale height, floored by `StoichonFraming.atmosphere_altitude`. **Nothing draws from it**: the shell that used to is gone and the march that will draw the air is not written. The camera's far plane reads it (`sky_reach()`); zero for a body with no air |
+| `atmosphere`, `surface: StoichonFrame` | built when landable, null otherwise |
+| `scale_body: StoichonScaleBody` | built |
+| `removals: Array` | **the chunks taken out of a body**, `[centre: Vector3, reach: float]` in body radii. The shape is the seed plus this list, so mining is state and not a mesh: `StoichonIrregularBody.build` rebuilds the geometry from it and `radius_at` follows the new surface. Empty until mining exists — the generator takes it now so the day it lands is not a rewrite of every caller |
+| `irregular: bool` | **drawn by `StoichonIrregularBody` instead of the planet path**, because its radius is below the potato radius. Set once at build and never cleared; it is what keeps `update_lod` from asking for a patch walk for a body whose mesh is generated and final |
 | `static_triangles: int` | the triangles its own static mesh draws, counted from that mesh at build — a body with no walk has nothing else to count |
-| `static from_content(content) -> SpacesimSceneBody` | |
-| `static color_of(content, materials) -> Color` | what content pinned, or `SpacesimSurfaceModel.color` — the derivation, not a placeholder |
+| `static from_content(content) -> StoichonSceneBody` | |
+| `static color_of(content, materials) -> Color` | what content pinned, or `StoichonSurfaceModel.color` — the derivation, not a placeholder |
 | `orbits() -> bool` | |
 
-### `SpacesimIrregularBody` — `RefCounted` (static)
+### `StoichonIrregularBody` — `RefCounted` (static)
 
 **A body that was never rounded by its own gravity** — a rock, not a small planet. Evert, 2026-11-08:
 *"I think what went wrong is that we tried to re-use planets mechanism, and these smaller bodies are
@@ -246,31 +246,31 @@ something fundamentally different"*, and *"I want non-planets to have a differen
 planet-shaped at all."*
 
 This is a **second builder, not a mode of the first**. What it makes shares nothing with the planet
-path: one static mesh generated from an implicit field (`SpacesimBlobShape`), one matte colour from
+path: one static mesh generated from an implicit field (`StoichonBlobShape`), one matte colour from
 what the body is made of, no field, no patch walk, no decks, no air, no sea, no interior, no culling,
-and nothing that is re-derived as the eye moves. `SpacesimSystemScene._build_body` dispatches on it and
+and nothing that is re-derived as the eye moves. `StoichonSystemScene._build_body` dispatches on it and
 returns, so no code below ever sees such a body; `update_lod` gives it a point of light past the tier
 and otherwise leaves it alone.
 
 | Member | |
 |---|---|
-| `static rounding_radius(content, materials) -> float` | **how big a body of THIS material has to be before its own gravity rounds it** — `R = sqrt(3·strength / (2·π·G·ρ²))`, from the central pressure of a uniform sphere against the material's yield strength. **Derived, because one constant cannot be right for both**: ice (2 MPa) rounds at 130 km and rock (100 MPa) at 384 km, which is why Mimas at 198 km is a sphere and Amalthea at 83 km is a lump. The strength is the largest solid share's (`SpacesimSpecies.strength`); `POTATO_RADIUS` 300 km is only the fallback for a material that states none, and the boundary is a band rather than a number |
+| `static rounding_radius(content, materials) -> float` | **how big a body of THIS material has to be before its own gravity rounds it** — `R = sqrt(3·strength / (2·π·G·ρ²))`, from the central pressure of a uniform sphere against the material's yield strength. **Derived, because one constant cannot be right for both**: ice (2 MPa) rounds at 130 km and rock (100 MPa) at 384 km, which is why Mimas at 198 km is a sphere and Amalthea at 83 km is a lump. The strength is the largest solid share's (`StoichonSpecies.strength`); `POTATO_RADIUS` 300 km is only the fallback for a material that states none, and the boundary is a band rather than a number |
 | `static is_irregular(body, materials) -> bool` | that radius against the body's own, with a star excluded by name (a star's mesh is its photosphere, not a ground) |
 | `static build(parent, body) -> void` | **places** the body and nothing more: node, material, a point of light, and a sphere for the travel unit. **Nothing is extracted here** — a small moon is built when it is placed and shaped when the eye is close enough to resolve it |
 | `static request(body) -> void` | asks the worker pool for the extraction, once, capturing the values rather than reading members on the worker, so a removal that lands meanwhile cannot change a shape already described |
 | `static poll(body) -> void` | publishes a finished extraction **on the main thread** (`add_surface_from_arrays` reaches the `RenderingServer`), and with it the altitude datum — the vertex bin the mesh needs |
 | `static irregularity(body, materials) -> float` | **how irregular a body is drawn, 0 to 1** — how far it sits below its own rounding radius. Both the off-centre balls and the fractal relief scale with it, so a body near the threshold is a slightly lumpy sphere and one far below it is a rock; a misclassified body then costs relief rather than a wrong shape. Set at build and kept on the body, because the extraction and the altitude datum must use the same number |
-| `RESOLVE_PIXELS` | `2.0` px of radius — **half the point tier** (`SpacesimLod.POINT_TIER_SCREEN_RADIUS` is 4), so the work starts while the body is still a splat and is finished before the handover. Until then the body is its own point of light, never a hole |
+| `RESOLVE_PIXELS` | `2.0` px of radius — **half the point tier** (`StoichonLod.POINT_TIER_SCREEN_RADIUS` is 4), so the work starts while the body is still a splat and is finished before the handover. Until then the body is its own point of light, never a hole |
 | `static material_for(body) -> StandardMaterial3D` | full roughness, no specular — a regolith scatters, and a smooth untextured body given a planet's material reads as glass. Lit by the scene's own `DirectionalLight3D` |
 | `static show_wireframe(body, wire) -> void` | **the debug view's mesh, swapped not dressed.** A wireframe in this engine is a `PRIMITIVE_LINES` mesh the walk builds, so a body with no walk had none at all; this builds the line mesh from the same grid on first use, keeps it, and restores the solid one when the view turns off |
 
-**Roughness and mining, both in the field** (`SpacesimBlobShape`): `ROUGHNESS` subtracts fractal noise from the field, so relief is a function of POSITION — re-extracting at another resolution or after a chunk is taken gives the same rock, not a different one. `removals` cuts the field (`max(field, reach - distance)`), so a mined body is the seed plus a list of holes and the save carries the holes rather than a mesh.
+**Roughness and mining, both in the field** (`StoichonBlobShape`): `ROUGHNESS` subtracts fractal noise from the field, so relief is a function of POSITION — re-extracting at another resolution or after a chunk is taken gives the same rock, not a different one. `removals` cuts the field (`max(field, reach - distance)`), so a mined body is the seed plus a list of holes and the save carries the holes rather than a mesh.
 
-**The datum is still the sphere** (`SpacesimScaleBody` answers altitude from `body.radius`), so on a
-lump the altitude is wrong by up to the lump's height. `SpacesimBlobShape.radius_at` is the shape's
+**The datum is still the sphere** (`StoichonScaleBody` answers altitude from `body.radius`), so on a
+lump the altitude is wrong by up to the lump's height. `StoichonBlobShape.radius_at` is the shape's
 own datum and it belongs with landing rather than with placing.
 
-### `SpacesimPopulationField` — `RefCounted`
+### `StoichonPopulationField` — `RefCounted`
 
 **The fragments a population actually has — made up around the observer and forgotten when they leave.**
 Nothing about a fragment is stored anywhere but here and only while it is in range: the population is a
@@ -287,7 +287,7 @@ than a structure. The cost, accepted and named: **coming back to a place gives d
 
 | Member | |
 |---|---|
-| `population: SpacesimPopulation` | the distribution being drawn from |
+| `population: StoichonPopulation` | the distribution being drawn from |
 | `fragments() -> Array[Fragment]` | what the field holds now |
 | `position_of(fragment, parent_position) -> Vector3` | the system-frame position |
 | `update(parent_position, mu, ship_position, delta)` | **drop** the fragments outside the ball and make up enough to fill the field again. **Nothing is advanced**: a fragment stands where it was made |
@@ -296,7 +296,7 @@ than a structure. The cost, accepted and named: **coming back to a place gives d
 | `static volume_of(pop) -> float` | the shell between the two semi-major axes, as thick as the inclination band makes it |
 | `static spawn_radius_of(pop) -> float` | **the ball the field is drawn in**: the radius that holds `FIELD_COUNT` fragments at that density, so the nearest fragment is as far away as the real belt would put it rather than as far as a rendering decision would |
 | `static in_band(pop, local) -> bool` | whether a point relative to the parent is inside the population |
-| `pieces(parent_position) -> Array[Dictionary]` | the fragments as `{id, position, diameter}` — the shape `SpacesimFragmentBodies` takes, so a belt and a ring hand rocks to one manager |
+| `pieces(parent_position) -> Array[Dictionary]` | the fragments as `{id, position, diameter}` — the shape `StoichonFragmentBodies` takes, so a belt and a ring hand rocks to one manager |
 | `const FIELD_COUNT` | 24 — how many fragments *exist*; the marker pool decides how many are *shown* |
 
 **Nothing moves yet, deliberately — exactly as nothing else in the world moves.** A fragment's orbit is
@@ -314,21 +314,21 @@ vectors — where it is and the direction of travel), `phase`, `rate` (radians/s
 fragments per cubic metre — a mean spacing of **105,000 km** — and the field draws two dozen of them inside
 **188,000 km**.
 
-### `SpacesimFragmentBodies` — `Node3D`
+### `StoichonFragmentBodies` — `Node3D`
 
-**The rocks you can see, as bodies.** One `SpacesimSceneBody` per live fragment, built by
-`SpacesimIrregularBody` — the same builder, generator, taper, extraction threshold and **wireframe** the
+**The rocks you can see, as bodies.** One `StoichonSceneBody` per live fragment, built by
+`StoichonIrregularBody` — the same builder, generator, taper, extraction threshold and **wireframe** the
 moons get. A fragment is a body for exactly as long as the field holds it: created when the field makes
 one, freed when it drops it.
 
 | Member | |
 |---|---|
 | `update(pieces, eye, camera, pixel, wireframe)` | mirror the source — a belt's field or a ring's view — creating a body per piece, freeing one per dropped piece, and advancing each as `advance_irregular` advances a moon. **`pixel` is the pixel's angular size**, because the extraction threshold is a screen size |
-| `rocks() -> Array[SpacesimSceneBody]` | **the rocks themselves**, for the marker path and the ship's travel unit. One list read by both: a rock is one object, not a marker entry and a scale body and a node that could disagree |
+| `rocks() -> Array[StoichonSceneBody]` | **the rocks themselves**, for the marker path and the ship's travel unit. One list read by both: a rock is one object, not a marker entry and a scale body and a node that could disagree |
 | `ids() -> Array[String]` | what the bodies are keyed by, so a renderer can stop drawing the splat each one replaced |
 | `count()`, `version()` | how many exist, and a counter bumped when one appears or is let go, so a caller's list of scale bodies can be rebuilt only when it is stale |
-| `static content_for(population, designation, diameter, label) -> SpacesimSystemBody` | **a fragment as content** — its radius and one layer of the population's composition. That is all the builder needs: colour, strength and density follow, so a rock's lumpiness is derived rather than chosen. **`id` is the designation**, because `request()` seeds the shape from `hash(body.id)` — the same rock is the same shape every time it is extracted |
-| per-body advance | **`SpacesimSystemScene.advance_irregular`** — the same call `update_lod` makes for a moon: extraction at `RESOLVE_PIXELS`, the splat that stands in while it runs, the wireframe |
+| `static content_for(population, designation, diameter, label) -> StoichonSystemBody` | **a fragment as content** — its radius and one layer of the population's composition. That is all the builder needs: colour, strength and density follow, so a rock's lumpiness is derived rather than chosen. **`id` is the designation**, because `request()` seeds the shape from `hash(body.id)` — the same rock is the same shape every time it is extracted |
+| per-body advance | **`StoichonSystemScene.advance_irregular`** — the same call `update_lod` makes for a moon: extraction at `RESOLVE_PIXELS`, the splat that stands in while it runs, the wireframe |
 
 **Nothing is extracted until the eye can resolve it.** A 17 m fragment is 2 px of radius at about 22 km, so
 a field of two dozen rocks costs nothing until one is close, and then the cost is one body's extraction on
@@ -340,7 +340,7 @@ and `_place_point` fades it by its own area below 0.56 px of radius. Evert, 2026
 be nice to see splats for asteroids, but of course they will be far dimmer and not as visible as planetary
 splats."*
 
-### `SpacesimRingModel` — `RefCounted` (static)
+### `StoichonRingModel` — `RefCounted` (static)
 
 **What a band of small bodies is worth** — its radiance, its shadow, and the two directions that matter. No
 geometry and no nodes: every number is a function of the band's optical depth and the camera's angle, which
@@ -361,9 +361,9 @@ is why it can be checked against Saturn on paper.
 and multiple scattering. Those need a phase function with measured parameters and a phase-angle sampling
 this game has no way to judge yet.
 
-### `SpacesimParticleCloud` — `RefCounted`
+### `StoichonParticleCloud` — `RefCounted`
 
-**A ring's particles, made once and never touched again** — the ring half of what `SpacesimPopulationField`
+**A ring's particles, made once and never touched again** — the ring half of what `StoichonPopulationField`
 is for a belt. A belt is 6 × 10²⁵ m³ of nothing and can only be seen where the observer is; a ring is
 4 × 10¹⁶ m² of sheet that is *there*, whole, from any angle, so it is generated at build in the planet's
 frame and stays. Nothing moves, so the instance transforms are written once.
@@ -373,13 +373,13 @@ thickness is 10⁻⁸ of a pixel at every distance a ring is visible from.
 
 | Member | |
 |---|---|
-| `static of(population) -> SpacesimParticleCloud` | generate: **uniform by area** across the band, not by radius, and sized by `SpacesimRingModel.diameter` |
+| `static of(population) -> StoichonParticleCloud` | generate: **uniform by area** across the band, not by radius, and sized by `StoichonRingModel.diameter` |
 | `positions`, `radii`, `size()`, `mean_radius()` | the particles; the mean is `sqrt(mean(r²))`, because a particle's flux goes as its area |
 | `nearest(where, count, reach) -> Array[int]` | **the nearest `count` particles, no further than `reach`.** Both stops are exact: radius buckets so the walk starts at the query's own radius, and a bearing-sorted list inside each bucket so a direction stops when `4·r_min·r0·sin²(Δ/2)` alone exceeds the worst kept. Measured at 207,000 particles: **116 µs** for the 25 nearest (563 µs with the radius ordering alone) |
 | `static closest_point(where, inner, outer) -> Vector3` | **the closest point on the band is trigonometry** — clamp the ship's radius into the band, keep its bearing. Evert, 2026-11-15: *"The ring is a geometric shape."* It is why a query from a million kilometres costs what one from a hundred does: the search starts where the answer is, not where the ship is |
 | `const RADIUS_BUCKETS` | 256 — a couple of hundred buckets over the band, so one holds a thousand particles and the bearing walk inside it reaches the answer in a few dozen |
 
-### `SpacesimRingView` — `Node3D`
+### `StoichonRingView` — `Node3D`
 
 **A band, drawn**: one `MultiMesh` of point quads written once, and **two draw nodes holding it** — the half
 in front of the planet and the half behind, cut on the plane through the planet's centre at right angles to
@@ -388,11 +388,11 @@ and behind it; both draws hold every particle and each collapses the other side 
 
 | Member | |
 |---|---|
-| `static of(population, cloud) -> SpacesimRingView` | build it, oriented by `population.ring_axis` |
+| `static of(population, cloud) -> StoichonRingView` | build it, oriented by `population.ring_axis` |
 | `update(pixel_angle, illuminance, albedo, centre, star_position, observer)` | **per frame**: the two cosines, the band's radiance, the unlit floor, and the overlap count that turns a share of `tau` into an alpha |
 | `pieces(eye, pixel_angle, count) -> Array[Dictionary]` | **which spots are bodies** — every spot whose disc has passed `RESOLVE_PIXELS`, plus the nearest spot whatever its size |
 | `set_hidden_ids(ids)` | stop drawing the splats a body stands for; `R26`, because a splat left behind grows through the shape it replaced |
-| `bake_shadow(star_position, caster_position, caster_radius, star_radius) -> float` | **once**: the planet's shadow per particle, with `SpacesimLuminance.shadow_fraction`. Returns the shaded fraction, so a caller can say what happened |
+| `bake_shadow(star_position, caster_position, caster_radius, star_radius) -> float` | **once**: the planet's shadow per particle, with `StoichonLuminance.shadow_fraction`. Returns the shaded fraction, so a caller can say what happened |
 | `spot_id(index)`, `static index_of(id)` | **one identity per spot**: `population:ring_b#12345` is the particle index, the body key and the shape seed at once |
 | `light()`, `shader_parameter(name)`, `shaded_fraction` | what the shader is told, for the tests |
 | `const FAR_PRIORITY` / `NEAR_PRIORITY` | −100 / +100 — outside the planet's whole transparent stack, see Render layers |
@@ -410,7 +410,7 @@ the space between the last two. The 300,000 drawn particles are **the largest em
 30 km** (Evert, 2026-11-15). `ring_axis` is in the **engine's frame**, not the orbital elements' — see the
 content's own comment, and the test that derives the elevation from the loaded positions.
 
-### `SpacesimKepler` — `RefCounted`
+### `StoichonKepler` — `RefCounted`
 
 Where a body is, from its elements. A **pure function of time**: no integration, no state, nothing
 stepped forward, so a system is reproducible at any `t`.
@@ -425,35 +425,35 @@ stepped forward, so a system is reproducible at any `t`.
 A body whose parent mass is not known does not move rather than moving wrongly — the rocky bodies
 have no derived mass yet, so a moon of one stands still.
 
-### `SpacesimSystemScene` — `RefCounted`
+### `StoichonSystemScene` — `RefCounted`
 
 | Member | |
 |---|---|
-| `content: SpacesimSolarSystem` | the authored content it was built from |
-| `static from_file(path) -> SpacesimSystemScene` | loads a `.tres` and works on a **copy**, since a resource is shared and building hangs nodes off it |
-| `static from_content(content) -> SpacesimSystemScene` | |
-| `SpacesimWorldTime.clock_at_epoch(iso) -> float` | world-clock seconds for an ISO epoch; J2000 is 63,113,947,200. **Moved out of the scene class** — see `save/world_time.gd` |
-| `build(parent) -> SpacesimSystemScene` | places the bodies, then builds; the observer is the caller's business |
+| `content: StoichonSolarSystem` | the authored content it was built from |
+| `static from_file(path) -> StoichonSystemScene` | loads a `.tres` and works on a **copy**, since a resource is shared and building hangs nodes off it |
+| `static from_content(content) -> StoichonSystemScene` | |
+| `StoichonWorldTime.clock_at_epoch(iso) -> float` | world-clock seconds for an ISO epoch; J2000 is 63,113,947,200. **Moved out of the scene class** — see `save/world_time.gd` |
+| `build(parent) -> StoichonSystemScene` | places the bodies, then builds; the observer is the caller's business |
 | `name` | read from the primary star |
-| `bodies: Array[SpacesimSceneBody]` | |
+| `bodies: Array[StoichonSceneBody]` | |
 | `content_version() -> int` | the revision a save records |
-| `container: Node3D`, `system_frame: SpacesimFrame`, `frame_tree: SpacesimFrameTree` | built |
-| `body_by_id(id) -> SpacesimSceneBody` | |
-| `scale_bodies() -> Array[SpacesimScaleBody]` | every body, for the travel unit |
-| `conditions_at(position) -> Dictionary` | **what it is like where the observer is**, for the body whose surface is nearest: `{body, altitude, gravity, pressure, temperature}` (metres, m/s², pascals, kelvin). **Gravity is at the EYE** (`GM/r²` at the distance from the body's centre, so 1,000 km up reads 7.3 m/s² on Earth against 9.8 on the ground), while the air's own laws keep the SURFACE gravity because they are the body's. Pressure and temperature come from `SpacesimAtmosphereModel.conditions_at`, so the surface temperature, lapse rate and scale height are derived from the two inputs this scene can be trusted with rather than assembled by the caller. An airless body answers pressure 0 rather than dropping the reading; `body` is null when nothing is near |
+| `container: Node3D`, `system_frame: StoichonFrame`, `frame_tree: StoichonFrameTree` | built |
+| `body_by_id(id) -> StoichonSceneBody` | |
+| `scale_bodies() -> Array[StoichonScaleBody]` | every body, for the travel unit |
+| `conditions_at(position) -> Dictionary` | **what it is like where the observer is**, for the body whose surface is nearest: `{body, altitude, gravity, pressure, temperature}` (metres, m/s², pascals, kelvin). **Gravity is at the EYE** (`GM/r²` at the distance from the body's centre, so 1,000 km up reads 7.3 m/s² on Earth against 9.8 on the ground), while the air's own laws keep the SURFACE gravity because they are the body's. Pressure and temperature come from `StoichonAtmosphereModel.conditions_at`, so the surface temperature, lapse rate and scale height are derived from the two inputs this scene can be trusted with rather than assembled by the caller. An airless body answers pressure 0 rather than dropping the reading; `body` is null when nothing is near |
 | `meshes() -> Array[MeshInstance3D]` | every body's mesh, for the hide debug key |
 | `ship_start() -> Vector3` | the system's start position |
-| `star() -> SpacesimSceneBody` | |
+| `star() -> StoichonSceneBody` | |
 | `update_sky(camera) -> void` | points the sky at the camera, hands it the depth and the gain, and re-sums the ambient when the depth changes. Called once a frame |
-| `update_lod(camera) -> void` | **hands every body the representation its angular size has earned**, once a frame: the screen radius from `camera`'s field, the render target's height and the observer's distance, a level from `SpacesimLod`, and a mesh assignment. **Below `SpacesimLod.POINT_TIER_SCREEN_RADIUS` the body stops being geometry** — mesh hidden, point of light shown, **the star included**, since its disc is a fraction of a pixel from any distance and what it puts on the screen is its own emission over the same area — and `lod.error_budget` is read here, so it is hot. **Nothing about the cull is visible outside this function**: a hidden body is still an entry in `bodies`, and nothing else reads whether it is drawn |
-| `SpacesimLuminance.shadow_fraction(point, star, caster, caster_radius, star_radius) -> float` | **how much of the star a point can see**: 1 in full light, 0 in the umbra, the fraction of the star's disc the caster does not cover, from two circles on the sky (the star's angular radius, the caster's, the angle between them). Partial overlap is the penumbra, which falls out. **The engine's shadow law, and there are no shadow maps in it.** A ring bakes it per particle — see `SpacesimRingView.bake_shadow` |
-| `body_luminance(body, observer, star_position) -> float` | **what the eye sees of a body**, lux/sr: `illuminance · albedo · lambert_phase(α) / π`. The gathering is here; **the expression itself is `SpacesimLuminance.disc_luminance`**, so the number the point of light is coloured by has one home |
-| `_place_point(…)` | sizes and colours a body's point of light. **It carries the body's whole flux into the pixel once the disc is under one**: `min(1, pi * r_px^2)`, the disc's share of the pixel's solid angle — the same term `sky_stars.gdshader` carries as `lux / d_omega`. Without it a receding body keeps its full surface brightness instead of fading as `1/d^2` (a body at 0.077 px is ~170x over the law), and with it a distant planet lands in the same currency as the star field, which is where it is judged. **It applies no exposure at all** — `SpacesimExposurePass` scales the finished frame, which covers the splat and every disc together, and a second application would be one too many. It used to be applied by hand here because an `unshaded` material receives none of Godot's per-path baking, and the flight test that found that is in `Lighting and Exposure` |
+| `update_lod(camera) -> void` | **hands every body the representation its angular size has earned**, once a frame: the screen radius from `camera`'s field, the render target's height and the observer's distance, a level from `StoichonLod`, and a mesh assignment. **Below `StoichonLod.POINT_TIER_SCREEN_RADIUS` the body stops being geometry** — mesh hidden, point of light shown, **the star included**, since its disc is a fraction of a pixel from any distance and what it puts on the screen is its own emission over the same area — and `lod.error_budget` is read here, so it is hot. **Nothing about the cull is visible outside this function**: a hidden body is still an entry in `bodies`, and nothing else reads whether it is drawn |
+| `StoichonLuminance.shadow_fraction(point, star, caster, caster_radius, star_radius) -> float` | **how much of the star a point can see**: 1 in full light, 0 in the umbra, the fraction of the star's disc the caster does not cover, from two circles on the sky (the star's angular radius, the caster's, the angle between them). Partial overlap is the penumbra, which falls out. **The engine's shadow law, and there are no shadow maps in it.** A ring bakes it per particle — see `StoichonRingView.bake_shadow` |
+| `body_luminance(body, observer, star_position) -> float` | **what the eye sees of a body**, lux/sr: `illuminance · albedo · lambert_phase(α) / π`. The gathering is here; **the expression itself is `StoichonLuminance.disc_luminance`**, so the number the point of light is coloured by has one home |
+| `_place_point(…)` | sizes and colours a body's point of light. **It carries the body's whole flux into the pixel once the disc is under one**: `min(1, pi * r_px^2)`, the disc's share of the pixel's solid angle — the same term `sky_stars.gdshader` carries as `lux / d_omega`. Without it a receding body keeps its full surface brightness instead of fading as `1/d^2` (a body at 0.077 px is ~170x over the law), and with it a distant planet lands in the same currency as the star field, which is where it is judged. **It applies no exposure at all** — `StoichonExposurePass` scales the finished frame, which covers the splat and every disc together, and a second application would be one too many. It used to be applied by hand here because an `unshaded` material receives none of Godot's per-path baking, and the flight test that found that is in `Lighting and Exposure` |
 | `triangles() -> int` | triangles the bodies and points are currently drawn with — the instrument for "the picture is unchanged and so is the cost", which means the policy is not being consulted |
 
-**The projection is `SpacesimLod`'s** — `pixel_angle()`, `angular_radius()`, `screen_radius_pixels()` and
+**The projection is `StoichonLod`'s** — `pixel_angle()`, `angular_radius()`, `screen_radius_pixels()` and
 `POINT_TIER_SCREEN_RADIUS`, each with the reasoning that produced it. **The per-body level law is gone**
-(2026-10-25): `SpacesimPatches` decides per patch from the same pixel budget, so a level is no longer one
+(2026-10-25): `StoichonPatches` decides per patch from the same pixel budget, so a level is no longer one
 uniform choice per body. (The shell's own law, `SHELL_BUDGET_SOFTNESS`,
 `shell_screen_radius()` and `shell_ring_pixels()`, went with the shell on 2026-10-19 — and
 **its ring gate came back on 2026-10-25 as `air_ring_pixels()`**, because the pass inherited the shell's job
@@ -461,10 +461,10 @@ and not its gate.)
 | `orbit_parents() -> Dictionary` | for every **moon**, the body it orbits, keyed by the moon's node — what the navigation overlay's crowding rule uses. Moons only |
 | `significant_nodes() -> Array[Node3D]` | the bodies worth marking, in file order. Content decides which those are |
 | `aim_sun_at(position) -> void` | aims the star's light at a position |
-| `body_for_surface_frame(frame) -> SpacesimSceneBody` | |
-| `air_body(frame) -> SpacesimSceneBody` | the body whose air that frame is inside — its atmosphere or surface frame — or null in space |
+| `body_for_surface_frame(frame) -> StoichonSceneBody` | |
+| `air_body(frame) -> StoichonSceneBody` | the body whose air that frame is inside — its atmosphere or surface frame — or null in space |
 | `sky_reach(frame) -> float` | **how far the sky can be, in metres** — `sqrt(2) * sqrt(outer^2 - planet^2)`, or 0 in space. See **The far plane** below |
-| `place_surface_frame(body, point) -> void` | **puts a body's SURFACE FRAME on the ground under `point`** — coordinate machinery, and nothing else. **There is no landing-zone quad and has not been one since 2026-10-28**: it was a dark 4 km `PlaneMesh` with amber boxes round it, a scale reference from before the ground subdivided, ripped out on Evert's instruction (*"It has some yellow pillars standing on it, all of that must go"*), `SpacesimFraming.pad_size` with it, and nothing replaced it. The frame is what makes "landed on Nix" a space and gives the last metre of travel its own band |
+| `place_surface_frame(body, point) -> void` | **puts a body's SURFACE FRAME on the ground under `point`** — coordinate machinery, and nothing else. **There is no landing-zone quad and has not been one since 2026-10-28**: it was a dark 4 km `PlaneMesh` with amber boxes round it, a scale reference from before the ground subdivided, ripped out on Evert's instruction (*"It has some yellow pillars standing on it, all of that must go"*), `StoichonFraming.pad_size` with it, and nothing replaced it. The frame is what makes "landed on Nix" a space and gives the last metre of travel its own band |
 
 **Placement.** Bodies go down in dependency order rather than file order — a moon is placed relative
 to its planet — and a body whose parent is not in the system says so instead of quietly landing at
@@ -520,22 +520,22 @@ is what makes the authored Sol a calibration target rather than a fixture.
 
 | Class | |
 |---|---|
-| `SpacesimStarModel` | `model/star_model.gd` — `static luminosity(body)`: what content pinned, or the piecewise mass–luminosity relation. `static effective_temperature(luminosity, radius)`: Stefan-Boltzmann, and **a check on the data rather than a restatement of it** — L and R are measured independently and the Sun's give 5772 K. Deliberately small: what a star *puts out*. Its angular size is geometry rather than output and lives in `SpacesimLod.angular_radius` |
-| `SpacesimSurfaceModel` | `model/surface_model.gd` — `static bond_albedo(body, materials)` and `static color(body, materials)`. **`bond_albedo` is NET as of 2026-10-16**: `A = (1 - f) * clear_sky + f * deck`, with `clear_sky = surface_albedo + air_albedo` — the whole planet cloudless, which is the form the published split is in. It replaced a GROSS mix (`f * cloud + (1 - f) * surface`) that gave the surface under a cloud no credit at all; both are valid and they are different numbers, and calibrating the total never distinguished them. That is how the model came to have its **cloud term 1.9x** the published one and its **clear term a fifth** of it, cancelling to the right answer: Earth's all-sky albedo is 0.293 and its clear-sky 0.149 (Stephens et al. 2015, CERES EAFB), so the cloud's share is 0.144. Under the net accounting every term is within 9% — cloud 0.251 against 0.233, clear 0.054 against 0.060, total 0.306. `static air_albedo(body, materials)` is the air's own reflection (0 for an airless body, a value and not a missing one), `static clear_sky_albedo(...)` is surface + air, and `static reflectance_terms(body, materials)` returns the four terms as a Dictionary so the *split* can be compared with the published one rather than only the total. The surface contribution is area-weighted over the coverage fractions. `static lambert_phase(phase_angle)` is the **disc-averaged illuminated fraction** used to weight a body's share of the view: `(sin a + (pi - a)*cos a)/pi`, 1 at full, 1/pi at half, and 0 only at new — so a crescent contributes, where a clamped cosine returns exactly zero for everything past the half moon. **It is Bond-albedo normalised** (its phase integral is 3/2), which is why no geometric albedo is needed anywhere. **The two deliberately disagree about the deck**: the albedo *includes* it, because the temperature depends on it, and the drawn colour does *not*, because the deck was drawn as its own layer on top — counting it in both places gave Earth (0.66, 0.69, 0.73), a colour only 1.15:1 from neutral, which the eye reads as grey. The split outlives the drawn deck, and should: the reflectance is physics and the colour is a picture. **What the surface IS, since 2026-10-19, is the other half of this class.** `enum Phase { UNKNOWN, SOLID, LIQUID, GAS }` and `static phase_of(material, temperature, pressure)` settle a substance's phase from the ambient total pressure and the substance as pure — a sea, not a trace gas, which is the opposite of `condensation_temperature_at`'s partial-pressure use. `enum SurfaceKind { ROCKY, OCEAN, ICE, GAS_GIANT }` and `static surface_kind(body, materials, luminosity, distance)` are the one word a renderer branches on, so a gas giant cannot be handed a sea level (**there is no `MOLTEN`: it needs a solidus the table does not carry, and an unreachable verdict is worse than none**). `static ocean_bearing(...)` is the heaviest volatile in the coverage with its phase — Titan's `methane_ice` comes back **liquid** at its own 92.8 K, which is real physics overruling a label. `static sea_level_percentile(...)` is the liquid fraction, and **the percentile runs from the bottom**: Earth's 0.708 of ocean puts sea level at the 0.708 mark, the same relationship `SpacesimCloudMaps.threshold_for` has with coverage, so a fraction of the area means the fraction. `static bands(...)` is the surface as bands up the slope (`{material, from, to, color, albedo, roughness, specular}`) — liquids first because a liquid fills the basins, then the solids **in the order content authored the coverage dictionary** (Godot keeps insertion order, so the order an author writes is the height order), with each colour's **luminance set to its own albedo and its hue kept** because the authored palette is 2.3-3.4x brighter than the reflectance it claims. `static snow_line(...)` is `(T_surface - T_freeze) / lapse_rate(...)` in metres — derived, and low, because that lapse is the *dry* adiabat. `static polar_ice_line(body)` returns **0**: a polar cap is a latitude and the engine has no horizontal temperature yet |
-| `SpacesimCloudBand` | `model/cloud_band.gd` — **the band's laws and the slab's light.** `static two_flux(tau)` returns `(reflectance, transmittance)` — `tau/(1+tau)` and `1/(1+tau)`, so the two faces are exact complements, which is what lets one texture serve both and why a thick base darkens by the amount the top whitens. `static henyey_greenstein(cos, g)` is the normalised lobe that puts a base's bright side where physics does: looking *through* the slab at the star. `static sky_radiance(cos, rayleigh_tau, mie_tau, intensity, g)` is the closed form of the sky's own single-scatter loop over a slab, `p(theta)·beta·H` — a `vec3` because `beta` is, so **the colour is the Rayleigh ratio and there is no blue constant to choose**. **And it is a slab on a ray:** how deep a column is, how far through it the eye looks, and how many samples that chord deserves.** Arithmetic only, and it exists because of how the three previous attempts on the cloud failed: not from a wrong picture but from an **unobservable** one. A deck is `1 - exp(-39)` opaque within its first limb sample, so every later sample contributes `transmittance = 0` and any rewrite of the integration is invisible — three were made, each reported as *"visually nothing changed"*. These are the numbers that end that in one run. `static column_top(value, threshold, full_height)` is the map's value read as a **height, not an alpha**: the base is a plane and only the top follows the field, so a lateral edge is a taper rather than a cut and "no cloud here" is a gap rather than a special case (`h -> 0` makes the chord zero by arithmetic). `static extinction(optical_depth, scale_height)` is `tau / (scale_height * 0.5)` — a column one scale height deep is `2*tau`, stated rather than discovered — with the **`1 / (scale_height * 0.5)` fallback** for a layer that states no tau, which is every layer but the two giants and is what made the deck a lid. `static chord(outer, base, impact)` is the path inside the band: `0` past the top, `2*sqrt(outer^2 - impact^2)` for a grazing ray, and one arc for a ray that reaches the ground — **so the chord halves, not doubles, as the closest approach passes inside the base**, because the march ends at the surface rather than the far side. `impact = 0` returns exactly the slab's thickness, which is the anchor. `static samples(chord, extinction)` is `ceil(chord * extinction * 6)` and the six is the law: **a sample may not advance more than a sixth of an e-fold**, because past that it integrates through a quantity it cannot represent, which is what a lid is — so the count follows from the geometry instead of being chosen. `static stop_steps()` is the ceiling that makes the limb affordable, **derived** from `OPACITY_BOUND`(0.01) and `TAU_PER_STEP` rather than typed in, and lands on **28**. `static marched_transmittance(chord, extinction)` is what a correctly stepped march actually reports: `exp(-min(tau, 28/6))`, so a **thin band is exactly `exp(-tau)`** and a thick one stops just under the bound at **~0.0094** — where the naive exponential gives `1e-29.5` and silences everything after the first sample. Measured on Earth by `tests/test_cloud_band.gd` (39 checks): a 1,436 m base, 1,604 m deep, scale height 8,427 m, **tau 0.381 straight down against 67.9 at the limb**, and the limb chord **286 km, 178x the vertical column** — so no single step budget serves both views. **Scalar, deliberately**: per-channel extinction is what a tinted deck needs, but no layer in Sol states a tau yet, so the change is one signature and not a rewrite |
-| `SpacesimCloudModel` | `model/cloud_model.gd` — **how a body's clouds are organised, and nothing about how they are drawn.** Two competing length scales: the **Rhines scale** `L_Rh = sqrt(U/beta)` (where zonal bands form, `beta = 2*Omega*cos(latitude)/a`) and the **Rossby deformation radius** `L_D = N*H/f` (how big one eddy is, evaluated at 45 degrees because `f` vanishes at the equator). `static banding(ratio)` turns `L_Rh/a` into the verdict a renderer reads — `BANDED` / `SHREDDED` / `FEATURELESS` / `UNKNOWN` — and **`FEATURELESS` is what lets a renderer skip generating a field at all**, which is why there is a verdict rather than a naked ratio. `static morphology(body, materials, luminosity, distance)` returns the ratio, both scales, the cell count and the `Rotation` the air actually has — **once per BODY, and every deck is handed that same object**, so a stack's decks share their band envelope exactly and differ only by field seed. That is deliberate and it is the right way round: Juno's gravity field puts Jupiter's jets ~3,000 km deep and quasi-cylindrical (Kaspi et al. 2018), so the band structure at 0.9 bar and at 7 bar *is* one structure. What it costs is that each level gets the same band WIDTH, where `L_Rh = sqrt(U/β)` should vary with height through the thermal wind — a per-level wind needs `T(lat)`, which the model has not got (vault `Cloud Layers` §11); `static rotation_of(body)` prefers content's `atmospheric_rotation_period` and **reports which it used**, because the fallback is out by 61x on Venus. `static cell_count(ratio)` and `static condensation_favouring(latitude, cells)` are where condensation is favoured, from the circulation cells — Earth's three give rising at 0 and 60 degrees and sinking at 30 and 90, which is the ITCZ, the subtropical deserts, the storm track and the polar high. `static layers(atmosphere, materials, gravity, equilibrium, body)` is the deck stack, a **selection** from `SpacesimAtmosphereModel.condensation_levels()` rather than a second derivation. **A parameterisation, not a simulation**: plausible morphology, not a weather model. Two limits are named rather than hidden — `buoyancy_frequency` is the **isothermal** value standing in for a gap (the profile's lapse IS the dry adiabat, so the model's own `N` is zero by construction; Earth comes to 0.018 against a real ~0.01), and `U` is authored per body. The three planets check: Jupiter 0.045 `BANDED`, Earth 0.104 `SHREDDED`, Venus 0.674 `FEATURELESS` — asserted, with the numbers behind them, by `tests/test_clouds.gd` |
-| `SpacesimBlobShape` | `model/blob_shape.gd` — **a body as an implicit field**, and the mechanism small bodies are drawn from. `BALLS` seeded spheres, fused with a polynomial smooth minimum, each placed to **overlap** one already there so the pile is connected before the fusion rounds it; the field is negative inside, positive outside, in body radii. **`roughness × irregularity` is subtracted from the field**, so relief is a function of position — and the octave count follows the cell size (`noise_for`), because an octave finer than three cells aliases into the extraction instead of shaping it. **`removals` cuts the field** (`max(field, reach - distance)`), which is mining: the shape is the seed plus a list of holes. `mesh(seed, radius, resolution, removals)` extracts it with **surface nets** — one vertex per cell the surface crosses, at the mean of the cell's edge crossings, and a quad round every grid edge whose ends differ in sign. No lookup tables, no icosphere and no deformation of anything: there is no surface until the field is asked for one. Normals are the field's **gradient**, so they are exact; triangles are wound by asking that normal, which is one comparison per triangle and cannot be wrong per axis (the usual way a surface net comes out with holes). `radius_at` marches the field inward from outside — sphere tracing with a safety factor because roughness makes the field no longer a true distance. **`arrays(seed, radius, resolution, removals)` is the extraction on its own** — arithmetic, and therefore worker-safe — while `mesh_from(arrays)` is the `RenderingServer` half that must be on the main thread; that split is what lets a body be shaped while the frame keeps running. `wire_mesh(mesh)` is the debug view's lines. **Cost, measured** (`tests/probe_blob_rock.gd`, 1 m radius): 48³ 0.36 s / 5,880 triangles, 64³ 0.81 s / 10,444, 96³ 2.6 s / 23,540, every mesh closed. **That is why the extraction is LAZY**: paid on approach, on the pool, never at system load. **A belt or a ring still cannot pay it per body** — a population needs a shape library reused with per-instance scale and rotation, or the GPU |
-| `SpacesimSurfaceDistribution` | `model/surface_distribution.gd` — **the field's own DISTRIBUTION, measured once per body; nothing draws it.** The ground is no longer a texture (the shader evaluates `surface_height` at every pixel), but a formula cannot tell you its own 70.8th percentile, and two numbers come from the measurement: the **colour ramp's** band edges — bands are authored as *area fractions* and a shader needs *heights* — and the **sea level**, which is the percentile the liquid band's share implies and the datum the displacement measures from. The bake survives for exactly that: one `BUILD_WIDTH` 256 sample of the field at build, on a local `RenderingDevice`, read back and reduced to a `QUANTILES` 65-entry table by `quantiles_of`. **The table is the interface; the image never leaves the file.** `value_at(table, share)` is the one interpolator every band edge goes through — clamped, linear between 1/64ths — and `linear_quantiles()` is the placeholder a material is built with before a bake lands. **The reconstruction uses the fixed `-1 .. 1` mapping the binning used, never the observed range**: that bug shifted every quantile toward the top of the distribution for two days and drew Earth as a featureless blue ball |
+| `StoichonStarModel` | `model/star_model.gd` — `static luminosity(body)`: what content pinned, or the piecewise mass–luminosity relation. `static effective_temperature(luminosity, radius)`: Stefan-Boltzmann, and **a check on the data rather than a restatement of it** — L and R are measured independently and the Sun's give 5772 K. Deliberately small: what a star *puts out*. Its angular size is geometry rather than output and lives in `StoichonLod.angular_radius` |
+| `StoichonSurfaceModel` | `model/surface_model.gd` — `static bond_albedo(body, materials)` and `static color(body, materials)`. **`bond_albedo` is NET as of 2026-10-16**: `A = (1 - f) * clear_sky + f * deck`, with `clear_sky = surface_albedo + air_albedo` — the whole planet cloudless, which is the form the published split is in. It replaced a GROSS mix (`f * cloud + (1 - f) * surface`) that gave the surface under a cloud no credit at all; both are valid and they are different numbers, and calibrating the total never distinguished them. That is how the model came to have its **cloud term 1.9x** the published one and its **clear term a fifth** of it, cancelling to the right answer: Earth's all-sky albedo is 0.293 and its clear-sky 0.149 (Stephens et al. 2015, CERES EAFB), so the cloud's share is 0.144. Under the net accounting every term is within 9% — cloud 0.251 against 0.233, clear 0.054 against 0.060, total 0.306. `static air_albedo(body, materials)` is the air's own reflection (0 for an airless body, a value and not a missing one), `static clear_sky_albedo(...)` is surface + air, and `static reflectance_terms(body, materials)` returns the four terms as a Dictionary so the *split* can be compared with the published one rather than only the total. The surface contribution is area-weighted over the coverage fractions. `static lambert_phase(phase_angle)` is the **disc-averaged illuminated fraction** used to weight a body's share of the view: `(sin a + (pi - a)*cos a)/pi`, 1 at full, 1/pi at half, and 0 only at new — so a crescent contributes, where a clamped cosine returns exactly zero for everything past the half moon. **It is Bond-albedo normalised** (its phase integral is 3/2), which is why no geometric albedo is needed anywhere. **The two deliberately disagree about the deck**: the albedo *includes* it, because the temperature depends on it, and the drawn colour does *not*, because the deck was drawn as its own layer on top — counting it in both places gave Earth (0.66, 0.69, 0.73), a colour only 1.15:1 from neutral, which the eye reads as grey. The split outlives the drawn deck, and should: the reflectance is physics and the colour is a picture. **What the surface IS, since 2026-10-19, is the other half of this class.** `enum Phase { UNKNOWN, SOLID, LIQUID, GAS }` and `static phase_of(material, temperature, pressure)` settle a substance's phase from the ambient total pressure and the substance as pure — a sea, not a trace gas, which is the opposite of `condensation_temperature_at`'s partial-pressure use. `enum SurfaceKind { ROCKY, OCEAN, ICE, GAS_GIANT }` and `static surface_kind(body, materials, luminosity, distance)` are the one word a renderer branches on, so a gas giant cannot be handed a sea level (**there is no `MOLTEN`: it needs a solidus the table does not carry, and an unreachable verdict is worse than none**). `static ocean_bearing(...)` is the heaviest volatile in the coverage with its phase — Titan's `methane_ice` comes back **liquid** at its own 92.8 K, which is real physics overruling a label. `static sea_level_percentile(...)` is the liquid fraction, and **the percentile runs from the bottom**: Earth's 0.708 of ocean puts sea level at the 0.708 mark, the same relationship `StoichonCloudMaps.threshold_for` has with coverage, so a fraction of the area means the fraction. `static bands(...)` is the surface as bands up the slope (`{material, from, to, color, albedo, roughness, specular}`) — liquids first because a liquid fills the basins, then the solids **in the order content authored the coverage dictionary** (Godot keeps insertion order, so the order an author writes is the height order), with each colour's **luminance set to its own albedo and its hue kept** because the authored palette is 2.3-3.4x brighter than the reflectance it claims. `static snow_line(...)` is `(T_surface - T_freeze) / lapse_rate(...)` in metres — derived, and low, because that lapse is the *dry* adiabat. `static polar_ice_line(body)` returns **0**: a polar cap is a latitude and the engine has no horizontal temperature yet |
+| `StoichonCloudBand` | `model/cloud_band.gd` — **the band's laws and the slab's light.** `static two_flux(tau)` returns `(reflectance, transmittance)` — `tau/(1+tau)` and `1/(1+tau)`, so the two faces are exact complements, which is what lets one texture serve both and why a thick base darkens by the amount the top whitens. `static henyey_greenstein(cos, g)` is the normalised lobe that puts a base's bright side where physics does: looking *through* the slab at the star. `static sky_radiance(cos, rayleigh_tau, mie_tau, intensity, g)` is the closed form of the sky's own single-scatter loop over a slab, `p(theta)·beta·H` — a `vec3` because `beta` is, so **the colour is the Rayleigh ratio and there is no blue constant to choose**. **And it is a slab on a ray:** how deep a column is, how far through it the eye looks, and how many samples that chord deserves.** Arithmetic only, and it exists because of how the three previous attempts on the cloud failed: not from a wrong picture but from an **unobservable** one. A deck is `1 - exp(-39)` opaque within its first limb sample, so every later sample contributes `transmittance = 0` and any rewrite of the integration is invisible — three were made, each reported as *"visually nothing changed"*. These are the numbers that end that in one run. `static column_top(value, threshold, full_height)` is the map's value read as a **height, not an alpha**: the base is a plane and only the top follows the field, so a lateral edge is a taper rather than a cut and "no cloud here" is a gap rather than a special case (`h -> 0` makes the chord zero by arithmetic). `static extinction(optical_depth, scale_height)` is `tau / (scale_height * 0.5)` — a column one scale height deep is `2*tau`, stated rather than discovered — with the **`1 / (scale_height * 0.5)` fallback** for a layer that states no tau, which is every layer but the two giants and is what made the deck a lid. `static chord(outer, base, impact)` is the path inside the band: `0` past the top, `2*sqrt(outer^2 - impact^2)` for a grazing ray, and one arc for a ray that reaches the ground — **so the chord halves, not doubles, as the closest approach passes inside the base**, because the march ends at the surface rather than the far side. `impact = 0` returns exactly the slab's thickness, which is the anchor. `static samples(chord, extinction)` is `ceil(chord * extinction * 6)` and the six is the law: **a sample may not advance more than a sixth of an e-fold**, because past that it integrates through a quantity it cannot represent, which is what a lid is — so the count follows from the geometry instead of being chosen. `static stop_steps()` is the ceiling that makes the limb affordable, **derived** from `OPACITY_BOUND`(0.01) and `TAU_PER_STEP` rather than typed in, and lands on **28**. `static marched_transmittance(chord, extinction)` is what a correctly stepped march actually reports: `exp(-min(tau, 28/6))`, so a **thin band is exactly `exp(-tau)`** and a thick one stops just under the bound at **~0.0094** — where the naive exponential gives `1e-29.5` and silences everything after the first sample. Measured on Earth by `tests/test_cloud_band.gd` (39 checks): a 1,436 m base, 1,604 m deep, scale height 8,427 m, **tau 0.381 straight down against 67.9 at the limb**, and the limb chord **286 km, 178x the vertical column** — so no single step budget serves both views. **Scalar, deliberately**: per-channel extinction is what a tinted deck needs, but no layer in Sol states a tau yet, so the change is one signature and not a rewrite |
+| `StoichonCloudModel` | `model/cloud_model.gd` — **how a body's clouds are organised, and nothing about how they are drawn.** Two competing length scales: the **Rhines scale** `L_Rh = sqrt(U/beta)` (where zonal bands form, `beta = 2*Omega*cos(latitude)/a`) and the **Rossby deformation radius** `L_D = N*H/f` (how big one eddy is, evaluated at 45 degrees because `f` vanishes at the equator). `static banding(ratio)` turns `L_Rh/a` into the verdict a renderer reads — `BANDED` / `SHREDDED` / `FEATURELESS` / `UNKNOWN` — and **`FEATURELESS` is what lets a renderer skip generating a field at all**, which is why there is a verdict rather than a naked ratio. `static morphology(body, materials, luminosity, distance)` returns the ratio, both scales, the cell count and the `Rotation` the air actually has — **once per BODY, and every deck is handed that same object**, so a stack's decks share their band envelope exactly and differ only by field seed. That is deliberate and it is the right way round: Juno's gravity field puts Jupiter's jets ~3,000 km deep and quasi-cylindrical (Kaspi et al. 2018), so the band structure at 0.9 bar and at 7 bar *is* one structure. What it costs is that each level gets the same band WIDTH, where `L_Rh = sqrt(U/β)` should vary with height through the thermal wind — a per-level wind needs `T(lat)`, which the model has not got (vault `Cloud Layers` §11); `static rotation_of(body)` prefers content's `atmospheric_rotation_period` and **reports which it used**, because the fallback is out by 61x on Venus. `static cell_count(ratio)` and `static condensation_favouring(latitude, cells)` are where condensation is favoured, from the circulation cells — Earth's three give rising at 0 and 60 degrees and sinking at 30 and 90, which is the ITCZ, the subtropical deserts, the storm track and the polar high. `static layers(atmosphere, materials, gravity, equilibrium, body)` is the deck stack, a **selection** from `StoichonAtmosphereModel.condensation_levels()` rather than a second derivation. **A parameterisation, not a simulation**: plausible morphology, not a weather model. Two limits are named rather than hidden — `buoyancy_frequency` is the **isothermal** value standing in for a gap (the profile's lapse IS the dry adiabat, so the model's own `N` is zero by construction; Earth comes to 0.018 against a real ~0.01), and `U` is authored per body. The three planets check: Jupiter 0.045 `BANDED`, Earth 0.104 `SHREDDED`, Venus 0.674 `FEATURELESS` — asserted, with the numbers behind them, by `tests/test_clouds.gd` |
+| `StoichonBlobShape` | `model/blob_shape.gd` — **a body as an implicit field**, and the mechanism small bodies are drawn from. `BALLS` seeded spheres, fused with a polynomial smooth minimum, each placed to **overlap** one already there so the pile is connected before the fusion rounds it; the field is negative inside, positive outside, in body radii. **`roughness × irregularity` is subtracted from the field**, so relief is a function of position — and the octave count follows the cell size (`noise_for`), because an octave finer than three cells aliases into the extraction instead of shaping it. **`removals` cuts the field** (`max(field, reach - distance)`), which is mining: the shape is the seed plus a list of holes. `mesh(seed, radius, resolution, removals)` extracts it with **surface nets** — one vertex per cell the surface crosses, at the mean of the cell's edge crossings, and a quad round every grid edge whose ends differ in sign. No lookup tables, no icosphere and no deformation of anything: there is no surface until the field is asked for one. Normals are the field's **gradient**, so they are exact; triangles are wound by asking that normal, which is one comparison per triangle and cannot be wrong per axis (the usual way a surface net comes out with holes). `radius_at` marches the field inward from outside — sphere tracing with a safety factor because roughness makes the field no longer a true distance. **`arrays(seed, radius, resolution, removals)` is the extraction on its own** — arithmetic, and therefore worker-safe — while `mesh_from(arrays)` is the `RenderingServer` half that must be on the main thread; that split is what lets a body be shaped while the frame keeps running. `wire_mesh(mesh)` is the debug view's lines. **Cost, measured** (`tests/probe_blob_rock.gd`, 1 m radius): 48³ 0.36 s / 5,880 triangles, 64³ 0.81 s / 10,444, 96³ 2.6 s / 23,540, every mesh closed. **That is why the extraction is LAZY**: paid on approach, on the pool, never at system load. **A belt or a ring still cannot pay it per body** — a population needs a shape library reused with per-instance scale and rotation, or the GPU |
+| `StoichonSurfaceDistribution` | `model/surface_distribution.gd` — **the field's own DISTRIBUTION, measured once per body; nothing draws it.** The ground is no longer a texture (the shader evaluates `surface_height` at every pixel), but a formula cannot tell you its own 70.8th percentile, and two numbers come from the measurement: the **colour ramp's** band edges — bands are authored as *area fractions* and a shader needs *heights* — and the **sea level**, which is the percentile the liquid band's share implies and the datum the displacement measures from. The bake survives for exactly that: one `BUILD_WIDTH` 256 sample of the field at build, on a local `RenderingDevice`, read back and reduced to a `QUANTILES` 65-entry table by `quantiles_of`. **The table is the interface; the image never leaves the file.** `value_at(table, share)` is the one interpolator every band edge goes through — clamped, linear between 1/64ths — and `linear_quantiles()` is the placeholder a material is built with before a bake lands. **The reconstruction uses the fixed `-1 .. 1` mapping the binning used, never the observed range**: that bug shifted every quantile toward the top of the distribution for two days and drew Earth as a featureless blue ball |
 
-| `SpacesimSurfaceGpu` | `model/surface_gpu.gd` — **the height field baked on the GPU**, one `R16F` map per body. **R16F and not R8** because the height is *differentiated* to make normals and 256 levels over a ±10 km range terrace every gentle slope; **and not two 8-bit channels packed into an `RGBA8`** because filtering and mipping a value split across two channels is invalid — mip 1 and beyond average the halves separately. The shape is `SpacesimCloudGpu`'s (a local `RenderingDevice`, render-thread-only calls, `free()`d or the process segfaults at teardown); the arrangement is **not** — there is no CPU fallback to keep in step, so a headless run has no surface maps. **The push constant must be supplied at exactly the block's size (112 bytes)** — the driver rejects both more and less, unlike a uniform block where padding is the caller's. This is the **build-time** bake: it asks for the whole map and reads it back, because the field's *distribution* has to be measured for the sea level and the band edges. **`heights(plan, directions)` is the geometry's height source** and the reason there is no raster: the *same* kernel's field, asked at a list of unit directions and read back as one float each, at `footprint = 0` — which `surface_height` reads as *no limit*, so a point's height is a pure function of its direction and never changes when the LOD does. A map could not do this job: at 1 km altitude a facet is ~35 m across, so a global map fine enough for the mesh is 10^12 texels, and it would quantise the lattice's explicit directions onto a grid and interpolate them back off. The two kernels share `surface_params.gdshaderinc` — the push-constant block and the `SurfacePlan` assembly — so a bake and a heights dispatch cannot read different numbers; the GPU suite reconstructs a baked texel's direction and compares, and they agree to 0.0007, which is the map's own half-float quantisation. **Its shader and pipeline are separate from the bake's** (a compute source is one program) and are compiled on first use, so a device holds four RIDs once heights have been asked for. The refinement (one rung at a time) is `SpacesimSurfaceBakePass`'s, on the render thread |
-| `SpacesimCloudMaps` | `model/cloud_maps.gd` — **the baked maps, one per (body, layer), and the size each deserves.** `static required_width(radius, distance, pixel_angle)` is the law `tests/probe_cloud_maps.gd` measured: a map stops resolving when its texel `2*pi*r/W` projects past a pixel, so the width worth having is `2*pi*r / (pixel_angle * distance)` — **refinement on approach is therefore automatic and nothing is laddered or tuned.** `quantise()` rounds up to a power of two inside `FLOOR_WIDTH`(256)..`MAX_WIDTH`(8192). `map(body_id, layer, radius, coverage, distance, morphology)` **never stalls and never returns null once there is something to see**: a floor map is baked synchronously on first sight (256x128, 26 ms measured) so a body is never cloudless by accident, and everything above it goes to a `WorkerThreadPool` task that lands when it lands, leaving the previous map in place so the picture improves rather than blinking. `poll()` is the **main-thread** step that turns a finished `Image` into an `ImageTexture` — the texture is the `RenderingServer`'s, so it is created there and not in the task. `static mean_opacity(image, threshold, depth)` is **the mean of `R(tau) = tau/(1+tau)` over the covered texels** — the complement of the transmittance the march integrates, so the top's opacity and the base's transmittance are one law from one texel. It replaced a reflectance ramp that saturated at 1, which made a tau-1.5 deck hide everything from above while transmitting a fifth of the sky underneath it — what a tau layer's ramp is fitted to, because its drawn reflectance is `ALBEDO * ALPHA` with ALPHA exponential, and fitting the ramp to the mean *thickness* would over-brighten it. Measured at the local vertical, so the limb is deliberately brighter than the budget. `map(...)` takes the layer's `depth` and stores both means. `static threshold_for(image, coverage)` is the layer's coverage as a **percentile of the map's own field**, so the achieved coverage is the requested one: **25/50/75% asked gives 25.3/50.2/75.0%**. A `FEATURELESS` or `UNKNOWN` body gets no map, not a smaller one — the same skip as the field's, one layer up. Entries are least-recently-used capped at `MAX_ENTRIES`(24), and **that bound is soft**: a map with a refinement in flight cannot be evicted, so a burst of new bodies can exceed it by the pool's thread count. **`gpu_allowed` is TRUE by default** (2026-10-20, `5adfdcc`): *"that's why we bake on the GPU, not the CPU"* — 47 ms against ~230 s at 8192x4096 is the difference between a refinement that arrives while it is still wanted and one that lands below the altitude it was baked for. **The gate existed for one day and its reason was wrong**: the RID-allocator exhaustion it was blamed on turned out to be `SpacesimAtmospherePass`'s per-frame uniform set, in a pass this cache never touches. The CPU path stays as the headless fallback — `create_local_rendering_device()` is null there — and as the reference a test compares against. The dispatch is **main-thread**, because a local device refuses every call from a worker thread; `gpu_available()` is both the availability test and the answer to which thread may bake |
+| `StoichonSurfaceGpu` | `model/surface_gpu.gd` — **the height field baked on the GPU**, one `R16F` map per body. **R16F and not R8** because the height is *differentiated* to make normals and 256 levels over a ±10 km range terrace every gentle slope; **and not two 8-bit channels packed into an `RGBA8`** because filtering and mipping a value split across two channels is invalid — mip 1 and beyond average the halves separately. The shape is `StoichonCloudGpu`'s (a local `RenderingDevice`, render-thread-only calls, `free()`d or the process segfaults at teardown); the arrangement is **not** — there is no CPU fallback to keep in step, so a headless run has no surface maps. **The push constant must be supplied at exactly the block's size (112 bytes)** — the driver rejects both more and less, unlike a uniform block where padding is the caller's. This is the **build-time** bake: it asks for the whole map and reads it back, because the field's *distribution* has to be measured for the sea level and the band edges. **`heights(plan, directions)` is the geometry's height source** and the reason there is no raster: the *same* kernel's field, asked at a list of unit directions and read back as one float each, at `footprint = 0` — which `surface_height` reads as *no limit*, so a point's height is a pure function of its direction and never changes when the LOD does. A map could not do this job: at 1 km altitude a facet is ~35 m across, so a global map fine enough for the mesh is 10^12 texels, and it would quantise the lattice's explicit directions onto a grid and interpolate them back off. The two kernels share `surface_params.gdshaderinc` — the push-constant block and the `SurfacePlan` assembly — so a bake and a heights dispatch cannot read different numbers; the GPU suite reconstructs a baked texel's direction and compares, and they agree to 0.0007, which is the map's own half-float quantisation. **Its shader and pipeline are separate from the bake's** (a compute source is one program) and are compiled on first use, so a device holds four RIDs once heights have been asked for. The refinement (one rung at a time) is `StoichonSurfaceBakePass`'s, on the render thread |
+| `StoichonCloudMaps` | `model/cloud_maps.gd` — **the baked maps, one per (body, layer), and the size each deserves.** `static required_width(radius, distance, pixel_angle)` is the law `tests/probe_cloud_maps.gd` measured: a map stops resolving when its texel `2*pi*r/W` projects past a pixel, so the width worth having is `2*pi*r / (pixel_angle * distance)` — **refinement on approach is therefore automatic and nothing is laddered or tuned.** `quantise()` rounds up to a power of two inside `FLOOR_WIDTH`(256)..`MAX_WIDTH`(8192). `map(body_id, layer, radius, coverage, distance, morphology)` **never stalls and never returns null once there is something to see**: a floor map is baked synchronously on first sight (256x128, 26 ms measured) so a body is never cloudless by accident, and everything above it goes to a `WorkerThreadPool` task that lands when it lands, leaving the previous map in place so the picture improves rather than blinking. `poll()` is the **main-thread** step that turns a finished `Image` into an `ImageTexture` — the texture is the `RenderingServer`'s, so it is created there and not in the task. `static mean_opacity(image, threshold, depth)` is **the mean of `R(tau) = tau/(1+tau)` over the covered texels** — the complement of the transmittance the march integrates, so the top's opacity and the base's transmittance are one law from one texel. It replaced a reflectance ramp that saturated at 1, which made a tau-1.5 deck hide everything from above while transmitting a fifth of the sky underneath it — what a tau layer's ramp is fitted to, because its drawn reflectance is `ALBEDO * ALPHA` with ALPHA exponential, and fitting the ramp to the mean *thickness* would over-brighten it. Measured at the local vertical, so the limb is deliberately brighter than the budget. `map(...)` takes the layer's `depth` and stores both means. `static threshold_for(image, coverage)` is the layer's coverage as a **percentile of the map's own field**, so the achieved coverage is the requested one: **25/50/75% asked gives 25.3/50.2/75.0%**. A `FEATURELESS` or `UNKNOWN` body gets no map, not a smaller one — the same skip as the field's, one layer up. Entries are least-recently-used capped at `MAX_ENTRIES`(24), and **that bound is soft**: a map with a refinement in flight cannot be evicted, so a burst of new bodies can exceed it by the pool's thread count. **`gpu_allowed` is TRUE by default** (2026-10-20, `5adfdcc`): *"that's why we bake on the GPU, not the CPU"* — 47 ms against ~230 s at 8192x4096 is the difference between a refinement that arrives while it is still wanted and one that lands below the altitude it was baked for. **The gate existed for one day and its reason was wrong**: the RID-allocator exhaustion it was blamed on turned out to be `StoichonAtmospherePass`'s per-frame uniform set, in a pass this cache never touches. The CPU path stays as the headless fallback — `create_local_rendering_device()` is null there — and as the reference a test compares against. The dispatch is **main-thread**, because a local device refuses every call from a worker thread; `gpu_available()` is both the availability test and the answer to which thread may bake |
 ### Temperature
 
 | | |
 |---|---|
-| `static heat_capacity(atmosphere, materials) -> float` | the mix's specific heat, J/(kg·K) — **mass-weighted**, unlike every other mix here, because it is per kilogram. From `SpacesimSpecies.heat_capacity` |
+| `static heat_capacity(atmosphere, materials) -> float` | the mix's specific heat, J/(kg·K) — **mass-weighted**, unlike every other mix here, because it is per kilogram. From `StoichonSpecies.heat_capacity` |
 | `static lapse_rate(atmosphere, materials, gravity) -> float` | the dry adiabatic lapse rate, `g/c_p`, K/m. **Derived, and a real check**: Earth's composition and gravity give 9.72 K/km against a textbook 9.8; Venus 10.46 against 10.5; Mars 4.43 against 4.4 |
-| `static greenhouse_optical_depth(atmosphere, materials, gravity) -> float` | `sum(kappa_i * column_i)` over the infrared, where `column_i = x_i * (M_i/m-bar) * (p_surface/g)`. `kappa` is `SpacesimSpecies.greenhouse[0]`, and is **explicitly zero** for the gases transparent in the infrared, so "known transparent" and "not known" do not look alike |
+| `static greenhouse_optical_depth(atmosphere, materials, gravity) -> float` | `sum(kappa_i * column_i)` over the infrared, where `column_i = x_i * (M_i/m-bar) * (p_surface/g)`. `kappa` is `StoichonSpecies.greenhouse[0]`, and is **explicitly zero** for the gases transparent in the infrared, so "known transparent" and "not known" do not look alike |
 | `static surface_temperature(atmosphere, materials, gravity, equilibrium) -> float` | **the greenhouse**: `T_eff * (1 + 3*tau/4)^(1/4)`, the grey-atmosphere result |
 | `static reference_temperature(body, materials, luminosity, distance) -> float` | **what everything reads.** A content pin first, then the greenhouse, then plain equilibrium. See **Calibration** below |
 | `static tropopause_temperature(equilibrium) -> float` | the grey-atmosphere skin temperature, `2^-1/4 * T_eff` = 0.8409 |
@@ -562,12 +562,12 @@ season — it falls out of asking the orbit for a position.
    sunlight gets through 92 bar of CO₂, per the Venera landers. One scattering event cannot make that
    dome; multiple scattering is the fix.
 A third limitation used to sit here — the exposure exposed for the light at the *top* of the air rather
-than at the observer, worth a factor of forty on Venus — and **`SpacesimExposurePass` closed it** by
+than at the observer, worth a factor of forty on Venus — and **`StoichonExposurePass` closed it** by
 metering the finished frame instead of the model: the air is in the buffer before the metre reads it. See
-`Notes/Projects/Programming/SpaceSim/Lighting and Exposure.md` §3a for the reasoning and §6a for the
+`Notes/Projects/Programming/Stoichon/Lighting and Exposure.md` §3a for the reasoning and §6a for the
 meter.
 
-| `SpacesimAtmosphereModel` | `model/atmosphere_model.gd` — the air's scattering and its **condensation levels**: `static rayleigh_coefficient(atmosphere, materials, temperature)` (the per-channel `kRlh` the sky shader takes, summed as each species' cross-section times its number density), `static absorption_coefficient(...)` and `static single_scatter_albedo(...)` (the visible absorbers — ozone so far — and `w = scatter/extinct`), `static condensation_levels(atmosphere, materials, gravity, equilibrium, body)` (**`body` is optional**, and where it carries `overrides.mean_surface_temperature` that pinned temperature IS the surface — ignoring it was the bug that kept the giants from having a deck at all, since `sol.tres` has carried Jupiter's 165 K since it was authored), `static condensation_temperature_at(material, fraction, total_pressure)` (**Clausius-Clapeyron at the species' PARTIAL pressure**, which is worth 80 K on Jupiter's ammonia: 263 Pa condenses it at 159 K, not the 1-atm 240 K) (**where a cloud deck sits**, derived from where a species reaches its `condensation_temperature`; returns per species a `Condensation` with a `Regime` of `LEVEL`, `DEEP` or `NONE` — **`DEEP` means it genuinely condenses but below the depth the model represents** (`MODELLED_PRESSURE_MULTIPLE`, one stated calibration and nothing per body, so a generated system cannot author an impossible depth), `NONE` means the troposphere never gets cold enough. **A level's `height` may be NEGATIVE**: the model's datum is the reference pressure, not a surface, so a gas giant's water cloud is a real deck at −43 km and 7 bar. `temperature_at` extends the adiabat below the datum for the same reason — the clamp at zero height is what made every sub-datum deck inexpressible) — **and it now says HOW each level formed**: `Condensation.formation` is `CONDENSATION` for a gas in the mix, `REACTION` for a product that is *not* in the mix and exists only where **all** of its `SpacesimSpecies.formed_from` reactants are present (ammonium hydrosulphide is NH3 and H2S meeting at a level, not a gas anyone puts in an atmosphere), or **`DEPOSITION` for a gas's own solid form — the ice sheet at the TOP of the convective column** (2026-11-03). That level's height is the tropopause itself, `(surface − ceiling)/Γ`, which is where `temperature_at` stops cooling and where rising air stops rising: **the cold trap, which is why cirrus is a thin sheet up there while cumulus is a lumpy deck at the base**, and why it needs no authored altitude. It is gated on the ceiling being below the solid's `melting_temperature` (the only honest test — a saturated column can hold only ONE water cloud, so a second lapse crossing does not exist), and it is **not capped by the tropopause**, because the cap is `(surface − ceiling)/Γ − height`, exactly zero up there — routing it through `_level_for` would collapse the node onto its own base. Earth: water at 1.4 km, ice at **7.7 km in a 779 m sheet**. **And since 2026-10-20 it says how DEEP the deck is**: `Condensation.thickness` is the **condensate scale height** `(R/L)·T_base²/Γ` — the height over which the saturation mixing ratio falls by e, from Clausius-Clapeyron along the body's own lapse, capped by the tropopause so a cloud cannot rise past it — **except a `DEPOSITION` level, which sits AT the tropopause and is evaluated at that temperature, uncapped**). Derived, so `SpacesimCloudLayer` carries no thickness; zero for a regime that is not `LEVEL`, and zero for a species with no `latent_heat` (this module's *not stated*). Measured: **Earth 1,604 m, Jupiter 3,969 m, Venus 160 m** — Earth and Jupiter are the order of the real decks (Venus's miss is its photochemical H₂SO₄, and its base sits *on* the tropopause so the cap binds rather than the scale). A species that is both an input and a product gets one level, not two, `static pressure_at(height, surface_pressure, scale_height)` (**hydrostatic on ONE scale height, good for about two and no further** — see the note below), `static scale_height(...)` (`kT/(m-bar g)`), `static shell_reach(...)` (**how many scale heights of air to draw** — see **The sky**), `static surface_gravity(body)`, `static reference_temperature(...)` (what content **pinned**, or equilibrium temperature), `static equilibrium_temperature(...)` (§3.6's first row, the placeholder), `static sky_scale(illuminance)`, `static coverage(...)`, and **the air's own reflection**: `static clear_sky_albedo(atmosphere, materials, gravity)` returns the per-channel fraction of starlight a cloudless sky scatters back — `0.5 * omega * (1 - exp(-tau))` with `tau = k(1/m) * H`, the half being the Rayleigh phase function's up/down symmetry and `omega` separating what is scattered from what is absorbed — and `static clear_sky_scalar(...)` weights the three channels (equal weights by default, which is a *stated* simplification: this is an energy question so luminance would be wrong, and the right weights are Planck at the star's effective temperature). **It takes no temperature and that is a result rather than a simplification**: the optical depth is `[sigma p / kT] * [kT / m-bar g] = sigma p / (m-bar g)`, so the temperature cancels exactly — which is also what stops `bond_albedo` depending on itself through the equilibrium temperature computed *from* it. **Aerosols are excluded on purpose:** `MIE_COEFFICIENT` is an Earth-authored volume coefficient applied to every body by the sky shader, and counting it here gave 1.4 Pa Triton an aerosol optical depth of 0.30, pushing its clear-sky albedo past 1.0 and every temperature on it to NaN. Dropping it took Earth's air from 0.123 to **0.055 against a published 0.059**. **`static conditions_at(atmosphere, materials, gravity, equilibrium, height, body)` is THE AIR WHERE THE EYE IS** — pressure and temperature at a height above the surface, with the surface temperature, the lapse rate, the tropopause and the scale height all derived inside from the two inputs a caller can be trusted with, because `condensation_levels` already showed what one inconsistently-passed part costs (the 518 K Venus). A pinned `mean_surface_temperature` is the surface, exactly as for a deck. Its limits are the profile's, not its own: one exponential for pressure, and a dry adiabat that flattens at the tropopause rather than warming above it. Read by `SpacesimSystemScene.conditions_at`, which is what the HUD's sensor column shows |
+| `StoichonAtmosphereModel` | `model/atmosphere_model.gd` — the air's scattering and its **condensation levels**: `static rayleigh_coefficient(atmosphere, materials, temperature)` (the per-channel `kRlh` the sky shader takes, summed as each species' cross-section times its number density), `static absorption_coefficient(...)` and `static single_scatter_albedo(...)` (the visible absorbers — ozone so far — and `w = scatter/extinct`), `static condensation_levels(atmosphere, materials, gravity, equilibrium, body)` (**`body` is optional**, and where it carries `overrides.mean_surface_temperature` that pinned temperature IS the surface — ignoring it was the bug that kept the giants from having a deck at all, since `sol.tres` has carried Jupiter's 165 K since it was authored), `static condensation_temperature_at(material, fraction, total_pressure)` (**Clausius-Clapeyron at the species' PARTIAL pressure**, which is worth 80 K on Jupiter's ammonia: 263 Pa condenses it at 159 K, not the 1-atm 240 K) (**where a cloud deck sits**, derived from where a species reaches its `condensation_temperature`; returns per species a `Condensation` with a `Regime` of `LEVEL`, `DEEP` or `NONE` — **`DEEP` means it genuinely condenses but below the depth the model represents** (`MODELLED_PRESSURE_MULTIPLE`, one stated calibration and nothing per body, so a generated system cannot author an impossible depth), `NONE` means the troposphere never gets cold enough. **A level's `height` may be NEGATIVE**: the model's datum is the reference pressure, not a surface, so a gas giant's water cloud is a real deck at −43 km and 7 bar. `temperature_at` extends the adiabat below the datum for the same reason — the clamp at zero height is what made every sub-datum deck inexpressible) — **and it now says HOW each level formed**: `Condensation.formation` is `CONDENSATION` for a gas in the mix, `REACTION` for a product that is *not* in the mix and exists only where **all** of its `StoichonSpecies.formed_from` reactants are present (ammonium hydrosulphide is NH3 and H2S meeting at a level, not a gas anyone puts in an atmosphere), or **`DEPOSITION` for a gas's own solid form — the ice sheet at the TOP of the convective column** (2026-11-03). That level's height is the tropopause itself, `(surface − ceiling)/Γ`, which is where `temperature_at` stops cooling and where rising air stops rising: **the cold trap, which is why cirrus is a thin sheet up there while cumulus is a lumpy deck at the base**, and why it needs no authored altitude. It is gated on the ceiling being below the solid's `melting_temperature` (the only honest test — a saturated column can hold only ONE water cloud, so a second lapse crossing does not exist), and it is **not capped by the tropopause**, because the cap is `(surface − ceiling)/Γ − height`, exactly zero up there — routing it through `_level_for` would collapse the node onto its own base. Earth: water at 1.4 km, ice at **7.7 km in a 779 m sheet**. **And since 2026-10-20 it says how DEEP the deck is**: `Condensation.thickness` is the **condensate scale height** `(R/L)·T_base²/Γ` — the height over which the saturation mixing ratio falls by e, from Clausius-Clapeyron along the body's own lapse, capped by the tropopause so a cloud cannot rise past it — **except a `DEPOSITION` level, which sits AT the tropopause and is evaluated at that temperature, uncapped**). Derived, so `StoichonCloudLayer` carries no thickness; zero for a regime that is not `LEVEL`, and zero for a species with no `latent_heat` (this module's *not stated*). Measured: **Earth 1,604 m, Jupiter 3,969 m, Venus 160 m** — Earth and Jupiter are the order of the real decks (Venus's miss is its photochemical H₂SO₄, and its base sits *on* the tropopause so the cap binds rather than the scale). A species that is both an input and a product gets one level, not two, `static pressure_at(height, surface_pressure, scale_height)` (**hydrostatic on ONE scale height, good for about two and no further** — see the note below), `static scale_height(...)` (`kT/(m-bar g)`), `static shell_reach(...)` (**how many scale heights of air to draw** — see **The sky**), `static surface_gravity(body)`, `static reference_temperature(...)` (what content **pinned**, or equilibrium temperature), `static equilibrium_temperature(...)` (§3.6's first row, the placeholder), `static sky_scale(illuminance)`, `static coverage(...)`, and **the air's own reflection**: `static clear_sky_albedo(atmosphere, materials, gravity)` returns the per-channel fraction of starlight a cloudless sky scatters back — `0.5 * omega * (1 - exp(-tau))` with `tau = k(1/m) * H`, the half being the Rayleigh phase function's up/down symmetry and `omega` separating what is scattered from what is absorbed — and `static clear_sky_scalar(...)` weights the three channels (equal weights by default, which is a *stated* simplification: this is an energy question so luminance would be wrong, and the right weights are Planck at the star's effective temperature). **It takes no temperature and that is a result rather than a simplification**: the optical depth is `[sigma p / kT] * [kT / m-bar g] = sigma p / (m-bar g)`, so the temperature cancels exactly — which is also what stops `bond_albedo` depending on itself through the equilibrium temperature computed *from* it. **Aerosols are excluded on purpose:** `MIE_COEFFICIENT` is an Earth-authored volume coefficient applied to every body by the sky shader, and counting it here gave 1.4 Pa Triton an aerosol optical depth of 0.30, pushing its clear-sky albedo past 1.0 and every temperature on it to NaN. Dropping it took Earth's air from 0.123 to **0.055 against a published 0.059**. **`static conditions_at(atmosphere, materials, gravity, equilibrium, height, body)` is THE AIR WHERE THE EYE IS** — pressure and temperature at a height above the surface, with the surface temperature, the lapse rate, the tropopause and the scale height all derived inside from the two inputs a caller can be trusted with, because `condensation_levels` already showed what one inconsistently-passed part costs (the 518 K Venus). A pinned `mean_surface_temperature` is the surface, exactly as for a deck. Its limits are the profile's, not its own: one exponential for pressure, and a dry adiabat that flattens at the tropopause rather than warming above it. Read by `StoichonSystemScene.conditions_at`, which is what the HUD's sensor column shows |
 | | **Three conventions the deck derivation rests on, and every one was got wrong once.** The tropopause is the skin temperature of the **equilibrium** temperature (`tropopause_temperature(equilibrium)`), not of the greenhouse-adjusted surface — passing it the surface put the ceiling 28 K too warm, and `temperature_at`, `surface_temperature` and `condensation_levels` now share the one pairing. And the deck check is a **height** against the literature's altitude ranges, because `pressure_at` cannot span more than a couple of scale heights: Earth's cloud base comes to 0.82 bar against a real ~0.9, Venus's to 3.5 against a real ~0.7–1. And **`condensation_levels`' `equilibrium` argument must be `equilibrium_temperature()`, never `reference_temperature()`** — the latter returns what content *pinned*, and passing a pinned 737 K Venus here raises the tropopause to 620 K and returns `NONE` for every species, deleting the planet's deck (measured 2026-10-20) |
 
 **Calibrated against measured Bond albedos** (`test_surface.gd`): Luna 0.120 vs 0.110 measured,
@@ -579,13 +579,13 @@ Known data limitation, named rather than fudged: **one `regolith` material canno
 tolerance. Io and Europa are not asserted at all — their bright frosts (SO₂ in particular) need their
 own species and verified albedos.
 
-Shared with the scene: the colour the renderer draws is `SpacesimSurfaceModel.color`, unless content
+Shared with the scene: the colour the renderer draws is `StoichonSurfaceModel.color`, unless content
 pinned `surface_color`. A body with neither surface nor deck gets `UNPINNED_COLOR`, deliberately
 unlovely so a placeholder is never mistaken for a result.
 
 ## Lighting
 
-`addons/spacesim/lighting/` — the star as a physical light source, and the camera that exposes for it.
+`addons/stoichon/lighting/` — the star as a physical light source, and the camera that exposes for it.
 
 A fixed light energy cannot work across a solar system: Mercury to Neptune is **6,000:1**, about 12.6
 stops, before surface albedo. So the star's light is set in **lux** and the camera exposes. The same
@@ -594,21 +594,21 @@ code lights every distance; nothing is hand-tuned per location.
 **Requires `rendering/lights_and_shadows/use_physical_light_units = true`** in `project.godot`. With
 it off, Godot ignores `light_intensity_lux` entirely and every number below is correct and invisible.
 
-### `SpacesimStarLight` — `RefCounted`
+### `StoichonStarLight` — `RefCounted`
 
 | Member | |
 |---|---|
 | `LUMINOUS_EFFICACY` | 94 lm/W for sunlight; a constant, with a Planck-derived value as a later refinement |
 | `luminosity`, `light: DirectionalLight3D` | |
 | `create(parent, luminosity, temperature, radius) -> DirectionalLight3D` | sets `light_temperature` and keeps the star's radius. The `light_angular_distance` is **not** set here — it follows the observer's distance, so `aim_at` sets it |
-| `static angular_radius(...)` | see `SpacesimStarModel` |
+| `static angular_radius(...)` | see `StoichonStarModel` |
 | `static irradiance(luminosity, distance) -> float` | W/m² — the solar constant, 1361, at 1 au |
 | `static illuminance(luminosity, distance) -> float` | lux — 128,000 at 1 au |
 | `aim_at(observer_position, star_position) -> void` | aims the light and sets its strength **and its angular size** for that distance — the disk is a fact about the same distance, so 0.533° at one au is where it lands rather than where it is pinned |
 
-### `SpacesimExposure` — `RefCounted`
+### `StoichonExposure` — `RefCounted`
 
-**The window and the rate live here; the frame is metered.** `SpacesimExposurePass` reads the rendered
+**The window and the rate live here; the frame is metered.** `StoichonExposurePass` reads the rendered
 pixels and applies one multiplier to them — the `Lighting` section below has the mechanism. What is left
 in this class is what the pass cannot own: the two ends of the window, the adaptation rate, the reference
 lux the ambient is expressed in, and the camera attributes that must stay attached at identity.
@@ -658,7 +658,7 @@ argument.
 > borrowed the first's authority.
 >
 > It was the compensation for a calibrated sky looking too dim, and it went when the pass made it
-> unnecessary: `SpacesimExposurePass` meters the finished frame and applies one multiplier to it, so
+> unnecessary: `StoichonExposurePass` meters the finished frame and applies one multiplier to it, so
 > the frame's exposure is decided by **what is on the screen**, not by an anchor computed from the
 > light at the observer. Nothing replaced it — that is the point.
 >
@@ -668,11 +668,11 @@ argument.
 > *"I want the scene to be rendered scientifically correct, THEN apply the EV pass to make dim things
 > visible, or bright things resolvable."*
 >
-> What remains in `SpacesimExposure` is the light-adapted floor (`MIN_MULTIPLIER`) and the ceiling
+> What remains in `StoichonExposure` is the light-adapted floor (`MIN_MULTIPLIER`) and the ceiling
 > (`MAX_MULTIPLIER`, moved by `exposure.range_stops`) — both states of the eye, neither a compensation.
 
 **The ambient is the star field's own light, summed from the catalogue** — `AMBIENT_SOURCE_COLOR`, with
-its energy set each time `sky.star_depth` changes from `SpacesimStarSky.illuminance()`. It is *not*
+its energy set each time `sky.star_depth` changes from `StoichonStarSky.illuminance()`. It is *not*
 `AMBIENT_SOURCE_BG`: Godot builds that ambient from a radiance **cubemap**, and a sky of point sources
 cannot be represented in one. The sky is still the light source; it is not asked to travel through a
 cubemap to say so. Evert, 2026-10-14: *"The sky should be the ambient light source."*
@@ -698,7 +698,7 @@ are consistent everywhere, so nothing looks wrong — and both were inferred bef
 **The star is a source, not a reflector**: it cannot be brought into range without making everything
 else black, so it is allowed to clip and `glow_*` handles how that reads. Nothing here exposes for it.
 
-### `SpacesimExposurePass` — `CompositorEffect`
+### `StoichonExposurePass` — `CompositorEffect`
 
 `lighting/exposure_pass.gd`. **The frame-wide exposure**: the metre and the multiply in one compute pass at
 `POST_TRANSPARENT`, which the class reference documents as running *"before any built-in post-processing
@@ -706,8 +706,8 @@ effects"* — so Godot's glow and tonemap both see what it wrote.
 
 | | |
 |---|---|
-| **sample** | `SAMPLES_X × SAMPLES_Y` (32×18) invocations, each averaging its own block of the frame. **Every texel is capped at `CAP`** before the block mean is taken, then that mean is weighted by `SpacesimExposureMeter`'s radial profile. Writes `(weighted, weight)` per cell. |
-| **finalize** | one invocation: the weighted mean, `TARGET_AVERAGE / mean` clamped to `SpacesimExposure`'s window, then the temporal lerp against the previous frame. **A mean of zero pins at the ceiling** rather than dividing. |
+| **sample** | `SAMPLES_X × SAMPLES_Y` (32×18) invocations, each averaging its own block of the frame. **Every texel is capped at `CAP`** before the block mean is taken, then that mean is weighted by `StoichonExposureMeter`'s radial profile. Writes `(weighted, weight)` per cell. |
+| **finalize** | one invocation: the weighted mean, `TARGET_AVERAGE / mean` clamped to `StoichonExposure`'s window, then the temporal lerp against the previous frame. **A mean of zero pins at the ceiling** rather than dividing. |
 | **apply** | the frame × that one number. Alpha is left alone — it is coverage, not light. |
 | `frame_delta` | **set by the game each frame.** There is no delta inside `_render_callback`, and a wall clock there would read the render thread's timing rather than the frame's. |
 | `status()` | the instrument: whether it built, and how many frames it has dispatched. |
@@ -719,7 +719,7 @@ is what keeps the cap meaning what it means on the CPU.
 **Three preconditions, each measured:** the camera attributes must stay **attached** (`attributes = null`
 puts the engine's lux convention out of the pipeline and renders ~95× bright); `Environment.tonemap_exposure`
 must stay **1.0**, because the glow applies the exposure itself (`copy.glsl:195`) and an exposure in both
-places is applied twice; and `SpacesimExposure.identity()` is what puts the camera side at 1.0.
+places is applied twice; and `StoichonExposure.identity()` is what puts the camera side at 1.0.
 
 **Verified in the running game**, not only in a probe: `tests/probe_frame_exposure.gd` toggles the effect's
 inherited `enabled` flag inside one run and finds the frame's centre luminance moving ×0.86 — the A/B is
@@ -727,10 +727,10 @@ within a run because the screenshot rig's noise floor is ~2.24% and would have t
 **Whether the metre's value is the right one is a judgement about a picture**, and `tests/run.sh` cannot
 make it: the suite is `--headless`, where there is no `RenderingDevice` at all.
 
-### `SpacesimExposureMeter` — `RefCounted` (static)
+### `StoichonExposureMeter` — `RefCounted` (static)
 
 `lighting/exposure_meter.gd`. **The frame metre**: one exposure number read from the rendered pixels,
-which is what `SpacesimExposure`'s adaptation targets once Track B3/B4 land. Pure arithmetic — the caller
+which is what `StoichonExposure`'s adaptation targets once Track B3/B4 land. Pure arithmetic — the caller
 supplies luminances and gets a multiplier — so its behaviour is checkable headlessly
 (`tests/test_meter.gd`, 23 checks, mutation-checked against a uniform weight).
 
@@ -738,7 +738,7 @@ supplies luminances and gets a multiplier — so its behaviour is checkable head
 |---|---|
 | `weight(offset) -> float` | `exp(-(r/SIGMA)^2)`, with `r` in **half-diagonal units** — the centre is 1 and a corner 0.0019. Monotonic in the radius, and steep enough that a bright thing at the perimeter "contributes only a little" |
 | `weighted_mean(samples, width, height) -> float` | the **capped**, weighted mean of a row-major grid. The centre is the grid's own centre, so the weighting is the same shape at any reduction |
-| `target_multiplier(mean) -> float` | `TARGET_AVERAGE / mean`, clamped to `SpacesimExposure.MIN_MULTIPLIER`…`MAX_MULTIPLIER` — the same 32-stop window, so nothing here can run away. A mean of zero **pins at the ceiling** rather than dividing by it |
+| `target_multiplier(mean) -> float` | `TARGET_AVERAGE / mean`, clamped to `StoichonExposure.MIN_MULTIPLIER`…`MAX_MULTIPLIER` — the same 32-stop window, so nothing here can run away. A mean of zero **pins at the ceiling** rather than dividing by it |
 | `SIGMA` | **0.4.** The one look value here, and the only number that could be tuned without anything becoming wrong: the weights are normalised, so a uniformly lit frame returns its own brightness whatever this is — only the selectivity moves |
 | `CAP` | **1.0**, the reference white. Anything brighter **counts as white**, so a source saturates the metre but cannot own it. This is frame control, *not* protection for the star's brightness — a disc at 24× white survives any realistic dim, because 4.5 stops brings 24 down to 1.0 and it is still clipping |
 | `TARGET_AVERAGE` | **0.18**, middle grey. Derived as far as it can be: an 18%-grey surface lit at `REFERENCE_LUX` reads about 0.23 in this currency, so the metre is **neutral on an ordinarily-lit scene** and moves only when the light or the composition is unusual |
@@ -749,11 +749,11 @@ the perimeter, it should only contribute a little"* — and **no location term a
 asserts that as a **comparison between two frames that differ only in where the bright block is**, because
 a metre with no weighting passes every other check and fails exactly those two — which is the metre Godot
 ships, and the reason metered exposure failed here once. Design, measurements and the four acceptance
-tests: vault `SpaceSim/Lighting Plan` §6a and §9.
+tests: vault `Stoichon/Lighting Plan` §6a and §9.
 
 ### The star's numbers
 
-Luminosity and effective temperature come from `SpacesimStarModel` — see **Derivation — `model/`**
+Luminosity and effective temperature come from `StoichonStarModel` — see **Derivation — `model/`**
 under Solar system above.
 
 ## Render layers
@@ -764,12 +764,12 @@ planet's node, so their distances are equal to the metre. Equal priority therefo
 
 | Draw | Priority |
 |---|---|
-| a ring's far half | **−100** (`SpacesimRingView.FAR_PRIORITY`) |
-| a body's interior surface | **−90** (`SpacesimBodyRenderer.INTERIOR_RENDER_PRIORITY`) |
+| a ring's far half | **−100** (`StoichonRingView.FAR_PRIORITY`) |
+| a body's interior surface | **−90** (`StoichonBodyRenderer.INTERIOR_RENDER_PRIORITY`) |
 | the sea | **−8** (`OCEAN_RENDER_PRIORITY`) |
 | cloud decks, one per condensed species | **−index**, so 0 and down |
 | a body's air shell | **+8** (`AIR_RENDER_PRIORITY`) |
-| a ring's near half | **+100** (`SpacesimRingView.NEAR_PRIORITY`) |
+| a ring's near half | **+100** (`StoichonRingView.NEAR_PRIORITY`) |
 
 The engine's whole range is **−128 … +128**; outside it a priority is *refused* and the material keeps 0,
 which is exactly the tie this table exists to prevent (measured 2026-11-03). `tests/test_rings.gd` asserts
@@ -781,29 +781,29 @@ surface of Saturn as well, and they need to be properly ordered."*
 
 ### What a body looks like
 
-`addons/spacesim/render/` — what a body looks like. Everything these shaders are given comes from **the
+`addons/stoichon/render/` — what a body looks like. Everything these shaders are given comes from **the
 derivation**, so a shader cannot quietly disagree with the model.
 
 | | |
 |---|---|
 | `body_surface.gdshader` | **the ground: the field itself, with NO RASTER.** The height is `surface_height(up, plan, footprint_angle)` — the same function the bake compiles — evaluated **per pixel** at the resolution that pixel can resolve, because a coastline is a *level set* of the height and is therefore exactly as smooth as whatever holds it: a raster is a grid, so a coast on one was a staircase one texel wide with corners at every texel boundary (2.4 km at 212 km altitude, photographed 2026-10-28). **The octave count is the footprint's**, since `surface_height` fades each octave a pixel cannot resolve, which is what makes it affordable — a 20-pixel moon pays for one octave and the ground at walking height for eighteen. **Gone with the raster, each a workaround rather than a mechanism**: the whole-body map and its rung ladder, the near field's quadtree of tiles, a 4×4 Catmull-Rom reconstruction for a bilinear raster's corners, a sub-texel grain for what a texel hides, and the field's own crests continued below the map. `ALBEDO` is a **colour table** (a `1 x 256` ramp from the derived bands and the *measured* quantiles) indexed by the field's value — the only sampler in the shader. **The picture is FLAT, and that is a requirement** (2026-11-01): `NORMAL` is the **geometric** normal, set in `vertex()` from the direction because the mesh carries no normal array — no tilt, no gradient-derived slope. The two stand-ins that used to fake height here are gone: the normal leaned by `relief_exaggeration` × the field's gradient, and the vertex displaced by `VERTEX += unit * (height − sea_level) * field_amplitude` in the vertex stage. **The relief is the geometry's**, translated into the vertex POSITIONS on the CPU, so the light falls on the slope that was drawn. `sea_level` stays as the DATUM a translated vertex measures from, so the ship's altitude, the framings' bands and a deck's condensation level all keep measuring from the same sphere. Then the air through the light path, the star's own transmission, the deck's shadow, and a specular that owes a beam's transmittance. Opaque, `cull_back`, lit, `specular_schlick_ggx` |
-| `body_deck.gdshader` | **the far regime's cloud: a baked coverage map on a shell, with its thickness as SHADING.** **A deck draws the ground's own mesh, translated to `radius + height`** — the same lattice, the same chunks, the same index array, so one tessellation serves the surface and every deck over it and a refinement cannot land in one and not the other. So the shader's model space is the ground's: metres from a near-eye origin, with the direction `VERTEX + patch_origin` and the pixel's footprint `length(fwidth(VERTEX)) / planet_radius`. **The thickness is not built, it is sampled**: the layer's base and top are both real derived radii, and the shader picks its case from the eye's own distance in top-radii (`eye_local`, divided on the host) — above the top it samples the tops; **below the base it samples where the same eye ray crosses the BASE sphere**, which is genuine parallax of thickness rather than a fudge; inside it everything is cloud. **Which face a fragment is decides how it is lit, and `FRONT_FACING` says which** (2026-11-03, `18db086`): a front face is seen from outside — the top, lit by the star — and a back face from inside — the base. The eye's own radius was the old test and it is one answer for the whole frame, so inside the band the far clouds, whose *undersides* are what you actually see there, were lit as tops against a normal pointing away from the star: black (Evert: *"the far clouds render as black where they should be white"*). The base's light is `deck_column_path()` on the **star's** ray — the same lookup that casts the shadow, so a base and the shadow it makes cannot drift (`0869cc7`, `e20a424`) — plus `UNDERSIDE_FLOOR = 0.12` standing in for the multiple scattering inside the slab that nothing here models (`e20a424`); the normal still flips so the light loop does not take the base to black. **The alpha law is where the variation lives**: `ALPHA = covered · veil · (1 − exp(−tau·thickness/mu))` — **Beer–Lambert on both faces** (2026-11-03, `a195586`): the diffusion form `1 − 1/(1 + tau)` left **30 %** of what is behind the deck at Earth's `tau = 2.3`, which is the sun's own glare through a layer the content calls 0.9 opaque. The complement relation survives; what changed is *which* transmittance, because this face composites a **beam** and not a diffuse flux. `tau_full` comes from the layer's `optical_depth`, or `−ln(1 − opacity)` where it states none, so `ALPHA` thickens at the limb and the base's transmittance and the top's opacity are one law from one texel. **And since 2026-11-03 it is ONE number for the whole deck** — `SpacesimSceneBody.Deck.tau`, the same value the base's light, the ground's shadow and the ramp gain's measurement all read. It used to be two: the deck drew with `−ln(1 − the map's mean exceedance)` while the shadow cast with `−ln(1 − opacity)`, 3.07x apart on Earth and 6.81x on Neptune and the *other* way round on Titan, with no law relating them — a per-map statistic and an authored number standing in for one physical quantity. `SpacesimCloudMaps.column_depth()` existed only to convert between them and is gone. One `ALBEDO = cloud_color · ramp_gain` whose mean is the calibrated albedo — a measured 0.419 over the area against 0.746 at the tops. **No noise ladder** (deleted 2026-10-29, with the ground's): it was a stand-in for structure the field already has, and a rung at 2–4 px added to a coverage field is where the banding and the extra noise came from. **The coverage is RECONSTRUCTED rather than interpolated** — `cloud_coverage.gdshaderinc`'s 4×4 Catmull-Rom, because a cloud's edge is a *level set* of the field and bilinear is C⁰, i.e. a corner at every texel boundary (the land's coastline staircase, in a different shader). The map's own width is published beside it so the texel the kernel is measured in moves with a refinement. **A HAZE LAYER wears this same shader and gets a second band scale** (2026-11-03, `47568e4`): `envelope_lobes` / `envelope_floor` / `envelope_phase` multiply `ALPHA` by a broad latitude lobe, and `envelope_lobes = 0` — every ordinary deck — skips the term outright. That is how Jupiter's broad white zones are drawn: not by changing the field's band term, which modulates the cream and brown bands, but by a veil *above* the stack whose own opacity varies over several of them. See `SpacesimCloudLayer.haze`. **It draws `cull_disabled`** (`blend_mix, cull_disabled, depth_draw_always, specular_disabled`) — both faces are visible at once from inside a band, which is the fact `FRONT_FACING` above has to respect. **It writes depth where there is cloud and `discard`s where there is not**, which is what lets the air's shell clip its march at the first thing drawn without losing the air above the gaps |
+| `body_deck.gdshader` | **the far regime's cloud: a baked coverage map on a shell, with its thickness as SHADING.** **A deck draws the ground's own mesh, translated to `radius + height`** — the same lattice, the same chunks, the same index array, so one tessellation serves the surface and every deck over it and a refinement cannot land in one and not the other. So the shader's model space is the ground's: metres from a near-eye origin, with the direction `VERTEX + patch_origin` and the pixel's footprint `length(fwidth(VERTEX)) / planet_radius`. **The thickness is not built, it is sampled**: the layer's base and top are both real derived radii, and the shader picks its case from the eye's own distance in top-radii (`eye_local`, divided on the host) — above the top it samples the tops; **below the base it samples where the same eye ray crosses the BASE sphere**, which is genuine parallax of thickness rather than a fudge; inside it everything is cloud. **Which face a fragment is decides how it is lit, and `FRONT_FACING` says which** (2026-11-03, `18db086`): a front face is seen from outside — the top, lit by the star — and a back face from inside — the base. The eye's own radius was the old test and it is one answer for the whole frame, so inside the band the far clouds, whose *undersides* are what you actually see there, were lit as tops against a normal pointing away from the star: black (Evert: *"the far clouds render as black where they should be white"*). The base's light is `deck_column_path()` on the **star's** ray — the same lookup that casts the shadow, so a base and the shadow it makes cannot drift (`0869cc7`, `e20a424`) — plus `UNDERSIDE_FLOOR = 0.12` standing in for the multiple scattering inside the slab that nothing here models (`e20a424`); the normal still flips so the light loop does not take the base to black. **The alpha law is where the variation lives**: `ALPHA = covered · veil · (1 − exp(−tau·thickness/mu))` — **Beer–Lambert on both faces** (2026-11-03, `a195586`): the diffusion form `1 − 1/(1 + tau)` left **30 %** of what is behind the deck at Earth's `tau = 2.3`, which is the sun's own glare through a layer the content calls 0.9 opaque. The complement relation survives; what changed is *which* transmittance, because this face composites a **beam** and not a diffuse flux. `tau_full` comes from the layer's `optical_depth`, or `−ln(1 − opacity)` where it states none, so `ALPHA` thickens at the limb and the base's transmittance and the top's opacity are one law from one texel. **And since 2026-11-03 it is ONE number for the whole deck** — `StoichonSceneBody.Deck.tau`, the same value the base's light, the ground's shadow and the ramp gain's measurement all read. It used to be two: the deck drew with `−ln(1 − the map's mean exceedance)` while the shadow cast with `−ln(1 − opacity)`, 3.07x apart on Earth and 6.81x on Neptune and the *other* way round on Titan, with no law relating them — a per-map statistic and an authored number standing in for one physical quantity. `StoichonCloudMaps.column_depth()` existed only to convert between them and is gone. One `ALBEDO = cloud_color · ramp_gain` whose mean is the calibrated albedo — a measured 0.419 over the area against 0.746 at the tops. **No noise ladder** (deleted 2026-10-29, with the ground's): it was a stand-in for structure the field already has, and a rung at 2–4 px added to a coverage field is where the banding and the extra noise came from. **The coverage is RECONSTRUCTED rather than interpolated** — `cloud_coverage.gdshaderinc`'s 4×4 Catmull-Rom, because a cloud's edge is a *level set* of the field and bilinear is C⁰, i.e. a corner at every texel boundary (the land's coastline staircase, in a different shader). The map's own width is published beside it so the texel the kernel is measured in moves with a refinement. **A HAZE LAYER wears this same shader and gets a second band scale** (2026-11-03, `47568e4`): `envelope_lobes` / `envelope_floor` / `envelope_phase` multiply `ALPHA` by a broad latitude lobe, and `envelope_lobes = 0` — every ordinary deck — skips the term outright. That is how Jupiter's broad white zones are drawn: not by changing the field's band term, which modulates the cream and brown bands, but by a veil *above* the stack whose own opacity varies over several of them. See `StoichonCloudLayer.haze`. **It draws `cull_disabled`** (`blend_mix, cull_disabled, depth_draw_always, specular_disabled`) — both faces are visible at once from inside a band, which is the fact `FRONT_FACING` above has to respect. **It writes depth where there is cloud and `discard`s where there is not**, which is what lets the air's shell clip its march at the first thing drawn without losing the air above the gaps |
 | `cloud_coverage.gdshaderinc` | **the coverage field, RECONSTRUCTED rather than interpolated** — a 4×4 Catmull-Rom sample of the deck's map, in one place because **two consumers must agree**: the deck, which draws the cloud, and the ground shadow, which is the *image* of the same cloud. A cloud's edge is a level set of this field, so it is exactly as smooth as the reconstruction of it, and bilinear is C⁰ — its gradient jumps at every texel boundary, so the level set is a polyline with a corner at each one, which is the land's coastline staircase in a different shader. The kernel's weights sum to 1, so a constant field reconstructs as that constant, and **the map's own texel size is passed in** (`(1/w, 2/w)` for a 2:1 equirect) rather than assumed, because a kernel that assumed a square texel would reconstruct a different field on a 2:1 map. Minification is still the mip pyramid's business, **but the LOD is passed in rather than derived** (`cloud_coverage(map, uv, texel, lod)` samples with `textureLod`, and `cloud_uv_lod(direction, footprint, width)` computes it): the uv is built from `atan(z, x)` and so passes from 1 to 0 inside one pixel at the antimeridian, where an implicit `texture()` reads the whole map as sub-pixel and draws **one column from the coarsest mip** — a one-pixel vertical line at every distance (`e9…`, 2026-11-03). The footprint is the sphere's own pixel angle, a direction rather than a wrapping number, so it is continuous everywhere |
-| `deck_shadow.gdshaderinc` | **a cloud deck's shadow on the ground and the sea — as the star's transmittance — and, since 2026-10-25, what a specular highlight owes the same cloud.** The deck's map is a coverage field and its layer states an optical depth, so together they are a *transmittance map*: `deck_column_path(p, direction, radius, with_detail)` is **one home for both rays**: the star's (which makes a shadow, and keeps the detail ladder because the ladder is what makes the edge belong to the cloud) and the eye's (which is what the surface's light must cross to be seen, and skips it — six noise evaluations, and a beam's attenuation is decided by the coarse field). It returns `thickness/mu` with the map read where that ray crosses the deck, and −1 for a ray that leaves below the horizontal. **`deck_specular_share(p, to_eye, radius)` is `exp(-x)·(1+x)` at the same `x = deck_tau·path` the shadow casts with**: the deck is drawn `blend_mix`, so the surface behind it passes at `1 - alpha`, and `alpha` is built from `two_flux`'s **diffuse** transmittance `1/(1+x)`. That is right for the ground's own colour — a cloud's base is a diffuse source — and thousands of times too much for a specular, which is a **beam**: at `x = 11.5` the diffuse answer is 8 % and a beam's is 0.001 %, which is why a solid deck looked like a wisp with the sun behind it (Evert, 2026-10-25). The result is ≤ 1 for every `x`, so it can only dim. `body_eye_local` is the eye **in body radii** — a position, not a direction, because the camera is a few radii away so the viewing angle varies across a disc. The deck's map is a coverage field and its layer states an optical depth, so together they are a *transmittance map*: The deck's map is a coverage field and its layer states an optical depth, so together they are a *transmittance map*: the lookup is the deck's own map sampled where the **star's** ray crosses the deck's shell rather than where the eye's does, a horizontal offset of `height · tan(zenith)` along the star's azimuth. `exp(-τ · thickness / mu_sun)` with the same percentile the cloud is drawn with, so a shadow cannot disagree with the cloud that casts it; a sunrise shadow is long because the offset is, not because anything was authored. **Written into `AO` and `AO_LIGHT_AFFECT` and not into a `light()`**: the clustered renderer turns ambient occlusion into a *direct-light* occlusion with `ao = mix(1.0, ao, ao_light_affect)` before the light loop (`scene_forward_clustered.glsl`), which is exactly a cloud's shadow and needs no BRDF of its own. **It cannot dim the ambient and the direct light by different amounts** — one `AO` value drives both — so "a shadow keeps the ambient" is said as a **floor**: `AO = mix(deck_shadow_floor, 1.0, transmittance)`, with `SpacesimBodyRenderer.DECK_SHADOW_FLOOR` = **0.45**, i.e. a shadow removes a little over half the light and reads as shade rather than night. The physical reason a shadow keeps light at all is multiple scattering — a cloud's base is a bright diffuse source overhead — which nothing here models, because the ambient is a *constant* and not a sky probe. When the lighting plan gives the ambient an actual sky, the floor goes and the ambient is simply lit by what is above it; the other upgrade path is a `light()` override, which costs the PBR the surface was tuned with. Included by **both** the land and the sea, and the two cannot drift. **The field it thresholds is the same one the cloud draws, reconstructed the same way**: the map alone (the ladder is gone from both), sampled through the same `cloud_coverage.gdshaderinc` kernel with the same published width — so a shadow sharpens when the cloud does and cannot be a different cloud from the one casting it. `τ` comes from the layer's `optical_depth`, or `−ln(1 − opacity)` where it states none, because that is what "how opaque it is where it covers" already means. `deck_tau = 0` is every body with no deck, and it makes the path a uniform branch. **Since 2026-11-01 the shadow is culled where the ground has risen above the deck's base** (Evert: *"we need to cull the shadowmap so that it does not show when the land is taller than the base of the clouds"*): land standing up through a band is not under it, and shading a summit the cloud is wrapped around draws a contour along every ridge that crosses the base. `deck_base` is published beside `deck_height`, and the share is `mix(1.0, shadow, 1 - smoothstep(deck_base - 150 m, deck_base, altitude))` — soft, because the terrain crosses the base at every ridge. The altitude is the fragment's own radius less the datum, **carried from `vertex()` as a varying**: `VERTEX` is model space there and view space in `fragment()`, so measuring it later gives a distance from the camera. **Every deck is lit by ITS OWN slab** (2026-11-03): `_publish_deck_shadow` writes a deck's own map and its own `Deck.tau` to that deck's material, and the ground and the sea take the SHADOWING deck's `tau` alone. Handing the shadowing deck's numbers to every deck material was invisible while a body had one deck and wrong the moment it had two — Earth's ice sheet, its own τ 0.2, was darkened by the water deck's 2.30 and read as a shadow it was not casting, and the giants' ammonia decks were lit at their water decks' τ from the day their stacks existed |
-| `star_transmission.gdshaderinc` | **how much of the star reaches a point on a body's surface — twice over: whether the body is in the way, and what the air took.** *Occlusion*: the fraction of the star's own disk above the point's horizon, written into `AO` with `AO_LIGHT_AFFECT = 1.0` — the same direct-light slot `deck_shadow` uses, and the two multiply. A point on a sphere sees the star iff the sphere's *own* normal does, so no tilted shading normal (the surface's relief is a fiction) can light a fragment the geometry says is in shadow, which is what stopped the lit coastlines in the dark half. A **fraction and not a step**, because the star is a disk: the disk-above-a-line area at `t = −elevation/half_width`, `half_width = max(star_angle, pixel_angle/2)` — the physical penumbra where a pixel can resolve it, the filtered step where it cannot. `star_angle` is `asin(R_star/d)` from `SpacesimLod.angular_radius`, the call `light_angular_distance` already makes and 77x across Sol. *Extinction*: `exp(-τ)` along the **star's own ray**, per channel, scaling `ALBEDO` — the air in the light path on the way *in*, not only along the eye ray. τ is the vertical column above the point (`H·exp(-h/H)`) times a **closed-form spherical air mass**, `1/sqrt(μ² + 2H/(πR))`: 1 overhead, 34 at the horizon against Chapman's 38, within ~20 % between, six operations and no loop. The horizon is the point's **own**, offset by `sqrt(1 − (R/(R+h))²)` — 1.2° at 1.4 km — which is why a cloud stays lit after the ground beneath it has gone dark. The law is `SpacesimAtmosphereModel.sun_transmittance`, tested there; this is its transcription. `air_*` are `body.air`'s own numbers, published once at build, so the ground and the march cannot disagree about how thick the air is. **The view transmittance is NOT here** — `air_shell.gdshader` owns it — and zero coefficients are an airless body, with no branch. Included by the land, the sea and the decks, and it declares `body_sun`, so it must come **before** `deck_shadow.gdshaderinc` |
-| `noise.gdshaderinc` | **FastNoiseLite in GLSL**, one copy for the whole engine: `fnl_os2s3`, `fnl_fbm3` and their tables, transcribed from the version Godot *vendors* rather than the project's newer GLSL port. Two ways in — `SpacesimCloudGpu`/`SpacesimSurfaceGpu` concatenate it in front of a compute kernel (a source string gets no preprocessor), and a fragment shader reaches it with `#include`, which it must: it declares **no `shared` memory**, which is what makes it legal outside compute |
-| `surface_field.gdshaderinc` | **the surface height field in GLSL — the only implementation.** `surface_plate_centre/level` (the Fibonacci lattice and its biased levels), `surface_plates` (nearest and second-nearest, and the belt between them), `surface_ridged3`, and `surface_height` composing them. `SpacesimSurfaceGpu` compiles it into a kernel; the surface shader will include it for the detail below the map's Nyquist. **Its `SurfacePlan` fields are read from the host's push constants — no constant is typed in here** |
+| `deck_shadow.gdshaderinc` | **a cloud deck's shadow on the ground and the sea — as the star's transmittance — and, since 2026-10-25, what a specular highlight owes the same cloud.** The deck's map is a coverage field and its layer states an optical depth, so together they are a *transmittance map*: `deck_column_path(p, direction, radius, with_detail)` is **one home for both rays**: the star's (which makes a shadow, and keeps the detail ladder because the ladder is what makes the edge belong to the cloud) and the eye's (which is what the surface's light must cross to be seen, and skips it — six noise evaluations, and a beam's attenuation is decided by the coarse field). It returns `thickness/mu` with the map read where that ray crosses the deck, and −1 for a ray that leaves below the horizontal. **`deck_specular_share(p, to_eye, radius)` is `exp(-x)·(1+x)` at the same `x = deck_tau·path` the shadow casts with**: the deck is drawn `blend_mix`, so the surface behind it passes at `1 - alpha`, and `alpha` is built from `two_flux`'s **diffuse** transmittance `1/(1+x)`. That is right for the ground's own colour — a cloud's base is a diffuse source — and thousands of times too much for a specular, which is a **beam**: at `x = 11.5` the diffuse answer is 8 % and a beam's is 0.001 %, which is why a solid deck looked like a wisp with the sun behind it (Evert, 2026-10-25). The result is ≤ 1 for every `x`, so it can only dim. `body_eye_local` is the eye **in body radii** — a position, not a direction, because the camera is a few radii away so the viewing angle varies across a disc. The deck's map is a coverage field and its layer states an optical depth, so together they are a *transmittance map*: The deck's map is a coverage field and its layer states an optical depth, so together they are a *transmittance map*: the lookup is the deck's own map sampled where the **star's** ray crosses the deck's shell rather than where the eye's does, a horizontal offset of `height · tan(zenith)` along the star's azimuth. `exp(-τ · thickness / mu_sun)` with the same percentile the cloud is drawn with, so a shadow cannot disagree with the cloud that casts it; a sunrise shadow is long because the offset is, not because anything was authored. **Written into `AO` and `AO_LIGHT_AFFECT` and not into a `light()`**: the clustered renderer turns ambient occlusion into a *direct-light* occlusion with `ao = mix(1.0, ao, ao_light_affect)` before the light loop (`scene_forward_clustered.glsl`), which is exactly a cloud's shadow and needs no BRDF of its own. **It cannot dim the ambient and the direct light by different amounts** — one `AO` value drives both — so "a shadow keeps the ambient" is said as a **floor**: `AO = mix(deck_shadow_floor, 1.0, transmittance)`, with `StoichonBodyRenderer.DECK_SHADOW_FLOOR` = **0.45**, i.e. a shadow removes a little over half the light and reads as shade rather than night. The physical reason a shadow keeps light at all is multiple scattering — a cloud's base is a bright diffuse source overhead — which nothing here models, because the ambient is a *constant* and not a sky probe. When the lighting plan gives the ambient an actual sky, the floor goes and the ambient is simply lit by what is above it; the other upgrade path is a `light()` override, which costs the PBR the surface was tuned with. Included by **both** the land and the sea, and the two cannot drift. **The field it thresholds is the same one the cloud draws, reconstructed the same way**: the map alone (the ladder is gone from both), sampled through the same `cloud_coverage.gdshaderinc` kernel with the same published width — so a shadow sharpens when the cloud does and cannot be a different cloud from the one casting it. `τ` comes from the layer's `optical_depth`, or `−ln(1 − opacity)` where it states none, because that is what "how opaque it is where it covers" already means. `deck_tau = 0` is every body with no deck, and it makes the path a uniform branch. **Since 2026-11-01 the shadow is culled where the ground has risen above the deck's base** (Evert: *"we need to cull the shadowmap so that it does not show when the land is taller than the base of the clouds"*): land standing up through a band is not under it, and shading a summit the cloud is wrapped around draws a contour along every ridge that crosses the base. `deck_base` is published beside `deck_height`, and the share is `mix(1.0, shadow, 1 - smoothstep(deck_base - 150 m, deck_base, altitude))` — soft, because the terrain crosses the base at every ridge. The altitude is the fragment's own radius less the datum, **carried from `vertex()` as a varying**: `VERTEX` is model space there and view space in `fragment()`, so measuring it later gives a distance from the camera. **Every deck is lit by ITS OWN slab** (2026-11-03): `_publish_deck_shadow` writes a deck's own map and its own `Deck.tau` to that deck's material, and the ground and the sea take the SHADOWING deck's `tau` alone. Handing the shadowing deck's numbers to every deck material was invisible while a body had one deck and wrong the moment it had two — Earth's ice sheet, its own τ 0.2, was darkened by the water deck's 2.30 and read as a shadow it was not casting, and the giants' ammonia decks were lit at their water decks' τ from the day their stacks existed |
+| `star_transmission.gdshaderinc` | **how much of the star reaches a point on a body's surface — twice over: whether the body is in the way, and what the air took.** *Occlusion*: the fraction of the star's own disk above the point's horizon, written into `AO` with `AO_LIGHT_AFFECT = 1.0` — the same direct-light slot `deck_shadow` uses, and the two multiply. A point on a sphere sees the star iff the sphere's *own* normal does, so no tilted shading normal (the surface's relief is a fiction) can light a fragment the geometry says is in shadow, which is what stopped the lit coastlines in the dark half. A **fraction and not a step**, because the star is a disk: the disk-above-a-line area at `t = −elevation/half_width`, `half_width = max(star_angle, pixel_angle/2)` — the physical penumbra where a pixel can resolve it, the filtered step where it cannot. `star_angle` is `asin(R_star/d)` from `StoichonLod.angular_radius`, the call `light_angular_distance` already makes and 77x across Sol. *Extinction*: `exp(-τ)` along the **star's own ray**, per channel, scaling `ALBEDO` — the air in the light path on the way *in*, not only along the eye ray. τ is the vertical column above the point (`H·exp(-h/H)`) times a **closed-form spherical air mass**, `1/sqrt(μ² + 2H/(πR))`: 1 overhead, 34 at the horizon against Chapman's 38, within ~20 % between, six operations and no loop. The horizon is the point's **own**, offset by `sqrt(1 − (R/(R+h))²)` — 1.2° at 1.4 km — which is why a cloud stays lit after the ground beneath it has gone dark. The law is `StoichonAtmosphereModel.sun_transmittance`, tested there; this is its transcription. `air_*` are `body.air`'s own numbers, published once at build, so the ground and the march cannot disagree about how thick the air is. **The view transmittance is NOT here** — `air_shell.gdshader` owns it — and zero coefficients are an airless body, with no branch. Included by the land, the sea and the decks, and it declares `body_sun`, so it must come **before** `deck_shadow.gdshaderinc` |
+| `noise.gdshaderinc` | **FastNoiseLite in GLSL**, one copy for the whole engine: `fnl_os2s3`, `fnl_fbm3` and their tables, transcribed from the version Godot *vendors* rather than the project's newer GLSL port. Two ways in — `StoichonCloudGpu`/`StoichonSurfaceGpu` concatenate it in front of a compute kernel (a source string gets no preprocessor), and a fragment shader reaches it with `#include`, which it must: it declares **no `shared` memory**, which is what makes it legal outside compute |
+| `surface_field.gdshaderinc` | **the surface height field in GLSL — the only implementation.** `surface_plate_centre/level` (the Fibonacci lattice and its biased levels), `surface_plates` (nearest and second-nearest, and the belt between them), `surface_ridged3`, and `surface_height` composing them. `StoichonSurfaceGpu` compiles it into a kernel; the surface shader will include it for the detail below the map's Nyquist. **Its `SurfacePlan` fields are read from the host's push constants — no constant is typed in here** |
 | `surface_params.gdshaderinc` | **the plan's push-constant block and the `SurfacePlan` assembly, in one place** — shared by `surface_kernel.gdshaderinc` (the map bake) and `surface_heights_kernel.gdshaderinc` (the geometry's heights). The block is 112 bytes, `ivec2` + two `vec2` + twenty-two 4-byte fields, and the driver rejects both more and less. A second copy would be a second field: the *blocks* would fail loudly if they drifted, but the twenty-two assignments would not — one left out is a field with a zero in it. `size` and the two `vec2`s are the bake's window and are never read by a heights dispatch, which passes zeros. |
 | `surface_heights_kernel.gdshaderinc` | **directions in, heights out** — `layout(set = 0, binding = 0) readonly buffer vec4 dirs[]` and a writeonly float buffer, one `surface_height(unit, surface_plan_params(), 0.0)` per invocation. `local_size_x = 64`, and **the host pads the buffers to a whole workgroup** rather than the kernel carrying a bound, because the bound would need a number in the bake's push-constant block. |
 | `body_star.gdshader` | the star's own surface: **unshaded and emissive**, coloured from its temperature. Unshaded because a star is a source — drawn with the ordinary surface material it was lit by *its own* light, and its near face, the one facing the observer, came out black |
-| `SpacesimBodyRenderer` | `body_renderer.gd` — builds a body's materials from derived values: the surface, the star's own emissive shader, and the point of light. **`point_quad()` and `point_material()`** are the point of light: one shared unit quad, wearing an unshaded additive `StandardMaterial3D`. **The quad is NOT billboarded by the material** — `BILLBOARD_ENABLED` rewrites `MODELVIEW_MATRIX` with `INV_VIEW_MATRIX`, i.e. world-space axes against a camera-relative translation, which is the transform chain the double-precision emulation cannot follow (the same family as `world_vertex_coords` and `triplanar`). The orientation is set each frame in `_place_point` by copying the camera's basis onto the node, with the size on that same basis. **`splat_fade(screen, floor)`** is how much of that radiance a sub-pixel splat carries: below one pixel the disc cannot shrink, so it carries the disc's share of the pixel's solid angle, `π·r_px²`, capped at 1 from about 0.56 px of radius — and **floored** at the `render.splat_floor` setting, because the law makes anything small invisible long before it resolves, and a splat exists so a thing can be *found* before it can be seen. Evert, 2026-11-14: *"The eye can resolve light long before shape, you know."* `point_colour(body, radiance)` is what it is coloured with — **by kind, the same distinction `material_for` makes**: a planet's is its radiance in `UNIT_LUX_PER_SR` tinted by the body's own colour **at unit luminance** (so the tint cannot change the brightness while the hue survives), and a star's is `star_color * STAR_INTENSITY`, its own emission. **The planet's value is sRGB-encoded on the way out**, because Godot's default spatial material declares `uniform vec4 albedo : source_color` and therefore *decodes* `albedo_color` — which for a linear radiance is `level^2.2`, silent and non-linear. The star field has no such conversion (it writes `COLOR` in a sky shader), so without this encode a splat is in a different currency from the sky it is seen against. The star's branch is deliberately **not** encoded, because it goes into the same property the star's own disc does and the two must convert alike for their handoff to look free — noting that both clip at 24x, which is the only reason it does. **Running the reflector formula on a star gives zero** — a star has no albedo — which is how a Sun with a sub-pixel disc would vanish from its own sky — an overbright albedo, so a splat can be brighter than white and still be tone-mapped with everything else. `UNIT_LUX_PER_SR` is **the same number as `sky_stars.gdshader`'s**, and `tests/test_render.gd` checks the shader still carries it. **The deck material**, merged to `main` on 2026-10-21 — `deck_material(body, level, palette, seed_layer)`, `apply_cloud_map(material, texture, width, threshold, ramp_gain, veil, tau_full)`, `face_deck(material, eye_offset)` and `cloud_gain(albedo, palette, mean)`; see `body_deck.gdshader` below. **`tau_full` is the deck's OPACITY, not its lighting** — `alpha = covered * veil * (1 - exp(-tau_full*thickness/mu))`, so an unpublished `tau_full` is `alpha = 0` and a completely invisible deck. It is published here, in the one place a deck's numbers reach a material, because the function that used to set it (`apply_deck_light`) was deleted as light plumbing on 2026-10-21 and took the deck with it: **a deletion that claims "nothing reads this" must grep each uniform for its readers, not each function.** `SpacesimSurfaceDistribution`' `deck_ramp_gain` became `SpacesimBodyRenderer.cloud_gain` when the deck was rebuilt, and it returns the achieved fraction beside the gain so a clamped deployment reports its shortfall instead of hiding it. **The surface** is `material_for(body, ramp)` — and it is the whole of the ground's material, because **the shader evaluates the field itself**: no height map, no ladder, no tile array and no sea level to publish beside the heights it belongs to. What the renderer hands over is the `colour_ramp` (a `1 x 256` table), `planet_radius`, the land's roughness and specular, the **whole `field_*` set** — every number `SpacesimSurfaceField.plan()` derives, so the shader and the bake are one field — and the sea level, which is the datum the displacement will measure from. `static ramp_image(bands, quantiles, fallback)` is the derivation-to-picture link: each band edge's *percentile* becomes a field value through the measured quantiles, and a body with no bands at all (a gas giant, whose visible surface is its deck) is filled with the colour it was already drawn in. `static deck_ramp_gain(body, ramp_mean)` is that fit, `static uniform_white()` is the one-texel field a `FEATURELESS` body gets (a uniform field cannot carry partial *area*, so its coverage goes into the alpha instead), and the gain **clamps at 1.0** — a cloud cannot reflect more than white, so a low-contrast field falls short of the budget and `tests/test_cloud_deck.gd` reports the shortfall rather than hiding it  `air_shell_material(air, planet_radius, band_outer)` builds the air's shell — the optics and the band's two radii, the half that never changes; the eye, the star, the frame's rotation and the gate are published per frame by the scene.|
-| `SpacesimLod` | `lod.gd` — **how much of the view a body takes up**, as pure arithmetic so it can be decided with no GPU and no meshes. **`air_ring_pixels(depth, distance, pixel_angle)`** = `(depth/distance)/pixel_angle` is the width of an atmosphere's own limb ring in pixels, with **`AIR_RING_FADE`** (2 → 4 px) the pair it fades in between — `full while a pixel holds four samples of the feature, gone by two`, the same sampling law as every ladder. It is the gate the air march is drawn by, because a disc's size is the wrong question: at 6.95 Gm Jupiter is nine pixels across and its ring is 0.02, so every pixel of it is a grazing chord, the transmittance collapses at the rim, the in-scatter peaks there, and the picture is a sub-pixel ring point sampled. Earth fades in at ~39,000 km, Jupiter at ~78,000, against 1.25 Gm and 13.5 Gm before. **The idea is not new and that is the lesson**: the *shell* had `ATMOSPHERE_RING_MIN_PIXELS` and `shell_ring_pixels()` and it went with the shell on 2026-10-19 — so when a mechanism is replaced, carry its **gates** across as well as its picture. `static angular_radius(radius, distance)` = `asin(R/d)` in radians — **derived rather than stated**, because a value fixed at one au is 2.6x too small at Mercury and 30x too large at Neptune, and **two of its consumers want a diameter**: the drawn disc, the penumbra of a body's shadow and total-versus-annular take the radius, while Godot's `light_angular_distance` takes `rad_to_deg(2 * angular_radius(...))`. `static pixel_angle(fov, render_height)` = `2*tan(fov/2)/H`, **the CENTRE pixel** — a pixel further out subtends more, the frame's average is `fov/H`, and at 1080p/70° the two are 0.0743° and 0.0648°. `static screen_radius_pixels(angular_radius, pixel_angle)` = `tan(theta)/p`, **in pixels** — the projection, not its linearisation. `static triangles_at(level)` = `20 * 4^level`, the closed form `tests/test_icosphere.gd` checks the built meshes against, and `TRIANGLES_PER_SCREEN_RADIUS` = 5.836 is a level's sagitta times its triangle count — **measured from the mesh**, and the relation every pixel error budget descends from. **The per-body level law that used these went on 2026-10-25**: it chose one uniform level per body, and `SpacesimPatches` decides per patch instead, so a body is no longer one level. `POINT_TIER_SCREEN_RADIUS` is where one representation gives way to another rather than a quality budget |
-| `SpacesimIcosphere` | `icosphere.gd` — a unit sphere as a subdivided icosahedron, one `ArrayMesh` per level, **built on first use and then the same object every time**, so a level change is a pointer assignment where a `SphereMesh` would re-tessellate. Triangles are exact (`20 * 4^level`) and vertices are `10 * 4^k + 2` (Euler), because midpoints are **cached on the edge** — without that the two triangles meeting at a seam would each get their own copy and the surface would be cracked, which is the one error the mesh carries. Vertices are on the unit sphere and the position **is** the normal. Built at unit radius so every body scales the same mesh. **Wound the way `SphereMesh` is, which is Godot's convention and not the standard one**, so a mesh wound the other way renders a planet inside out; `tests/test_icosphere.gd` measures the winding against `SphereMesh` so it cannot regress quietly. `static relative_sagitta(level)` measures the built mesh's worst departure from the sphere, which is what the law's constant is read from |
+| `StoichonBodyRenderer` | `body_renderer.gd` — builds a body's materials from derived values: the surface, the star's own emissive shader, and the point of light. **`point_quad()` and `point_material()`** are the point of light: one shared unit quad, wearing an unshaded additive `StandardMaterial3D`. **The quad is NOT billboarded by the material** — `BILLBOARD_ENABLED` rewrites `MODELVIEW_MATRIX` with `INV_VIEW_MATRIX`, i.e. world-space axes against a camera-relative translation, which is the transform chain the double-precision emulation cannot follow (the same family as `world_vertex_coords` and `triplanar`). The orientation is set each frame in `_place_point` by copying the camera's basis onto the node, with the size on that same basis. **`splat_fade(screen, floor)`** is how much of that radiance a sub-pixel splat carries: below one pixel the disc cannot shrink, so it carries the disc's share of the pixel's solid angle, `π·r_px²`, capped at 1 from about 0.56 px of radius — and **floored** at the `render.splat_floor` setting, because the law makes anything small invisible long before it resolves, and a splat exists so a thing can be *found* before it can be seen. Evert, 2026-11-14: *"The eye can resolve light long before shape, you know."* `point_colour(body, radiance)` is what it is coloured with — **by kind, the same distinction `material_for` makes**: a planet's is its radiance in `UNIT_LUX_PER_SR` tinted by the body's own colour **at unit luminance** (so the tint cannot change the brightness while the hue survives), and a star's is `star_color * STAR_INTENSITY`, its own emission. **The planet's value is sRGB-encoded on the way out**, because Godot's default spatial material declares `uniform vec4 albedo : source_color` and therefore *decodes* `albedo_color` — which for a linear radiance is `level^2.2`, silent and non-linear. The star field has no such conversion (it writes `COLOR` in a sky shader), so without this encode a splat is in a different currency from the sky it is seen against. The star's branch is deliberately **not** encoded, because it goes into the same property the star's own disc does and the two must convert alike for their handoff to look free — noting that both clip at 24x, which is the only reason it does. **Running the reflector formula on a star gives zero** — a star has no albedo — which is how a Sun with a sub-pixel disc would vanish from its own sky — an overbright albedo, so a splat can be brighter than white and still be tone-mapped with everything else. `UNIT_LUX_PER_SR` is **the same number as `sky_stars.gdshader`'s**, and `tests/test_render.gd` checks the shader still carries it. **The deck material**, merged to `main` on 2026-10-21 — `deck_material(body, level, palette, seed_layer)`, `apply_cloud_map(material, texture, width, threshold, ramp_gain, veil, tau_full)`, `face_deck(material, eye_offset)` and `cloud_gain(albedo, palette, mean)`; see `body_deck.gdshader` below. **`tau_full` is the deck's OPACITY, not its lighting** — `alpha = covered * veil * (1 - exp(-tau_full*thickness/mu))`, so an unpublished `tau_full` is `alpha = 0` and a completely invisible deck. It is published here, in the one place a deck's numbers reach a material, because the function that used to set it (`apply_deck_light`) was deleted as light plumbing on 2026-10-21 and took the deck with it: **a deletion that claims "nothing reads this" must grep each uniform for its readers, not each function.** `StoichonSurfaceDistribution`' `deck_ramp_gain` became `StoichonBodyRenderer.cloud_gain` when the deck was rebuilt, and it returns the achieved fraction beside the gain so a clamped deployment reports its shortfall instead of hiding it. **The surface** is `material_for(body, ramp)` — and it is the whole of the ground's material, because **the shader evaluates the field itself**: no height map, no ladder, no tile array and no sea level to publish beside the heights it belongs to. What the renderer hands over is the `colour_ramp` (a `1 x 256` table), `planet_radius`, the land's roughness and specular, the **whole `field_*` set** — every number `StoichonSurfaceField.plan()` derives, so the shader and the bake are one field — and the sea level, which is the datum the displacement will measure from. `static ramp_image(bands, quantiles, fallback)` is the derivation-to-picture link: each band edge's *percentile* becomes a field value through the measured quantiles, and a body with no bands at all (a gas giant, whose visible surface is its deck) is filled with the colour it was already drawn in. `static deck_ramp_gain(body, ramp_mean)` is that fit, `static uniform_white()` is the one-texel field a `FEATURELESS` body gets (a uniform field cannot carry partial *area*, so its coverage goes into the alpha instead), and the gain **clamps at 1.0** — a cloud cannot reflect more than white, so a low-contrast field falls short of the budget and `tests/test_cloud_deck.gd` reports the shortfall rather than hiding it  `air_shell_material(air, planet_radius, band_outer)` builds the air's shell — the optics and the band's two radii, the half that never changes; the eye, the star, the frame's rotation and the gate are published per frame by the scene.|
+| `StoichonLod` | `lod.gd` — **how much of the view a body takes up**, as pure arithmetic so it can be decided with no GPU and no meshes. **`air_ring_pixels(depth, distance, pixel_angle)`** = `(depth/distance)/pixel_angle` is the width of an atmosphere's own limb ring in pixels, with **`AIR_RING_FADE`** (2 → 4 px) the pair it fades in between — `full while a pixel holds four samples of the feature, gone by two`, the same sampling law as every ladder. It is the gate the air march is drawn by, because a disc's size is the wrong question: at 6.95 Gm Jupiter is nine pixels across and its ring is 0.02, so every pixel of it is a grazing chord, the transmittance collapses at the rim, the in-scatter peaks there, and the picture is a sub-pixel ring point sampled. Earth fades in at ~39,000 km, Jupiter at ~78,000, against 1.25 Gm and 13.5 Gm before. **The idea is not new and that is the lesson**: the *shell* had `ATMOSPHERE_RING_MIN_PIXELS` and `shell_ring_pixels()` and it went with the shell on 2026-10-19 — so when a mechanism is replaced, carry its **gates** across as well as its picture. `static angular_radius(radius, distance)` = `asin(R/d)` in radians — **derived rather than stated**, because a value fixed at one au is 2.6x too small at Mercury and 30x too large at Neptune, and **two of its consumers want a diameter**: the drawn disc, the penumbra of a body's shadow and total-versus-annular take the radius, while Godot's `light_angular_distance` takes `rad_to_deg(2 * angular_radius(...))`. `static pixel_angle(fov, render_height)` = `2*tan(fov/2)/H`, **the CENTRE pixel** — a pixel further out subtends more, the frame's average is `fov/H`, and at 1080p/70° the two are 0.0743° and 0.0648°. `static screen_radius_pixels(angular_radius, pixel_angle)` = `tan(theta)/p`, **in pixels** — the projection, not its linearisation. `static triangles_at(level)` = `20 * 4^level`, the closed form `tests/test_icosphere.gd` checks the built meshes against, and `TRIANGLES_PER_SCREEN_RADIUS` = 5.836 is a level's sagitta times its triangle count — **measured from the mesh**, and the relation every pixel error budget descends from. **The per-body level law that used these went on 2026-10-25**: it chose one uniform level per body, and `StoichonPatches` decides per patch instead, so a body is no longer one level. `POINT_TIER_SCREEN_RADIUS` is where one representation gives way to another rather than a quality budget |
+| `StoichonIcosphere` | `icosphere.gd` — a unit sphere as a subdivided icosahedron, one `ArrayMesh` per level, **built on first use and then the same object every time**, so a level change is a pointer assignment where a `SphereMesh` would re-tessellate. Triangles are exact (`20 * 4^level`) and vertices are `10 * 4^k + 2` (Euler), because midpoints are **cached on the edge** — without that the two triangles meeting at a seam would each get their own copy and the surface would be cracked, which is the one error the mesh carries. Vertices are on the unit sphere and the position **is** the normal. Built at unit radius so every body scales the same mesh. **Wound the way `SphereMesh` is, which is Godot's convention and not the standard one**, so a mesh wound the other way renders a planet inside out; `tests/test_icosphere.gd` measures the winding against `SphereMesh` so it cannot regress quietly. `static relative_sagitta(level)` measures the built mesh's worst departure from the sphere, which is what the law's constant is read from |
 
 Roughness and specularity are constants in the renderer because the material table does not carry them
 yet — named there rather than buried in the shader, so they can be found when the picture is wrong.
 
-**The ground is the field, and there is no raster**: `SpacesimSurfaceField` (the height, as one GLSL field compiled by both the shader and the bake), `SpacesimSurfaceDistribution` (the percentile table the colours are placed with, measured once per body), `SpacesimSurfaceGpu` (the one build-time bake that measures it) and `body_surface.gdshader` (the land, which evaluates the field per pixel). The ocean, the tile quadtree and the render-thread bake pass are **deleted** — a liquid is a level and comes back as its own mechanism. See [[SpaceSim/Surface|Surface]] for the design and [[SpaceSim/Surface Plan|Surface Plan]] for the state.
+**The ground is the field, and there is no raster**: `StoichonSurfaceField` (the height, as one GLSL field compiled by both the shader and the bake), `StoichonSurfaceDistribution` (the percentile table the colours are placed with, measured once per body), `StoichonSurfaceGpu` (the one build-time bake that measures it) and `body_surface.gdshader` (the land, which evaluates the field per pixel). The ocean, the tile quadtree and the render-thread bake pass are **deleted** — a liquid is a level and comes back as its own mechanism. See [[Stoichon/Surface|Surface]] for the design and [[Stoichon/Surface Plan|Surface Plan]] for the state.
 Two things it must not do again, both of which the deleted attempt did: sample a field in **world
 metres** (a planet is millions of metres across and the field is tens of voxels, so adjacent pixels land
 ~64 km apart in it — a field of dots), and put **the air's arithmetic in a material** (air is one
@@ -818,13 +818,13 @@ and outshone every atmospheric limb.
 
 | | |
 |---|---|
-| `body_ocean.gdshader` | **the sea: a LEVEL on its own mesh, wearing the ground's own triangles at ratio 1.0** — the sea's surface IS the sphere the land is displaced from, so the two cannot disagree about the waterline. **No `discard`**: the land is opaque and drawn first, the water transparent and drawn after, so the depth test IS the coastline. **The water's thickness comes from the FRAME** (`depth_texture` + `INV_PROJECTION_MATRIX`), not from a second evaluation of the terrain field: the planet is already drawn below, so the column is `ground distance - water distance` along the pixel's ray, converted to the vertical column by incidence. That is what lets the sea have no terrain model at all, and with it `surface_height` — the last 21 octaves the water paid — left this shader. A **two-colour depth ramp** (bright teal to deep blue, `shallow_metres` 5 m to `deep_metres` **15 m**) because a shallow sea is bright for seeing its bottom; `ALPHA` is `mix(shore_alpha, 1.0, smoothstep(0, shallow_depth 15 m, depth))`, so past fifteen metres the floor is gone and the water is its own reflecting colour. **Fresnel sky reflection** — `0.02 + 0.98(1-cos)^5` into `EMISSION`, deliberately not multiplied by `AO` — tinted by `sky_tint`, the body's own Rayleigh coefficients. **`NORMAL` is VIEW space in the fragment stage**, so the body-space wave normal is transformed by `VIEW_MATRIX * MODEL_MATRIX`. **Waves are four directional waves evaluated ANALYTICALLY** (512 m to 64 m, equal slope per octave, golden-angle directions turned by the patch field), because a float32 position on a 6,371 km sphere is quantised at 0.5 m: nothing shorter than ~64 m is representable, and the slope of a sampled field is quantisation noise there. `slope * cos(phase)` is the exact derivative, so there is no sampling and nothing to alias; `ROUGHNESS` rises with the pixel's footprint so unresolved slopes **widen** the glint into a path. Built by `SpacesimSystemScene` for a body with a `Phase.LIQUID` material; `SpacesimBodyRenderer.ocean_material(liquid)` and `sky_reflection_tint(air)`. **`render_priority = −8`** (`OCEAN_RENDER_PRIORITY`; `RENDER_PRIORITY_MIN` is −128 and a value outside the range is *refused outright*, the material silently keeping 0): the decks run `0…−N`, so at 0 the sea and Earth's deck **tied**, and a distance sort cannot separate two meshes at one origin — the sea's glint composited **over** the cloud instead of being attenuated through it (2026-11-03, `b0d7c78`) |
-| `body_interior.gdshader` | **the opaque floor under a body with no surface** (2026-11-03, `3dc52e7`): one colour, `unshaded`, no map and no alpha — **a giant's interior IS opaque, so a gap between two decks must show darkness and never stars**. Drawn on the walk's own lattice scaled to `radius - H·ln(MODELLED_PRESSURE_MULTIPLE)`, i.e. the depth the model stops claiming to know the troposphere (that is the definition of a `DEEP` level): −65 km on Jupiter against its water deck's −43, −149 km on Saturn against −138, so a deck can never z-fight with it. `cull_disabled` because a descent puts the eye inside it, and the light is `interior_color × star_air_transmittance × star_transmission` — the same two terms every other layer here is lit by, so the floor darkens into the terminator rather than glowing at night. The colour is the DEEPEST deck's own, dimmed by `SpacesimBodyRenderer.INTERIOR_DIM`; both numbers are `A GUESS`. **This closes the note `update_lod` carried since 2026-11-02**, which recorded the old hidden reference sphere filling these gaps "in a colour derived from the body's own gases" (a pale blue faceted ball on Saturn) and prescribed this as the fallback |
+| `body_ocean.gdshader` | **the sea: a LEVEL on its own mesh, wearing the ground's own triangles at ratio 1.0** — the sea's surface IS the sphere the land is displaced from, so the two cannot disagree about the waterline. **No `discard`**: the land is opaque and drawn first, the water transparent and drawn after, so the depth test IS the coastline. **The water's thickness comes from the FRAME** (`depth_texture` + `INV_PROJECTION_MATRIX`), not from a second evaluation of the terrain field: the planet is already drawn below, so the column is `ground distance - water distance` along the pixel's ray, converted to the vertical column by incidence. That is what lets the sea have no terrain model at all, and with it `surface_height` — the last 21 octaves the water paid — left this shader. A **two-colour depth ramp** (bright teal to deep blue, `shallow_metres` 5 m to `deep_metres` **15 m**) because a shallow sea is bright for seeing its bottom; `ALPHA` is `mix(shore_alpha, 1.0, smoothstep(0, shallow_depth 15 m, depth))`, so past fifteen metres the floor is gone and the water is its own reflecting colour. **Fresnel sky reflection** — `0.02 + 0.98(1-cos)^5` into `EMISSION`, deliberately not multiplied by `AO` — tinted by `sky_tint`, the body's own Rayleigh coefficients. **`NORMAL` is VIEW space in the fragment stage**, so the body-space wave normal is transformed by `VIEW_MATRIX * MODEL_MATRIX`. **Waves are four directional waves evaluated ANALYTICALLY** (512 m to 64 m, equal slope per octave, golden-angle directions turned by the patch field), because a float32 position on a 6,371 km sphere is quantised at 0.5 m: nothing shorter than ~64 m is representable, and the slope of a sampled field is quantisation noise there. `slope * cos(phase)` is the exact derivative, so there is no sampling and nothing to alias; `ROUGHNESS` rises with the pixel's footprint so unresolved slopes **widen** the glint into a path. Built by `StoichonSystemScene` for a body with a `Phase.LIQUID` material; `StoichonBodyRenderer.ocean_material(liquid)` and `sky_reflection_tint(air)`. **`render_priority = −8`** (`OCEAN_RENDER_PRIORITY`; `RENDER_PRIORITY_MIN` is −128 and a value outside the range is *refused outright*, the material silently keeping 0): the decks run `0…−N`, so at 0 the sea and Earth's deck **tied**, and a distance sort cannot separate two meshes at one origin — the sea's glint composited **over** the cloud instead of being attenuated through it (2026-11-03, `b0d7c78`) |
+| `body_interior.gdshader` | **the opaque floor under a body with no surface** (2026-11-03, `3dc52e7`): one colour, `unshaded`, no map and no alpha — **a giant's interior IS opaque, so a gap between two decks must show darkness and never stars**. Drawn on the walk's own lattice scaled to `radius - H·ln(MODELLED_PRESSURE_MULTIPLE)`, i.e. the depth the model stops claiming to know the troposphere (that is the definition of a `DEEP` level): −65 km on Jupiter against its water deck's −43, −149 km on Saturn against −138, so a deck can never z-fight with it. `cull_disabled` because a descent puts the eye inside it, and the light is `interior_color × star_air_transmittance × star_transmission` — the same two terms every other layer here is lit by, so the floor darkens into the terminator rather than glowing at night. The colour is the DEEPEST deck's own, dimmed by `StoichonBodyRenderer.INTERIOR_DIM`; both numbers are `A GUESS`. **This closes the note `update_lod` carried since 2026-11-02**, which recorded the old hidden reference sphere filling these gaps "in a colour derived from the body's own gases" (a pale blue faceted ball on Saturn) and prescribed this as the fallback |
 | `sky_stars.gdshader` | a `shader_type sky` material on a `Sky` resource, `background_mode = BG_SKY`. One pixel a star, carrying its whole flux. **The air left this shader on 2026-11-02**: between 2026-11-01 and then it drew the far half of every column, which hid the air in front of every body the rasteriser drew (Luna came out black against a glowing sky) — the half a sky owns can never be drawn in front of anything. It is `air_shell.gdshader`'s now, and `set_air_off()` is called unconditionally |
 | `air_shell.gdshader` | **the air, one band per shell, worn by the body itself.** `unshaded, cull_front, depth_test_disabled, depth_draw_disabled, blend_mix, fog_disabled`, so the far face is drawn even where a mountain stands in front of it, and the march stops where the FRAME says the surface is (`hint_depth_texture` → unprojected distance) rather than where a depth test would reject it — which is what makes the air in front of a mountain drawable, and what makes a mountain poking through the shell harmless. It integrates the ray's chord through its own band only (`u_band_inner`, `u_band_outer`), so bands sum to the column and no instance needs to know the eye's altitude; `u_strength` is the host's ring-pixel gate, multiplied into alpha. `ALBEDO` is the in-scatter divided by alpha, because `blend_mix` multiplies by alpha itself; extinction is carried by one scalar (`1 - luminance(T)`), which is the corner it cuts — per-channel alpha does not exist |
-| `atmosphere_pass.gd` | `SpacesimAtmospherePass` — a `CompositorEffect` that now draws **only the fog**, and is registered for that alone (2026-11-03, `07ed5c1`): `main.gd::_update_fog` feeds it `fog.gain`, the deck's own numbers, the cover map and the camera's altitude, and it runs **ahead of the exposure pass** so the metre weighs the veil. Everything in it that marched air or walked the deck as a segment is unreachable (`MARCHES_DECK` is `const false`); `march_deck`/`deck_span` are kept because the second band at a deck's base will want them. **A pass is the only place a medium at the eye can live** — see `fog.gain` — and its header says so |
-| `sky/star_catalogue.gd` | `SpacesimStarCatalogue` — loads `sky/hyg_v44.stars` into three textures |
-| `sky/star_sky.gd` | `SpacesimStarSky` — owns the `Sky` and hands the shader its host plumbing. **`set_air(air, planet_radius, atmosphere_radius, eye_local, sun_local, to_local)`** publishes the nearest body's scattering numbers in the body's own frame, plus the rotation that turns a world `EYEDIR` into it; `set_air_off()` is every frame with no atmosphere under the camera. Called from `SpacesimSystemScene.update_sky()` once a frame, before the pass is prepared. **Since 2026-11-02 the host calls `set_air_off()` unconditionally** and `set_air()` is kept only as the switch's other half: the air is the shells' |
+| `atmosphere_pass.gd` | `StoichonAtmospherePass` — a `CompositorEffect` that now draws **only the fog**, and is registered for that alone (2026-11-03, `07ed5c1`): `main.gd::_update_fog` feeds it `fog.gain`, the deck's own numbers, the cover map and the camera's altitude, and it runs **ahead of the exposure pass** so the metre weighs the veil. Everything in it that marched air or walked the deck as a segment is unreachable (`MARCHES_DECK` is `const false`); `march_deck`/`deck_span` are kept because the second band at a deck's base will want them. **A pass is the only place a medium at the eye can live** — see `fog.gain` — and its header says so |
+| `sky/star_catalogue.gd` | `StoichonStarCatalogue` — loads `sky/hyg_v44.stars` into three textures |
+| `sky/star_sky.gd` | `StoichonStarSky` — owns the `Sky` and hands the shader its host plumbing. **`set_air(air, planet_radius, atmosphere_radius, eye_local, sun_local, to_local)`** publishes the nearest body's scattering numbers in the body's own frame, plus the rotation that turns a world `EYEDIR` into it; `set_air_off()` is every frame with no atmosphere under the camera. Called from `StoichonSystemScene.update_sky()` once a frame, before the pass is prepared. **Since 2026-11-02 the host calls `set_air_off()` unconditionally** and `set_air()` is kept only as the switch's other half: the air is the shells' |
 | `sky/PROVENANCE.md` | where the data came from, its licence, its format, and the calibration |
 | `sky/hyg_v44.stars` | 119,613 stars, 1.2 MB, CC BY-SA 4.0 (see below). Bucketed into a **cube-face grid of GRID x GRID cells a face**, and **every cell's stars are in ascending magnitude order** — which is what lets the shader's depth filter `break` instead of `continue`, so the per-pixel loop costs the *visible* stars in the cell rather than all of them. The one piece of arithmetic that must agree across the language boundary is `cell_of` (and now that ordering, which is the second); `tests/test_render.gd` checks the shader's `MAX_PER_CELL` covers the asset's worst cell, so a grid change cannot silently start dropping the densest cell's stars |
 | `tools/build_star_catalogue.py` | the reduction, and the check that reproduces the calibration |
@@ -856,13 +856,13 @@ already baked in — which is why none of them could respond to a varying EV: a 
 by a variable exposure is a different picture, not the same one seen differently. The conversion into
 engine units is `UNIT_LUX_PER_SR = 100,000/pi` — **a unit conversion, not a gain factor**.
 
-**The catalogue is Sol calibration data, not shipped content** ([[SpaceSim/Cosmos and Discovery|Cosmos
+**The catalogue is Sol calibration data, not shipped content** ([[Stoichon/Cosmos and Discovery|Cosmos
 and Discovery]] §2). It is licensed **CC BY-SA 4.0**, which is compatible with this repository's GPL-3.0
 because the data and the code are separate works; `PROVENANCE.md` carries the attribution. Its depth is
 swept by `sky.star_depth`; the catalogue is a *complete* sky to magnitude 8 and a diminishing fraction
 beyond (0.99 at 8, 0.69 at 9), so the setting belongs in 6.5 to 8.0 with 9.5 a soft ceiling.
 
-**The light path.** `SpacesimSystemScene.update_sky(camera)` points the sky at the camera once a frame,
+**The light path.** `StoichonSystemScene.update_sky(camera)` points the sky at the camera once a frame,
 sets its depth and gain from settings, and re-sums the ambient from the catalogue when the depth changes.
 The **frame's** exposure is the pass's: it reads the rendered pixels, so what the eye is looking at is
 whatever the picture ended up containing — an empty frame included, which the metre answers by opening
@@ -883,7 +883,7 @@ already records the distinction (*filtering, not collecting*).
 **No body draws its air today.** The shell that did — one icosphere reaching `radius + sky_top`,
 `cull_front`, marching Rayleigh and Mie scattering to `min(the ray's exit, the planet hit)` — is deleted, along
 with its shader, its material and its level law. What survives is the **arithmetic**, because it is a fact
-about a body rather than about a renderer: `SpacesimAtmosphereModel` still derives the scale height, the
+about a body rather than about a renderer: `StoichonAtmosphereModel` still derives the scale height, the
 coefficients, the temperatures and the air's own height, and `sky_top` is still on the scene body because the
 camera's far plane reads it.
 
@@ -898,7 +898,7 @@ it, which was right while the shell was the only air; beside a march it applies 
 integral, one place.
 
 **How tall the air is, per body** — derived, `SHELL_SCALE_HEIGHTS` scale heights of the air's own
-`kT/(m-bar g)`, floored by `SpacesimFraming.atmosphere_altitude` so the air can never be shorter than the
+`kT/(m-bar g)`, floored by `StoichonFraming.atmosphere_altitude` so the air can never be shorter than the
 atmosphere frame the game puts the player in. Printed from the running code and asserted in
 `test_render.gd`:
 
@@ -943,7 +943,7 @@ That script needs a window (`xvfb-run` counts), which is why it is not part of `
 
 ## Navigation
 
-`addons/spacesim/navigation/` — navigation markers: **a ring where each object is, a short line, and
+`addons/stoichon/navigation/` — navigation markers: **a ring where each object is, a short line, and
 a label**. The beginning of the HUD's navigation overlay.
 
 - **The ring** is the object's own screen position, and **may be off screen**. It is the label that
@@ -958,7 +958,7 @@ a label**. The beginning of the HUD's navigation overlay.
 The set is rebuilt every frame and the labels are **pooled, not allocated**; the pool size is the
 screen-space budget in one place.
 
-### `SpacesimMarkers` — `Node3D`
+### `StoichonMarkers` — `Node3D`
 
 | Member | |
 |---|---|
@@ -966,20 +966,20 @@ screen-space budget in one place.
 | `pool_size: int` | the cap, and the screen-space budget |
 | `font_size: int`, `margin: float` | applied from the settings; `margin` is the inset the labels are fitted inside |
 | `selected_color: Color` | the selected target's own colour — see `markers.selected_color` |
-| `colour_of(priority) -> Color` | that colour for `SELECTED`, `SpacesimOverlay.COLOR` otherwise |
+| `colour_of(priority) -> Color` | that colour for `SELECTED`, `StoichonOverlay.COLOR` otherwise |
 | `context_targets`, `mission_targets: Array[Node3D]` | ambient group, then mission objectives |
 | `selected: Node3D` | the selected target, or null |
 | `targets: Array[Dictionary]` | markers for things with no node — fragments. Each is `{id, position, text, priority, parent}`; `id` is negative so it cannot collide with a node's instance id, and `parent` is `NO_PARENT` (0) |
 | `const NO_PARENT` | the parent id of a target that orbits nothing this overlay knows about |
 | `refresh(camera) -> void` | rebuild the set, place its labels, hand the rings to the overlay; call once a frame |
-| `orbits: Dictionary` | moon node → the [SpacesimSceneBody] it orbits; handed in once, a fact about the system |
+| `orbits: Dictionary` | moon node → the [StoichonSceneBody] it orbits; handed in once, a fact about the system |
 | `static choose(candidates, limit) -> Array[Dictionary]` | the keyed union for one frame, by `id`; highest priority wins, then nearest |
 | every mark draws a ring | **there is no fragment-shaped marker.** The ring is the object's screen position and that is as true of a rock as of a moon; Evert, 2026-11-14: *"I like the ring."* The only thing a fragment's label adds is its diameter, which is in the entry's `text` |
 | `static clamp_to_edge(point, size, margin) -> Vector2` | the edge point in a direction — **and the point itself when it is already inside** |
 | `static screen_direction(camera, target) -> Vector2` | viewport direction, valid behind the camera |
 | `static format_distance(metres) -> String` | `1.50 Gm`, `2.5 km`, `12 m` |
 
-### `SpacesimBand` — `Control`
+### `StoichonBand` — `Control`
 
 **The band the 3D is drawn in, and the strip under it.** The picture is not the whole screen: the bottom
 fifth is an opaque black strip, and the 3D above it is rendered into a `SubViewport` sized to the band and
@@ -991,7 +991,7 @@ asks: the vertical field is unchanged and the horizontal grows (2.22 : 1 on 16:9
 | Member | |
 |---|---|
 | `take(camera: Camera3D)` | **moves a camera into the viewport**, keeping its global transform. A `Camera3D` renders into the viewport that contains it, so this is what makes the picture come out at the band's size — and the caller must then DRIVE that camera, because it no longer inherits the ship's transform |
-| `fit(band, strip, pixels, scale)` | places both rects (canvas units) and sizes the `SubViewport` (**window pixels**) with the render scale. The rects come from `SpacesimDisplay`, so a changed strip height moves everything together |
+| `fit(band, strip, pixels, scale)` | places both rects (canvas units) and sizes the `SubViewport` (**window pixels**) with the render scale. The rects come from `StoichonDisplay`, so a changed strip height moves everything together |
 | `viewport() -> SubViewport`, `picture_rect()`, `strip_rect()` | for a test, and for anything that needs the render size |
 | `STRIP_COLOR` | black, and **painted** rather than left empty: the root's clear colour is not something to rely on once anything draws there |
 
@@ -1000,7 +1000,7 @@ transform per drawn frame puts the render camera a tick behind the scene — whi
 flickering while the view rotates, not as a camera fault. Drive it in `_physics_process` from the source's
 physics `global_transform`; the `godot` skill carries the rule.
 
-### `SpacesimGroup` — `Control`
+### `StoichonGroup` — `Control`
 
 **One labelled group in the HUD strip**: a thin white rounded border (`StyleBoxFlat`, radius 6, alpha 0.45),
 a heading, and its fields as two aligned columns.
@@ -1009,7 +1009,7 @@ a heading, and its fields as two aligned columns.
 |---|---|
 | `set_fields(fields: Array)` | `[label, value]` pairs. **The names are right-aligned in a column measured with the font they are drawn in**, which is what puts the colons in one line — counting characters only works in a monospaced face. One space either side of the colon: the leading one is part of the name (`"Label :"`), the trailing one is the gap between the two labels, measured rather than guessed |
 | `set_lines(lines: PackedStringArray)` | raw text in the values column, for a group with nothing to label |
-| `fit(rect)` | places the group and its text; the strip's geometry is `SpacesimDisplay`'s |
+| `fit(rect)` | places the group and its text; the strip's geometry is `StoichonDisplay`'s |
 | `set_heading(text)`, `heading_text()`, `names_text()`, `values_text()` | the heading and the content, for a caller and for a test |
 | `column_width()`, `value_gap()` | the measured column and gap, in pixels |
 
@@ -1017,7 +1017,7 @@ a heading, and its fields as two aligned columns.
 row are weights in `main.gd`, so wiring a reading in moves nothing else. A group narrower than its own
 longest label clamps the column — a degenerate case, not a layout.
 
-### `SpacesimOverlay` — `Control`
+### `StoichonOverlay` — `Control`
 
 Draws every ring and line in **one `_draw()` pass** rather than as a node each. Twelve markers
 would otherwise be twelve Controls to build, place and hide every frame — and none of them would know
@@ -1078,10 +1078,10 @@ still drawn, with nothing written beside it. A moon that is the **target** is ne
 neither is one whose planet is not marked — there is nothing to compete with.
 
 The set is ordered **parents before their own moons**, so a planet's label is placed by the time its
-moon asks. `SpacesimMarkers._parents_before_their_moons` does that, keeping the order within each
+moon asks. `StoichonMarkers._parents_before_their_moons` does that, keeping the order within each
 part.
 
-The map it uses is `SpacesimSystemScene.orbit_parents()`, which is **moons only**. A planet's own
+The map it uses is `StoichonSystemScene.orbit_parents()`, which is **moons only**. A planet's own
 `parent_id` is its star, and "hidden by the thing you orbit" is not the same claim there — a star's
 disc is a fraction of a pixel from any distance, so the rule would hide planets for being roughly in
 the Sun's direction, which is where they spend half of every orbit.
@@ -1099,7 +1099,7 @@ Which objects are marked is the caller's business; this decides only how they ar
 
 ## Settings
 
-`addons/spacesim/settings/` — declared defaults in code, and **one machine-written file** for what
+`addons/stoichon/settings/` — declared defaults in code, and **one machine-written file** for what
 differs.
 
 This is the shape Godot recommends and the shape Godot itself uses: `project.godot` carries only
@@ -1110,13 +1110,13 @@ argument exists because the key is expected to be absent.
 ### Where it lives
 
 ```
-$XDG_CONFIG_HOME/spacesim/settings.cfg      player settings          (fallback ~/.config/...)
-$XDG_DATA_HOME/spacesim/                    worlds and save branches (fallback ~/.local/share/...)
+$XDG_CONFIG_HOME/stoichon/settings.cfg      player settings          (fallback ~/.config/...)
+$XDG_DATA_HOME/stoichon/                    worlds and save branches (fallback ~/.local/share/...)
 ```
 
 Not Godot's `user://`: that is a single writable directory, under the *data* home and nested
 through `godot/app_userdata`, so it cannot separate configuration from data and it is not
-`~/.config`. `SpacesimXdg` resolves the paths properly, and per the specification a variable that
+`~/.config`. `StoichonXdg` resolves the paths properly, and per the specification a variable that
 is unset, empty, or **not an absolute path** is ignored.
 
 ### The file
@@ -1148,13 +1148,13 @@ holds that end.
 travels with the world.
 
 Content that *should* travel — the frame bands, the shell altitudes, the pad size — is authored on the
-**content resource** (`systems/*.tres`) instead. `SpacesimFraming` carries those numbers and
-`SpacesimSystemScene.build()` reads it, so it is the one source for them.
+**content resource** (`systems/*.tres`) instead. `StoichonFraming` carries those numbers and
+`StoichonSystemScene.build()` reads it, so it is the one source for them.
 
 > **Changed 2026-10-15.** There used to be a second scope. Six `frames.*` keys were declared
 > `Scope.WORLD` — meant to be read from the world's own file, travelling with the world as content, and
 > never written to the player's — and **nothing read them.** The bands and thresholds come from
-> `SpacesimFraming` on the resource, and `frames.system_band`'s default had already drifted from it
+> `StoichonFraming` on the resource, and `frames.system_band`'s default had already drifted from it
 > (`1e11` against `1e13`). The keys are gone, and the world-scope machinery went with them: with those
 > keys removed the scope had **no members**, so it could not do anything, and a capability that cannot
 > be exercised is not a capability. **Two copies of one number was the bug this closed** — the original
@@ -1189,13 +1189,13 @@ on change (`camera.fov`, the marker pool and font size).
 | `render.atmosphere_volume` | player | **true** — whether the air is drawn at all. It gates **every body's air shell** (`air_shell.gdshader`): zero hides them and leaves the frame exactly as the rasteriser drew it |
 | `render.wireframe_sphere` | player | **true** — draw the **datum lattice** as its own wireframe: the same chunks and the same points the surface uses, with nothing translated. It is the SUBDIVISION itself, beside the things built on it, and it exists only in `render.mode = wireframe` — outside one the surface is the visible thing and a ball under it would hide it |
 | `render.wireframe_surface` | player | **true** — the surface's own wireframe. With it off the view is the subdivision and the decks alone, which is how a translated surface is judged against the sphere it was cut from |
-| `render.surface_translation` | player | **false** — the vertices carry the terrain: every drawn point moves radially by its own height either side of the datum, with `height` asked at *that point's own direction* on the device (`SpacesimSurfaceGpu.heights`). **The datum is per body** — the liquid fraction of its coverage, resolved through the measured quantiles (0.825 field units on Earth) — and **the field is normalised about it and scaled on each side separately**: `amplitude` (0.14 % of the radius, 8.9 km on Earth) above and `depth_amplitude` (0.17 %, 10.8 km) below, so the land rises through the cloud decks and the basins fall to an ocean floor. One scale for both gave the land the top 17.5 % of the range and the basins the bottom 82.5 % — 1.56 km against 16.3 km — and the clamp that hid it ('nothing drawn below the datum', 2026-11-01) flattened every basin onto the sea. **A basin is only drawable because the walk's cap reaches it**: a surface below the datum has a *wider* visible cap, so `SpacesimPatches.cover_angle` takes it as a layer below the datum and the walk maxes over layers. A barren body's datum is the field's own floor, so it has no basin branch and nothing is flattened. **It creates no vertices and refines nothing.** Radial and measured from the datum, so a vertex at sea level does not move and the coast is exact by construction, while the ship's altitude, the framings' bands and a deck's condensation level keep measuring from the same sphere. **The surface only** — a deck is a level and the sphere is the datum, so neither is translated. |
+| `render.surface_translation` | player | **false** — the vertices carry the terrain: every drawn point moves radially by its own height either side of the datum, with `height` asked at *that point's own direction* on the device (`StoichonSurfaceGpu.heights`). **The datum is per body** — the liquid fraction of its coverage, resolved through the measured quantiles (0.825 field units on Earth) — and **the field is normalised about it and scaled on each side separately**: `amplitude` (0.14 % of the radius, 8.9 km on Earth) above and `depth_amplitude` (0.17 %, 10.8 km) below, so the land rises through the cloud decks and the basins fall to an ocean floor. One scale for both gave the land the top 17.5 % of the range and the basins the bottom 82.5 % — 1.56 km against 16.3 km — and the clamp that hid it ('nothing drawn below the datum', 2026-11-01) flattened every basin onto the sea. **A basin is only drawable because the walk's cap reaches it**: a surface below the datum has a *wider* visible cap, so `StoichonPatches.cover_angle` takes it as a layer below the datum and the walk maxes over layers. A barren body's datum is the field's own floor, so it has no basin branch and nothing is flattened. **It creates no vertices and refines nothing.** Radial and measured from the datum, so a vertex at sea level does not move and the coast is exact by construction, while the ship's altitude, the framings' bands and a deck's condensation level keep measuring from the same sphere. **The surface only** — a deck is a level and the sphere is the datum, so neither is translated. |
 | `render.cloud_decks` | player | **false** — the far regime's cloud. **One switch for one mechanism, reading no other switch**: `show_decks = render.cloud_decks and not volume` made "turn the decks on" a lie for a whole day. Off hides every deck and bakes nothing. **Off by default because the clouds rung owns the tuning** (the layer's light, multiple decks, the near regime), not because it does not draw: a deck draws the **surface's own mesh translated to its level** — the same lattice, the same chunks, the same index array, so a refinement lands in both and the two cannot disagree about which triangles exist (2026-11-01; before that a deck had a unit icosphere of its own, sized by `shell_level`, whose sagitta had to be padded out with `shell_scale` or it cut into the ground) |
 | `render.mode` | player | `flat` — `wireframe`, `flat` or `rendered`. `flat` is the derived albedo and not one texture read; `wireframe` is the subdivision itself, drawn as the lattice's edges; **`rendered` is the real surface** — the land as the field itself, evaluated per pixel at the resolution the pixel can resolve and coloured from the derived ramp, with no map, no tile and no ladder (the raster was deleted 2026-10-28). All three are one mesh and one material: the mode is a uniform, plus a line material for the wireframe |
-| `render.depth_tint` | player | **false** — tint each patch by its chunk's depth, so the tree is legible at a glance. The colour is a vertex colour per patch (`SpacesimPatches.depth_tint`) |
-| `render.ev_compensation` | player | **true** — on, the exposure multiplier is applied by the frame-wide pass (`SpacesimExposurePass`); off disables the pass, so the frame is drawn at Godot's own reference and a difference in the picture is a difference in the geometry |
-| `lod.error_budget` | player | 4.0 — the geometric error a body's mesh may show at its **silhouette**, in pixels on screen. **It is no longer the only limit**: since 2026-10-28 the walk takes the smaller of this curvature bound and `lod.facet_angle` (2 degrees of apparent size by default), because ε bounds a facet's *sagitta* — curvature — which at 1 km altitude permits a facet 5.8 km across, ~17,700 pixels of screen. The apparent-size term binds close in and this one holds the silhouette from about 1.6 Gm out. **And the triangle budget is gone**: the walk refines to the law and the HUD reports the count. Read by `SpacesimSystemScene.update_lod`; small is finer. **The `[` / `]` keys this row used to promise do not exist** — they went with the triangle budget — so it is tuned on the settings screen or in `settings.cfg`. It is a **trim** meant to be tuned by eye and then frozen into `SpacesimLod`, the same shape as the star field's gain |
-| `lod.facet_angle` | player | 2.0 **degrees** — the apparent size a facet may subtend, and therefore the one number that sets how finely the ground is cut. It was `SpacesimPatches.FACET_ANGLE`, a constant with a note arguing it should not be a setting, because two consumers read it: the walk's apparent-size limit and `finest_edge_angle`, which tells the rebuild gate how far the eye may swing. They now take it as an argument and `walk_is_due` compares it, so it is hot and the two cannot disagree — the same arrangement `lod.error_budget` has. Read once a frame in `update_lod`, in degrees there and radians in every law below. Measured at 10 km altitude on Earth: 8 degrees gives 218 chunks, 2 gives 2,262, 0.5 gives 30,580. **The mechanism is always on** — this is its angle, not a switch |
+| `render.depth_tint` | player | **false** — tint each patch by its chunk's depth, so the tree is legible at a glance. The colour is a vertex colour per patch (`StoichonPatches.depth_tint`) |
+| `render.ev_compensation` | player | **true** — on, the exposure multiplier is applied by the frame-wide pass (`StoichonExposurePass`); off disables the pass, so the frame is drawn at Godot's own reference and a difference in the picture is a difference in the geometry |
+| `lod.error_budget` | player | 4.0 — the geometric error a body's mesh may show at its **silhouette**, in pixels on screen. **It is no longer the only limit**: since 2026-10-28 the walk takes the smaller of this curvature bound and `lod.facet_angle` (2 degrees of apparent size by default), because ε bounds a facet's *sagitta* — curvature — which at 1 km altitude permits a facet 5.8 km across, ~17,700 pixels of screen. The apparent-size term binds close in and this one holds the silhouette from about 1.6 Gm out. **And the triangle budget is gone**: the walk refines to the law and the HUD reports the count. Read by `StoichonSystemScene.update_lod`; small is finer. **The `[` / `]` keys this row used to promise do not exist** — they went with the triangle budget — so it is tuned on the settings screen or in `settings.cfg`. It is a **trim** meant to be tuned by eye and then frozen into `StoichonLod`, the same shape as the star field's gain |
+| `lod.facet_angle` | player | 2.0 **degrees** — the apparent size a facet may subtend, and therefore the one number that sets how finely the ground is cut. It was `StoichonPatches.FACET_ANGLE`, a constant with a note arguing it should not be a setting, because two consumers read it: the walk's apparent-size limit and `finest_edge_angle`, which tells the rebuild gate how far the eye may swing. They now take it as an argument and `walk_is_due` compares it, so it is hot and the two cannot disagree — the same arrangement `lod.error_budget` has. Read once a frame in `update_lod`, in degrees there and radians in every law below. Measured at 10 km altitude on Earth: 8 degrees gives 218 chunks, 2 gives 2,262, 0.5 gives 30,580. **The mechanism is always on** — this is its angle, not a switch |
 | `hud.debug` | player | **true** — the information block in the top left, which is **diagnostics now**: system, player, date, settings path, mode, nearest, local unit, state and the mesh's counts. **The ship's own readings live in the strip** (altitude, speed, throttle, target, frame), not here — the strip is the flying view's instrument panel and the block is what replaces it when asked for. Off hides the label, which is the point — the block is what a developer reads and a player stops seeing |
 | `hud.fps` | player | **true** — the frame rate, top right |
 | `hud.key_hints` | player | **true** — the three lines of key reminders under the readout. Read from the bindings, so a rebound key is right here without anyone editing text; off is a HUD with no reminders in it |
@@ -1203,12 +1203,12 @@ on change (`camera.fov`, the marker pool and font size).
 | `markers.font_size` | player | 17 — the HUD's own size, so markers read as part of the screen |
 | `markers.margin` | player | 24.0 — breathing room; labels are fitted inside it, so it is not the clearance a clamped pointer needed |
 | `markers.selected_color` | player | `Color(1.0, 0.9, 0.3)` — the one thing on the overlay that stands out, so it can be made to stand out against what it is seen against |
-| `exposure.range_stops` | player | 32.0 — **the ceiling on the metre's gain**, in stops above the light-adapted floor (`SpacesimExposure.MIN_MULTIPLIER`). The metre drives the frame toward middle grey, and a frame of nothing but stars has almost no mean luminance to answer with, so it asks for the top of the window; this is what caps how far it may go. 32.0 reproduces the derived `MAX_MULTIPLIER` exactly and 0.0 allows no boost. Read by `main.gd` and handed to `SpacesimExposurePass` |
-| `fog.gain` | player | **2.0** — **how opaque the cloud map's relative reading means**, and the only free number in the deck's fog. The amount is the map's value at the camera, and that value is *relative*: 0 at the coverage threshold, 1 only at the brightest texel the map can hold, so a patch anyone would call thick reads 0.5–0.7 and would fog at 50–70%. `share = clamp(density · gain, 0, 1) · (1 − altitude/full_column)`, so the ramp's two ends are geometry (full at the deck's base, zero at its top) and this scales what the texture says into the opacity it means. **Live again since 2026-11-03** (`07ed5c1`): parked for one day when the shells took the air, and given back because **the fog is a medium at the EYE** — what the camera is sitting in rather than a segment on a ray — which a per-pixel shell clipped at the frame's depth cannot express. `main.gd::_update_fog` reads it into `SpacesimAtmospherePass`, which is in the compositor for this alone. **The fog is a medium at the eye and belongs over the whole view**, so when the pass began handing empty-depth pixels to the sky shader (2026-11-01) it had to stay outside that handover: returning early confined it to the pixels with geometry and removed it from every pixel of sky, which at 1.6 km inside a band is most of the frame |
+| `exposure.range_stops` | player | 32.0 — **the ceiling on the metre's gain**, in stops above the light-adapted floor (`StoichonExposure.MIN_MULTIPLIER`). The metre drives the frame toward middle grey, and a frame of nothing but stars has almost no mean luminance to answer with, so it asks for the top of the window; this is what caps how far it may go. 32.0 reproduces the derived `MAX_MULTIPLIER` exactly and 0.0 allows no boost. Read by `main.gd` and handed to `StoichonExposurePass` |
+| `fog.gain` | player | **2.0** — **how opaque the cloud map's relative reading means**, and the only free number in the deck's fog. The amount is the map's value at the camera, and that value is *relative*: 0 at the coverage threshold, 1 only at the brightest texel the map can hold, so a patch anyone would call thick reads 0.5–0.7 and would fog at 50–70%. `share = clamp(density · gain, 0, 1) · (1 − altitude/full_column)`, so the ramp's two ends are geometry (full at the deck's base, zero at its top) and this scales what the texture says into the opacity it means. **Live again since 2026-11-03** (`07ed5c1`): parked for one day when the shells took the air, and given back because **the fog is a medium at the EYE** — what the camera is sitting in rather than a segment on a ray — which a per-pixel shell clipped at the frame's depth cannot express. `main.gd::_update_fog` reads it into `StoichonAtmospherePass`, which is in the compositor for this alone. **The fog is a medium at the eye and belongs over the whole view**, so when the pass began handing empty-depth pixels to the sky shader (2026-11-01) it had to stay outside that handover: returning early confined it to the pixels with geometry and removed it from every pixel of sky, which at 1.6 km inside a band is most of the frame |
 | `exposure.adaptation_rate` | player | **2.0** — **halvings per second** of the exposure's approach. The adaptation is exponential in STOPS, not linear in the multiplier, because a multiplier gap is a ratio: the remaining gap is multiplied by `1 − exp(−rate·delta)` each frame, so it halves every `ln2/rate` seconds whatever its size. Quick when the difference is large, fine-tuning when it is small, frame-rate independent by construction |
 
 There were six `frames.*` keys here until 2026-10-15. They were **read by nothing** and duplicated
-`SpacesimFraming` on the content resource, which is the live source for every one of those numbers —
+`StoichonFraming` on the content resource, which is the live source for every one of those numbers —
 see § Scope. **This is the current, complete list.**
 
 ### Bindings
@@ -1223,10 +1223,10 @@ Matching uses the **physical** key, so WASD stays under the same fingers on a la
 somewhere else — which is why a binding stores a key rather than a character. Modifiers must match
 exactly, so `W` does not fire while Alt is held.
 
-**The parser is `SpacesimBinding`** (`addons/spacesim/input/binding.gd`, documented below) — the
+**The parser is `StoichonBinding`** (`addons/stoichon/input/binding.gd`, documented below) — the
 `settings/bindings.gd` type of that name is gone, and its one remaining caller was the registry's
 `key_binding` validator, which now asks the new type. Everything that *consumes* a binding reads the
-store through `SpacesimInput`; nothing reads a `bindings.*` setting any more.
+store through `StoichonInput`; nothing reads a `bindings.*` setting any more.
 
 ### The settings screen
 
@@ -1250,8 +1250,8 @@ Rows come from the registry, so a newly declared setting appears without the pan
 Bindings are edited as text for now; capturing a key press is the next step.
 
 **The rows are grouped into tabs, and the grouping is a property of the row** — one `"tab"` per
-registry entry, read by `SpacesimSettings.tab_of`. The panel builds one grid per tab from
-`SpacesimSettings.TABS`, so a new setting is filed by declaring where it goes rather than by editing
+registry entry, read by `StoichonSettings.tab_of`. The panel builds one grid per tab from
+`StoichonSettings.TABS`, so a new setting is filed by declaring where it goes rather than by editing
 the screen; grouping by key prefix in the panel instead would put that knowledge in two places, and a
 `video.hdr` added later would land in whichever tab the prefix rule happened to name.
 
@@ -1259,7 +1259,7 @@ the screen; grouping by key prefix in the panel instead would put that knowledge
 |---|---|
 | **Display** | the six `video.*` settings — window, screen, the two resolutions, aspect |
 | **HUD** | everything the player looks through: the six `camera.*` — field of view and the five range bands, a matched set read as one — the three `hud.*` switches (readout, frame rate, key hints), and the four `markers.*`, the navigation labels' size, margin, pool and selection colour |
-| **Bindings** | `mouse.sensitivity`, plus **the thirteen actions, which are not settings**: they come from `SpacesimActions` and are edited through `SpacesimBindingsStore` |
+| **Bindings** | `mouse.sensitivity`, plus **the thirteen actions, which are not settings**: they come from `StoichonActions` and are edited through `StoichonBindingsStore` |
 | **Devices** | **nothing from the registry**: the attached gamepads, their identity, **two lines per axis** — the numbers above the bar it belongs to (`centre`, `travel`) and below it the bar, the shaped value, a **deadband** field, **Calibrate** and **Centred** — every button laid out (21, lit when held), and a **Configure** box per device (below). Plugging a device in or out rebuilds this list |
 | **Troubleshooting** | **what you reach for when the picture is wrong**: the drawing switches (`render.mode`, the two wireframe toggles, `render.surface_translation`, `render.atmosphere_volume`, `render.cloud_decks`), the LOD knobs (`lod.error_budget`, `lod.facet_angle`) and the exposure/sky calibration (`exposure.range_stops`, `exposure.adaptation_rate`, `render.ev_compensation`, `render.depth_tint`, `fog.gain`, `sky.star_depth`, `sky.star_gain`) |
 | **Rest** | the fallback: a row that declares no `tab` lands here rather than falling off the screen. **Empty today, so it is not built** |
@@ -1268,7 +1268,7 @@ the screen; grouping by key prefix in the panel instead would put that knowledge
 are somewhere else.
 
 **Configure, on the Devices tab: one device at a time is routed away from everything else.** While a
-device is named by `SpacesimSettingsPanel.configuring_device()`, `main.gd::_input` marks that device's
+device is named by `StoichonSettingsPanel.configuring_device()`, `main.gd::_input` marks that device's
 events handled **before `Control._gui_input`** — the documented order is `_input` → `_gui_input` →
 `_shortcut_input` → `_unhandled_*`, and marking handled in an earlier phase skips the later ones, which
 is why one call keeps a pad out of the menus as well as out of the game. The screen reads the device by
@@ -1292,7 +1292,7 @@ the first one — so a new type has to arrive with its editor, which is what the
 menu opens rather than when the row is built. Picking one fills the fields, which is a staged edit
 like any other: it changes nothing until **Apply**, and **Close** throws it away.
 
-| `SpacesimSettingsEdit` — `RefCounted` | |
+| `StoichonSettingsEdit` — `RefCounted` | |
 |---|---|
 | `static editable_keys() -> Array` | the player-scope keys, in registry order |
 | `value(key) -> Variant` | staged if edited, otherwise what stands |
@@ -1302,7 +1302,7 @@ like any other: it changes nothing until **Apply**, and **Close** throws it away
 | `has_changes() -> bool` | |
 | `changed` | emitted on any staging change |
 
-`SpacesimSettingsPanel` — `Control` — is built in code, since the project has no editor-authored
+`StoichonSettingsPanel` — `Control` — is built in code, since the project has no editor-authored
 scenes: `configure(settings, bindings)`, and the `closed` signal. The buttons drive the edits directly.
 
 **Apply is two edits now** — the settings and the bindings — and the button only goes idle when both
@@ -1313,7 +1313,7 @@ player has. `dismissed()` discards both.
 container for them. *That guard is load-bearing*: without it every tab page built one, `_bindings_vbox`
 ended up pointing at the last tab's, and every rebuild drew the rows into Troubleshooting while the player
 watched Bindings. The buttons looked dead; the rows were being made correctly, one tab to the right. Below `mouse.sensitivity` it draws
-`SpacesimActions` grouped by category, **one row per binding**: the first row of an action carries its
+`StoichonActions` grouped by category, **one row per binding**: the first row of an action carries its
 label, the rest repeat it dimmed. Each row has its text, **Detect**, **Remove**, and the first row also
 has **Add**.
 
@@ -1325,7 +1325,7 @@ has **Add**.
   an axis` / `Not a button`). A flight line has **no conflict check**: one source may legitimately do two
   things, and the same key can roll the ship and set a view.
 - **Detect** listens. **Keys and pad buttons arrive as events** — `main.gd` forwards them while
-  `is_detecting()` and marks them handled — and **axes are polled** with `SpacesimDevices.most_moved`: the
+  `is_detecting()` and marks them handled — and **axes are polled** with `StoichonDevices.most_moved`: the
   biggest change since the last look, outside that axis's own deadband, and only while no button is
   pressed. What is caught is **shown before it is committed**: *Bind* / *Detect again* / *Cancel*.
 - **A mouse click is only a binding inside the dialog's square.** Mouse events are *not* intercepted
@@ -1343,17 +1343,17 @@ about. `flush_rows()` and `flush_capture()` are how a test asks for either immed
 
 An edit that does not parse is **coloured and staged nowhere**, so a typo cannot reach the file.
 
-### `SpacesimXdg` — `RefCounted` (static)
+### `StoichonXdg` — `RefCounted` (static)
 
 | Member | |
 |---|---|
 | `config_home()`, `data_home()` | XDG base directories, with fallbacks applied |
-| `config_dir()`, `data_dir()` | those, plus `spacesim` |
+| `config_dir()`, `data_dir()` | those, plus `stoichon` |
 | `settings_path()` | `config_dir()/settings.cfg` |
 | `bindings_path()` | `config_dir()/bindings.cfg` — **beside** the settings, in its own file, because a different store writes it |
 | `ensure_directory(path)` | create it, recursively |
 
-### `SpacesimSettings` — `Node`, registered as the `SpacesimSettings` autoload
+### `StoichonSettings` — `Node`, registered as the `StoichonSettings` autoload
 
 | Member | |
 |---|---|
@@ -1369,12 +1369,12 @@ An edit that does not parse is **coloured and staged nowhere**, so a typo cannot
 | `static tab_title(tab) -> String` | what a tab is called on screen — its key capitalised, except `hud`, which is an acronym |
 | `static tab_of(key) -> String` | which tab a row is filed in; **a row that names none is in `rest`** |
 | `static is_acceptable(key, value) -> bool` | whether the store would accept it — what the screen asks before staging |
-| `KNOWN_VALIDATORS` | the named checks; a row naming anything else is a registry mistake. **Empty since the bindings left** — `key_binding` went with them, and `SpacesimBindingsStore.stage` refuses a text it cannot parse |
+| `KNOWN_VALIDATORS` | the named checks; a row naming anything else is a registry mistake. **Empty since the bindings left** — `key_binding` went with them, and `StoichonBindingsStore.stage` refuses a text it cannot parse |
 
 `get_value` never touches the disk. Tests use their own instance with their own path, so the suite
 never writes to the real file.
 
-### `SpacesimDisplay` — `Node`, registered as the `SpacesimDisplay` autoload, after `SpacesimSettings`
+### `StoichonDisplay` — `Node`, registered as the `StoichonDisplay` autoload, after `StoichonSettings`
 
 **Two frame-rate settings, applied together**: `video.vsync` (`enabled`, `disabled`, `adaptive`,
 `mailbox`) and `video.max_fps` — a choice of `unlimited`, `screen`, a **fraction of the screen's own
@@ -1461,11 +1461,11 @@ menu offers each monitor's current resolution, this window's, and a curated list
 
 ## Screens
 
-`addons/spacesim/ui/screen.gd` — the chrome every full-screen modal shares: a dimmed backdrop, a
+`addons/stoichon/ui/screen.gd` — the chrome every full-screen modal shares: a dimmed backdrop, a
 centred panel with a title, a scrollable content column and a button bar. Two screens with the
 same chrome would drift apart, so there is one.
 
-### `SpacesimScreen` — `Control`
+### `StoichonScreen` — `Control`
 
 | Member | |
 |---|---|
@@ -1480,7 +1480,7 @@ same chrome would drift apart, so there is one.
 | `dismissed()` | called just before it is hidden, **whatever the route** — so tidying up does not depend on which button happened to be pressed (a dialog it still has open, its pending action) |
 | `closed` | signal, emitted to ask the scene to hide the screen |
 
-`SpacesimSettingsPanel`, `SpacesimPlayerPanel` and `SpacesimSavedGamesPanel` are the subclasses. The
+`StoichonSettingsPanel`, `StoichonPlayerPanel` and `StoichonSavedGamesPanel` are the subclasses. The
 settings panel uses `dismissed()` to throw staged edits away, which is what its amber Close button
 warns about.
 
@@ -1491,9 +1491,9 @@ expanding child `max(its own size, the child's minimum)` (4.7.2, `scroll_contain
 `_reposition_children`); without the flag the column is pinned to its minimum and the extra height is
 lost, which no screen noticed while every screen was a list of minimum-sized rows.
 
-### `SpacesimActions` — `RefCounted` (static)
+### `StoichonActions` — `RefCounted` (static)
 
-`addons/spacesim/input/actions.gd`. **Every action a player can take, declared once.** An action is
+`addons/stoichon/input/actions.gd`. **Every action a player can take, declared once.** An action is
 *what* a player can do; a binding is one way to do it — they used to be the same identifier, with the
 settings key *being* the action.
 
@@ -1511,9 +1511,9 @@ to zero. A **level** persists and is *changed* by its inputs — a key winds the
 releasing it leaves the level where it got to. That distinction is what makes a key and a stick the
 same action.
 
-### `SpacesimBinding` — `RefCounted` (static)
+### `StoichonBinding` — `RefCounted` (static)
 
-`addons/spacesim/input/binding.gd`. **One way to press one action, as text**, so the file stays
+`addons/stoichon/input/binding.gd`. **One way to press one action, as text**, so the file stays
 readable and hand-editable: `Alt+C`, `W`, `BracketLeft`, `Mouse:Left`, `Mouse:WheelUp`, with the same
 optional modifier prefixes on either.
 
@@ -1535,7 +1535,7 @@ takes the set of held modifiers: the caller is tracking events anyway.
 the stick over and tapping the modifier hands the ship full deflection in one frame.
 
 **A pad's control names are Godot's own** — `Joy:<device name>/Button:A`, `Joy:<device name>/Axis:LEFT_X`
-— because the engine exposes no name-to-index helper, so `SpacesimDevices`' tables are the only vocabulary
+— because the engine exposes no name-to-index helper, so `StoichonDevices`' tables are the only vocabulary
 there is. The device part is the device's **name**, which is what the store keys its sections by, and the
 split is at the last `/` so a name with spaces works. **An axis binding is `relative`** — a deflection is a
 rate; `absolute` is refused until a `level` action and `step(dt)` exist behind it.
@@ -1548,9 +1548,9 @@ bind `W`), a **modifier as the key** (`Alt` alone parses as the Alt keycode — 
 does not distinguish, so it is refused explicitly), and **any joypad form** — `Joy:<device>/Button:A`
 is reserved grammar for the pad work and must not silently bind something else.
 
-### `SpacesimDevices` — `RefCounted` (static)
+### `StoichonDevices` — `RefCounted` (static)
 
-`addons/spacesim/input/devices.gd`. **What the operating system's gamepads look like through Godot —
+`addons/stoichon/input/devices.gd`. **What the operating system's gamepads look like through Godot —
 for looking at, not for binding.** It exists so a screen can show what a device is doing without
 knowing an enumeration, and so the capture dialog has one place to read a control's name from.
 
@@ -1576,9 +1576,9 @@ decision, not a detail; magnetometer and device-orientation have settings but no
 reports named controls in `[-1, 1]`, an unknown one reports raw indices. The screen prints that
 distinction beside the device's name.
 
-### `SpacesimAxisProfile` — `RefCounted`
+### `StoichonAxisProfile` — `RefCounted`
 
-`addons/spacesim/input/axis_profile.gd`. **One physical axis, shaped**: where its travel ends, where it
+`addons/stoichon/input/axis_profile.gd`. **One physical axis, shaped**: where its travel ends, where it
 rests, and how much of the middle is nothing.
 
 | | from | default | |
@@ -1591,7 +1591,7 @@ rests, and how much of the middle is nothing.
 |---|---|
 | `normalise(raw) -> float` | symmetric about the profile's own centre and scaled by its **two** spans, so an asymmetric axis (`−0.95 … +0.88`) maps onto −1…+1 exactly |
 | `shape(raw) -> float` | after the deadband, **rescaled by `1 − deadband`** so full deflection stays full and the response does not step at the edge of the band |
-| `default_for(axis) -> SpacesimAxisProfile` | **what an axis is before it is calibrated**: a `TRIGGER_*` rests at zero and travels to +1, so its default is `0 … +1` rather than a symmetric guess |
+| `default_for(axis) -> StoichonAxisProfile` | **what an axis is before it is calibrated**: a `TRIGGER_*` rests at zero and travels to +1, so its default is `0 … +1` rather than a symmetric guess |
 | `is_sane() -> bool` | travel that runs forwards, a centre **at or inside** it (a trigger rests at the bottom of its travel, and a lever at one stop is a real device), a band under 1.0. **A band of 0.9 is silly and legal** — the bar shows the red box swallowing the line, and that is the feedback |
 | `from_text` / `to_text` | `"-0.950, 0.880, 0.030, 0.150"`; one unreadable number falls back to that field's default alone |
 | `with_travel(low, high)` | a calibration replaces the travel and keeps what was typed |
@@ -1603,9 +1603,9 @@ a trap for the first line in that file that wants the function.
 have two deadbands for it. **Nothing consumes a profile yet** — there are no axis bindings, so these
 numbers are stored, shown and calibrated but change no behaviour.
 
-### `SpacesimAxisBar` — `Control`
+### `StoichonAxisBar` — `Control`
 
-`addons/spacesim/ui/axis_bar.gd`. One axis drawn as a line: the **profile's travel** across the full
+`addons/stoichon/ui/axis_bar.gd`. One axis drawn as a line: the **profile's travel** across the full
 width, the deadband **boxed in red**, a tick where it rests, and a dot where it is now — all in the
 travel's own units, so the dot lands in the middle of the box the moment **Centred** has been pressed.
 `set_state(raw, profile)` from a per-frame refresh; it draws and nothing else.
@@ -1617,9 +1617,9 @@ runs `0 … +1` gets a line it can actually fill. The band's half-width is conve
 (`deadband · (centre − low)` and `deadband · (high − centre)`), so an asymmetric axis gets a box that means
 the same thing either side of its rest.
 
-### `SpacesimBindingsStore` — `RefCounted`
+### `StoichonBindingsStore` — `RefCounted`
 
-`addons/spacesim/input/bindings_store.gd`. **The player's bindings, in a file of their own** —
+`addons/stoichon/input/bindings_store.gd`. **The player's bindings, in a file of their own** —
 `bindings.cfg`, beside `settings.cfg` — because the settings registry declares its keys statically and
 the suite asserts every declared setting has a control, which a bindings table cannot satisfy.
 
@@ -1652,22 +1652,22 @@ change it.
 throws them away, and nothing is ever written by any other route.
 
 **The one-time import** (`_import_legacy`): when `bindings.cfg` does not exist, the sixteen
-`bindings.*` keys in `settings.cfg` are read into memory — `SpacesimSettings` stores them as
+`bindings.*` keys in `settings.cfg` are read into memory — `StoichonSettings` stores them as
 `[bindings] throttle_up = "Shift+Equal"`, which is why the import reads that section and those keys.
 **It writes nothing**, so a first run cannot overwrite anything and the import is idempotent; the file
 first appears at the player's first Apply. A value that does not parse leaves the registry's default in
 place and is reported in `problems` rather than swallowed.
 
-### `SpacesimInput` — `RefCounted`
+### `StoichonInput` — `RefCounted`
 
-`addons/spacesim/input/input_map.gd`. **What an action's bindings are doing right now** — the one place
+`addons/stoichon/input/input_map.gd`. **What an action's bindings are doing right now** — the one place
 that knows an event is a press of an action. It replaces the three shapes the game used to call
 directly: `Bindings.matches(event, get_value("bindings.x"))`, a poll of `Input.is_physical_key_pressed`,
 and the raw text for the HUD's hints.
 
 | Member | |
 |---|---|
-| `store: SpacesimBindingsStore` | assigned at construction |
+| `store: StoichonBindingsStore` | assigned at construction |
 | `feed(event) -> bool` | take one event, pressed **or released**; returns whether it belonged to any action |
 | `triggered(event, action) -> bool` | an edge: a press, never a release and never a key repeating |
 | `held(action) -> bool` | whether any **bang** source is down right now |
@@ -1694,9 +1694,9 @@ integrated and clamped in `FlightController`, where the rest of the flight model
 throttle actions are `rate`s that say "+1 while held". A stick that sets a level directly is the pad
 work, and `step` arrives with it.
 
-### `SpacesimDialog` — a `SpacesimScreen`
+### `StoichonDialog` — a `StoichonScreen`
 
-`addons/spacesim/ui/dialog.gd` — a modal *inside* another screen: the same chrome, smaller and
+`addons/stoichon/ui/dialog.gd` — a modal *inside* another screen: the same chrome, smaller and
 generic, because the save browser needs three shapes of it and they are all "a title, some words,
 maybe a field, and a row of answers" — a confirmation that names what it will destroy, a name
 prompt, and a save's details.
@@ -1713,7 +1713,7 @@ It is a **child of the screen that uses it**, not a screen of its own, so the pa
 screen hotkeys stay where they are: one thing open is what being paused means, and a dialog over a
 screen is still one thing.
 
-### `SpacesimPlayerPanel`
+### `StoichonPlayerPanel`
 
 The personal-data screen, on Tab: what the player is, what they carry, and the doors out of it. Saved
 Games, Settings, Close and Exit Game; the attributes, the assets and where each of them is:
@@ -1731,9 +1731,9 @@ and one screen holding both made the lists scroll inside a screen that was alrea
 histories, their saves, **the Save button** and New Story are the Saved Games screen, one button
 away. Nothing on this screen can move the player, which is why it has no `session_reloaded`.
 
-### `SpacesimSavedGamesPanel`
+### `StoichonSavedGamesPanel`
 
-`addons/spacesim/save/saved_games_panel.gd`. **The histories above, the saves in them below** — a
+`addons/stoichon/save/saved_games_panel.gd`. **The histories above, the saves in them below** — a
 history is a branch and a save a commit on it, so it is one browser with two levels, and choosing a
 history is what the saves list below is about. Stacked rather than side by side because a save's label
 is a date and a place, and it needs the whole width to be one readable line.
@@ -1806,29 +1806,29 @@ signal** — the button would be freed mid-emit, which Godot reports as *"freed 
 a signal is being emitted"*. `_rebuild()` defers it by a frame, and is what a field, a list
 selection or a rename calls instead. Found by the tests, which said exactly that.
 
-## `SpacesimPlayer`
+## `StoichonPlayer`
 
-`addons/spacesim/player/` — the player's own state: what they are and what they carry.
+`addons/stoichon/player/` — the player's own state: what they are and what they carry.
 Player-owned per the world/player boundary; **a save holds it**, in `player/state.json`.
 
-### `SpacesimPlayer` — `RefCounted`
+### `StoichonPlayer` — `RefCounted`
 
 | Member | |
 |---|---|
 | `DEFAULT_NAME`, `DEFAULT_ATTRIBUTES`, `DEFAULT_ASSETS` | the placeholder starting state, handed out as **copies** on `reset()` |
 | `attributes: Dictionary` | named values, starting with `Name`. Currency lives here too, being a quantity rather than a thing |
 | `assets: Array` | things held, each `{id, name, type, value, location}` — `id` is generated once and never edited, because a location refers to it and a name can change |
-| `location: SpacesimLocation` | where the player is; the player and their ships are separate, and coincide when the player is inside one |
+| `location: StoichonLocation` | where the player is; the player and their ships are separate, and coincide when the player is inside one |
 | `deleted: Array` | save tombstones, by hash — recorded in `player/deleted.json`, not in the state file |
 | `display_name()`, `reset(name)`, `add_asset(...)`, `asset_by_id(id)` | |
 | `to_dictionary()` / `from_dictionary(data)` | unknown keys ignored, so a newer save may carry more than this build knows |
 
 ## Save and load
 
-`addons/spacesim/save/` — a world per repository, a history per playthrough, a save per commit. The
+`addons/stoichon/save/` — a world per repository, a history per playthrough, a save per commit. The
 design and the measured feasibility are in the vault (`Save and Load Plan`); this is what exists.
 
-### `SpacesimGit` — `RefCounted`
+### `StoichonGit` — `RefCounted`
 
 The git command line, and nothing else. **Git decides what a valid branch name is**, so
 `is_valid_branch_name` asks it rather than reimplementing the rules; `slug` only gets close, and a
@@ -1846,7 +1846,7 @@ on the machine's git config.
 | `is_valid_branch_name(name) -> bool` | asked of git |
 | `static slug(text) -> String` | a branch name a typed name can become; total, so it always yields something |
 
-### `SpacesimWorldRepo` — `RefCounted`
+### `StoichonWorldRepo` — `RefCounted`
 
 ```
 world.json    which world this is
@@ -1860,7 +1860,7 @@ envelope.
 
 | Member | |
 |---|---|
-| `static for_world(name) -> SpacesimWorldRepo` | under `$XDG_DATA_HOME/spacesim/worlds/` |
+| `static for_world(name) -> StoichonWorldRepo` | under `$XDG_DATA_HOME/stoichon/worlds/` |
 | `exists() -> bool`, `create(world_reference) -> Dictionary` | |
 | `save(files, label) -> Dictionary`, `commit(label) -> Dictionary` | `{"ok", "reason"}`; a save with nothing changed is refused rather than faked |
 | `discard_working_tree() -> bool` | a save is a commit, so uncommitted writes were never a save |
@@ -1877,7 +1877,7 @@ envelope.
 trunk, and git refuses a worktree's own branch anyway. Creating a history or switching first drops
 anything uncommitted, because a dirty tree makes git refuse the switch.
 
-### `SpacesimSession` — `RefCounted`
+### `StoichonSession` — `RefCounted`
 
 One playthrough: the player, the world clock, and the repository that holds them. The repository
 knows git and nothing about what a save contains; the player knows what a player is — **this is the
@@ -1885,7 +1885,7 @@ only place that knows a save is the player, the clock and the world.**
 
 | Member | |
 |---|---|
-| `static for_world(name) -> SpacesimSession` | under `$XDG_DATA_HOME/spacesim/worlds/` |
+| `static for_world(name) -> StoichonSession` | under `$XDG_DATA_HOME/stoichon/worlds/` |
 | `start(system) -> Dictionary` | brings the repository up, loads the last save, or starts the first story |
 | `load_last() -> bool` | the state at HEAD; no git operation, because HEAD already *is* the last save |
 | `load(hash) -> Dictionary` | reads the save out of the commit; nothing moves, in the history or the tree |
@@ -1893,7 +1893,7 @@ only place that knows a save is the player, the clock and the world.**
 | `new_story(name, system, player_name)` | branches from the trunk; history and player named separately |
 | `saves()`, `affected_saves(hash)`, `preview(hash)`, `delete_save(hash)` | deletions are tombstones |
 | `world_time: float`, `player_time: float`, `message: String`, `player`, `repo` | **two clocks**: the world's, and the crew's own proper time. **Both are saved** (`player_time` in the state envelope, defaulting to `world_time` for a save written before it existed) |
-| `advance(seconds)` | **moves both clocks, from one place** — the player's by the frame's delta, the world's by `SpacesimWorldTime.clock_rate(speed)` times it. A clock advanced only on a save is a clock that stands still while you fly, which is what this replaces |
+| `advance(seconds)` | **moves both clocks, from one place** — the player's by the frame's delta, the world's by `StoichonWorldTime.clock_rate(speed)` times it. A clock advanced only on a save is a clock that stands still while you fly, which is what this replaces |
 
 **Reading a save is free; continuing from one is what costs.** `load()` reads the state out of the
 commit, so every save stays in the list and nothing is lost by looking. The session remembers which
@@ -1913,9 +1913,9 @@ removed from. The list is built from commits that touched `player/state.json`.
 On load the clock advances by how long the player was really away (`now − saved_realtime`), and never
 runs backwards — a machine clock that is ahead does not take the world back with it.
 
-### `SpacesimLocation` — `RefCounted`
+### `StoichonLocation` — `RefCounted`
 
-Where something is: a frame, and a position in it. Turned into words by `SpacesimSystemScene.describe()`,
+Where something is: a frame, and a position in it. Turned into words by `StoichonSystemScene.describe()`,
 because saying "landed on Nix" needs the system's names and the player's assets — and `coordinate/`
 should depend on neither.
 
@@ -1925,23 +1925,23 @@ should depend on neither.
 | `is_set() -> bool` | |
 | `to_dictionary()`, `static from_dictionary(data)` | unreadable data gives an *unset* location, not an error |
 
-`SpacesimFrame` gains `frame_id` (and `SYSTEM_ID` for the one frame every system has).
-`SpacesimFrameTree` gains `register(frame)`, `frame_by_id(id)`, `place_in_frame(subject, frame,
+`StoichonFrame` gains `frame_id` (and `SYSTEM_ID` for the one frame every system has).
+`StoichonFrameTree` gains `register(frame)`, `frame_by_id(id)`, `place_in_frame(subject, frame,
 position)` — which *sets* the transform rather than preserving it, because a save says where
 something is — and `resolve_frame(id)` — resolving the **longest existing prefix**, so a save naming
 a frame the system no longer has is placed at the frame that remains, at its origin, rather than
 refused.
 
-### `SpacesimSystemScene` additions
+### `StoichonSystemScene` additions
 
 | Member | |
 |---|---|
 | `frame_phrase(frame_id) -> String` | "landed on Nix", "above Nix", empty for a frame it does not have |
 | `nearest_body_name(position) -> String` | |
-| `SpacesimWorldTime.format(seconds) -> String` | the world clock as a Terran date and time, e.g. "512-05-02 14:33". **In `save/world_time.gd`, not on the scene class** — a built scene knows about its bodies, and nothing about calendars. **The strip does not use it**: at aeons a date is five digits of noise |
-| `SpacesimWorldTime.since_bang(seconds) -> int` | the same instant as **seconds since the Big Bang** (`SECONDS_SINCE_BANG` = 13.787 Gyr, Planck 2018), which is what the HUD's Time group shows for both clocks. **The counter is float64 at 4.35e17, where one ULP is ~97 s** — the last two digits are noise, and that is worth nothing at this scale |
-| `SpacesimWorldTime.grouped(value) -> String` | thousands separators, hand-rolled rather than locale-dependent: nineteen digits is the one number here the eye cannot parse alone |
-| `SpacesimWorldTime.clock_rate(speed) -> float` | **how fast the world's clock runs per second of the crew's. 1.0 today**, deliberately: the light-time floor (`v_f / (c·tanh(v_f/c))`) is a later change and lands here, with everything that advances a clock already going through it |
+| `StoichonWorldTime.format(seconds) -> String` | the world clock as a Terran date and time, e.g. "512-05-02 14:33". **In `save/world_time.gd`, not on the scene class** — a built scene knows about its bodies, and nothing about calendars. **The strip does not use it**: at aeons a date is five digits of noise |
+| `StoichonWorldTime.since_bang(seconds) -> int` | the same instant as **seconds since the Big Bang** (`SECONDS_SINCE_BANG` = 13.787 Gyr, Planck 2018), which is what the HUD's Time group shows for both clocks. **The counter is float64 at 4.35e17, where one ULP is ~97 s** — the last two digits are noise, and that is worth nothing at this scale |
+| `StoichonWorldTime.grouped(value) -> String` | thousands separators, hand-rolled rather than locale-dependent: nineteen digits is the one number here the eye cannot parse alone |
+| `StoichonWorldTime.clock_rate(speed) -> float` | **how fast the world's clock runs per second of the crew's. 1.0 today**, deliberately: the light-time floor (`v_f / (c·tanh(v_f/c))`) is a later change and lands here, with everything that advances a clock already going through it |
 | `describe(location, assets) -> String` | the location chain as prose, innermost first |
 | `place_observer(location) -> bool` | puts the observer back where a save says it was; false when the frame had to fall back |
 | `start_time: float` | the clock a story begins at, from the system file's `start.world_time` |
@@ -1952,16 +1952,16 @@ under you as you land, so its origin is not saved and the saved position says wh
 your locale, not where on a globe. On a featureless sphere the locale is anonymous. Terrain is what
 makes the tangential part mean something, and then a surface will need a placement of its own.
 
-The world clock is a Terran date and time (`SpacesimWorldTime.format()`), carried by **Godot's own proleptic
+The world clock is a Terran date and time (`StoichonWorldTime.format()`), carried by **Godot's own proleptic
 Gregorian date arithmetic** rather than a table of months and leap-year rules of ours: seconds are
 counted from the world's epoch, which reads as year 0, so a story can open in any year it likes. A
 world that wants a calendar of its own is a thing to build when a story needs one.
 
-### `SpacesimPlayer` additions
+### `StoichonPlayer` additions
 
 | Member | |
 |---|---|
-| `location: SpacesimLocation` | the player and their ships are separate; they coincide when the player is inside one, which is containment |
+| `location: StoichonLocation` | the player and their ships are separate; they coincide when the player is inside one, which is containment |
 | assets carry `id`, `name`, `type`, `value`, `location` | the id is generated once and never edited, because a location refers to it |
 | `add_asset(name, type, value, at) -> Dictionary` | |
 | `asset_by_id(id) -> Dictionary` | |

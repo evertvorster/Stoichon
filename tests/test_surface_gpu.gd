@@ -5,8 +5,8 @@ extends RefCounted
 ## Two things this suite exists for, and neither can be checked headlessly:
 ##
 ## 1. **`create_local_rendering_device()` returns `null` under `--headless`**, so the ordinary suite run never
-##    takes this path at all. `SpacesimSurfaceGpu` is nonetheless the build-time bake in flight —
-##    `SpacesimSurfaceDistribution.prepare()` calls it synchronously for every body with a surface — so a fault here
+##    takes this path at all. `StoichonSurfaceGpu` is nonetheless the build-time bake in flight —
+##    `StoichonSurfaceDistribution.prepare()` calls it synchronously for every body with a surface — so a fault here
 ##    is a fault on the first frame of the game, not in a probe.
 ## 2. **The RID count.** The allocator exhaustion that cost this project two flights was allocations never
 ##    given back, found in a pass that was reading someone else's error. The counter lives on the device
@@ -26,7 +26,7 @@ const HEIGHT := 32
 func run(h, _root: Node) -> void:
 	print("  surface gpu")
 
-	var gpu := SpacesimSurfaceGpu.new()
+	var gpu := StoichonSurfaceGpu.new()
 	if not gpu.open():
 		# **The reported absence, not a silent skip** — the same rule the cloud suite follows, so a run that
 		# never reached a device says so rather than looking green. **Note what this check can and cannot say**:
@@ -42,7 +42,7 @@ func run(h, _root: Node) -> void:
 		"an open device holds the shader and the pipeline, and nothing else (%d live)" % gpu.live_rids())
 
 	# **The real entry point**: the plan is what the bake reads, exactly as `prepare()` builds it.
-	var plan := SpacesimSurfaceField.plan("planet:earth", 6.371e6)
+	var plan := StoichonSurfaceField.plan("planet:earth", 6.371e6)
 	var image := gpu.bake(plan, WIDTH, HEIGHT)
 	h.check(image != null, "the bake returned a map, not null")
 	if image == null:

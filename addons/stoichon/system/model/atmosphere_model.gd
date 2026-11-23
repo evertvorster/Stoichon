@@ -1,0 +1,956 @@
+class_name StoichonAtmosphereModel
+extends RefCounted
+## A body's air: the numbers the sky shader needs, derived from what the atmosphere is made of.
+##
+## This is §3.4 of [[Stoichon/Solar Systems and the Physics Model]] **and §3.6's first two rows**:
+## the scattering coefficients the sky shader takes, the profiles, and the greenhouse. Retention
+## (Jeans escape) is the one part that is not built. Everything is a pure function of content, so the
+## renderer cannot disagree with the model.
+##
+## The sky is drawn by `air_shell.gdshader`: one shell per band, marching each pixel's ray through the band it
+## owns — `glsl-atmosphere` applied to a ray, which is what the 2026-10-13 shell did and what the pass did
+## after it. Its inputs are exactly these numbers — see
+## [[Stoichon/Atmospheres]].
+
+## A temperature for the callers that take one and for the internals that must not care. **The air's
+## reflection does not depend on it** — see `clear_sky_albedo`, where the cancellation is spelled out —
+## so this is a formality rather than a physical input.
+const REFERENCE_TEMPERATURE := 288.0
+## Boltzmann, joules per kelvin.
+const BOLTZMANN := 1.380649e-23
+## The gas constant, J/(mol K) — for Clausius-Clapeyron.
+const GAS_CONSTANT := 8.314
+## One atmosphere, in pascals: the reference pressure
+## `StoichonSpecies.condensation_temperature` is stated at.
+const ATMOSPHERIC_PRESSURE := 101325.0
+## Avogadro, per mole.
+const AVOGADRO := 6.02214076e23
+## Stefan-Boltzmann, watts per square metre per kelvin to the fourth.
+const STEFAN_BOLTZMANN := 5.670374419e-8
+## Newton's constant.
+const GRAVITATION := 6.674e-11
+
+## **Mie scattering is aerosols, not the species mix**, so it cannot be derived from content and is
+## named here rather than hidden in the shader. Earth-like values from `glsl-atmosphere`'s example:
+## aerosols are coarse enough to scatter forward strongly, which is what `MIE_ANISOTROPY` says.
+const MIE_COEFFICIENT := 21.0e-6
+const MIE_SCALE_HEIGHT := 1.2e3
+const MIE_ANISOTROPY := 0.758
+
+## **The deck the constant above was calibrated against, as an AUTHORED OPACITY rather than a tau.**
+##
+## Earth's own cloud is `opacity = 0.9` in `sol.tres`, and `−ln(1 − 0.9)` is the tau the same law gives it — so
+## anchoring here makes Earth's aerosol **exactly** the constant, by construction rather than by a fitted number.
+## That matters: a first version anchored at `0.7`, which silently tripled Earth's Mie and turned the sunset black —
+## `tests/test_render.gd` caught it ("a sunset's red is dim but present" measured 0.000).
+const AEROSOL_OPACITY_REFERENCE := 0.9
+
+
+## **The body's own aerosol, scaled from that reference — never a second, Earth-shaped one.**
+##
+## Evert, 2026-11-03, flying Venus: *"I can still see the curve of the planet through it, so the absorption that we
+## calculate for it is not correct"* — and he was right about which term: Rayleigh scales with density and Venus's
+## 92 bar of CO2 gives it plenty, but **Mie is the aerosol, and it was one Earth-authored constant for every
+## body**. What hides a planet is the aerosol, so Venus wore Earth's haze over a sulphuric-acid shroud.
+##
+## The quantity is the layer's own stated optical depth — `optical_depth_at` where a layer states it, otherwise
+## `-ln(1 - opacity)`, which is the same reading `StoichonSceneBody.Deck.tau` takes — divided by the reference above. A body
+## thinner than Earth's deck is *not* made clearer (the ratio floors at 1), because the constant is the anchor the
+## picture was calibrated with and this change is not the place to re-tune a clear sky.
+##
+## **One number, one home**: `body.air["mie"]` is what the shell marches and what every material applies to the
+## star's path, so the shroud that hides the curve and the light that reaches the ground cannot disagree about it.
+static func aerosol_coefficient(clouds: StoichonClouds) -> float:
+	if clouds == null or clouds.layer_count() <= 0:
+		return MIE_COEFFICIENT
+	var tau := 0.0
+	for index in clouds.layer_count():
+		var stated := clouds.optical_depth_at(index)
+		if stated > 0.0:
+			tau += stated
+			continue
+		tau += -log(maxf(1.0 - clouds.opacity_at(index), 1.0e-3))
+	var reference := -log(maxf(1.0 - AEROSOL_OPACITY_REFERENCE, 1.0e-3))
+	return MIE_COEFFICIENT * maxf(1.0, tau / reference)
+
+## **The sky's scale is the star's own light, converted — there is no free constant in it.**
+##
+## The shader's integration returns a quantity in **inverse steradians**: the phase function times the
+## optical depth, with the phase functions normalised the way they have to be (`3/(16π)(1+cos²θ)` for
+## Rayleigh, so `∫p dΩ = 1`). Multiplying that by an illuminance in lux gives a radiance in **lux per
+## steradian** — and the engine's radiance unit is `REFERENCE_LUX / π`, because a white Lambertian under
+## `REFERENCE_LUX` has radiance `REFERENCE_LUX / π` and renders as `1.0`. So the conversion is the whole
+## of it:
+##
+##     scale = illuminance * PI / REFERENCE_LUX
+##
+## **It replaces `SKY_INTENSITY = 22.0`**, which was `glsl-atmosphere`'s own value for Earth at noon: a
+## number with no derivation, chosen against units its author never stated. Earth at noon is what checks
+## the derived one — `3/(16π)·2·τ` in blue is about `0.031`, and the conversion turns that into ~4,000
+## lux/sr, which is what a clear zenith sky measures. The old constant drew the same sky about seven
+## times brighter than that.
+static func sky_scale(illuminance: float) -> float:
+	# **Lifted into the frame's currency** with every other radiance path — see `StoichonRadiance`.
+	return StoichonRadiance.frame_from_illuminance(illuminance * PI / REFERENCE_LUX)
+
+## What a multiplier of 1.0 means to the camera. The same number `StoichonExposure` uses, so the sky
+## and the exposure cannot drift apart.
+const REFERENCE_LUX := 100_000.0
+
+## **How many scale heights of air to draw.** The shell's top is derived, not authored: the air thins
+## exponentially, so "where it ends" is a multiple of `kT/(m-bar g)` and nothing else.
+##
+## Ten puts the density at `e^-10` — one part in 22,000 of the surface — which is invisible. **It
+## matters that this is per body and not one number for the system**: at a fixed 100 km the shell is
+## twelve scale heights over Earth but only four over Jupiter, where the air is still 2% of surface
+## density at the top and the shell would end in visible haze.
+const SHELL_SCALE_HEIGHTS := 10.0
+
+
+## Below this the atmosphere is convective and follows the adiabat; above it, radiative. Named because
+## it is the grey-atmosphere skin temperature, `2^-1/4` of the effective temperature -- the temperature
+## a blackbody-only atmosphere settles at with no greenhouse at all.
+const SKIN_TEMPERATURE_FACTOR := 0.8408964152537145 ## 2 ** -0.25
+
+
+## The mix's specific heat capacity at constant pressure, J/(kg·K).
+##
+## **Mass-weighted, not mole-weighted** — this one is per kilogram, so the fractions that enter are mass
+## fractions. Every other mix in this file is mole-weighted, and getting this one wrong by copying them
+## would be a quiet factor of about four on the lapse rate.
+static func heat_capacity(
+	atmosphere: StoichonAtmosphere, materials: StoichonMaterialTable
+) -> float:
+	if atmosphere == null or materials == null:
+		return 0.0
+	var total := 0.0
+	var mass := 0.0
+	for key in atmosphere.species:
+		var material := materials.by_name(String(key))
+		if material == null:
+			continue
+		var amount := float(atmosphere.species[key]) * material.molar_mass
+		total += amount * material.heat_capacity
+		mass += amount
+	if mass <= 0.0:
+		return 0.0
+	return total / mass
+
+
+## The **dry adiabatic lapse rate**, `g / c_p`, in kelvin per metre: how fast a convecting parcel cools
+## as it rises.
+##
+## This is where the profile comes from, and it is a real check rather than a fitted number: Earth's
+## composition and gravity give **9.78 K/km**, against the textbook 9.8, and Venus's give ~10.5.
+static func lapse_rate(
+	atmosphere: StoichonAtmosphere,
+	materials: StoichonMaterialTable,
+	gravity: float
+) -> float:
+	var capacity := heat_capacity(atmosphere, materials)
+	if capacity <= 0.0 or gravity <= 0.0:
+		return 0.0
+	return gravity / capacity
+
+
+## The temperature at a height above the surface, kelvin.
+##
+## **Convective below, radiative above.** A parcel of air that is warmer than its surroundings rises and
+## cools at `lapse_rate`; that can continue only until it meets the temperature the radiation alone
+## would hold, which is the **skin temperature** `0.8409 * T_eff` at the top. So the profile is the
+## adiabat down from the tropopause to the surface, and the surface temperature is what that adiabat
+## lands on.
+##
+## **Named limitation:** this is a *dry* adiabat. Real convection is moist, which flattens the upper
+## troposphere — Earth's tropopause comes out at 7.4 km against a real 11-12. It does not affect cloud
+## *bases*, which is what the profile is chiefly for, and moist convection is the refinement.
+static func temperature_at(
+	height: float,
+	surface_temperature: float,
+	lapse: float,
+	tropopause_temperature: float
+) -> float:
+	# **No clamp at zero height.** A convective troposphere continues *below* the reference level — a gas
+	# giant has no surface, and the 1-bar level is a reporting convention rather than the bottom of the
+	# air. Clamping here is what made every deck below 1 bar inexpressible: Jupiter's water cloud is at
+	# 15-20 bar and could never be found because the profile refused to go under its own datum.
+	return maxf(surface_temperature - lapse * height, tropopause_temperature)
+
+
+## The **grey infrared optical depth** of the whole column, top to surface: `sum(kappa_i * column_i)`.
+##
+## Each species' column mass is `x_i * (M_i / m-bar) * (p_surface / g)` — mole fraction turned into a
+## mass fraction and multiplied by the total column `p/g` — so this needs nothing that is not already
+## derived. `kappa` is the material table's `greenhouse[0]`, and it is **zero** for the gases that are
+## transparent in the infrared rather than absent, so "known transparent" and "not known" do not look
+## alike.
+static func greenhouse_optical_depth(
+	atmosphere: StoichonAtmosphere,
+	materials: StoichonMaterialTable,
+	gravity: float
+) -> float:
+	if atmosphere == null or materials == null or gravity <= 0.0:
+		return 0.0
+	var molar := mean_molar_mass(atmosphere, materials)
+	if molar <= 0.0:
+		return 0.0
+	var column := atmosphere.surface_pressure / gravity ## kg/m2, the whole air
+	var depth := 0.0
+	for key in atmosphere.species:
+		var material := materials.by_name(String(key))
+		if material == null or material.greenhouse.is_empty():
+			continue
+		var mass_fraction := float(atmosphere.species[key]) * material.molar_mass / molar
+		depth += material.greenhouse[0] * mass_fraction * column
+	return depth
+
+
+## **The surface temperature, with the greenhouse.** The grey-atmosphere result, which is textbook:
+##
+##     T_surface = T_eff * (1 + 3 * tau / 4) ^ (1/4)
+##
+## An atmosphere that is transparent in the infrared (`tau = 0`) leaves the surface at `T_eff`, which
+## is the right answer for an airless body and for Titan's nearly-clear methane. As `tau` grows the
+## surface warms, and **Venus is why this is worth having**: 92 bar of CO2 gives `tau` of 142 and a
+## surface 508 K above its equilibrium temperature, out of the column mass alone. No cloud term is
+## needed for that — the sulphuric-acid deck is already in the albedo, and the two agree.
+static func surface_temperature(
+	atmosphere: StoichonAtmosphere,
+	materials: StoichonMaterialTable,
+	gravity: float,
+	equilibrium: float
+) -> float:
+	if equilibrium <= 0.0:
+		return equilibrium
+	var depth := greenhouse_optical_depth(atmosphere, materials, gravity)
+	return equilibrium * pow(1.0 + 0.75 * depth, 0.25)
+
+
+## The temperature a purely radiative atmosphere would hold at its top: `2^-1/4 * T_eff`, the
+## grey-atmosphere skin temperature. Below this the profile is the adiabat instead.
+static func tropopause_temperature(equilibrium: float) -> float:
+	return equilibrium * SKIN_TEMPERATURE_FACTOR
+
+
+## How far above the surface the air is worth drawing, in metres: `SHELL_SCALE_HEIGHTS` scale heights.
+##
+## **Derived, and it has to be.** The alternative — one authored altitude for the whole system — is
+## right for exactly one body. A caller that needs the air to cover a region regardless (a frame's
+## transition altitude, say) takes the maximum of this and its own floor.
+static func shell_reach(
+	atmosphere: StoichonAtmosphere,
+	materials: StoichonMaterialTable,
+	temperature: float,
+	gravity: float
+) -> float:
+	return scale_height(atmosphere, materials, temperature, gravity) * SHELL_SCALE_HEIGHTS
+
+
+## Molecules per cubic metre, from the ideal gas law. Everything else follows from this: the
+## coefficients are cross-sections **per molecule**, so the density is what turns them into 1/m.
+static func number_density(atmosphere: StoichonAtmosphere, temperature: float) -> float:
+	if atmosphere == null or temperature <= 0.0:
+		return 0.0
+	return atmosphere.surface_pressure / (BOLTZMANN * temperature)
+
+
+## The per-channel Rayleigh coefficient of the mix, 1/m — `kRlh`, and exactly the argument
+## `glsl-atmosphere` takes. Summed as each species' cross-section times its number density.
+##
+## **Blue scattering most is the whole reason the sky is blue**, so this is a Vector3 and not a float.
+## A species with no cross-section in the material table contributes nothing rather than a guess —
+## see `coverage()`.
+static func rayleigh_coefficient(
+	atmosphere: StoichonAtmosphere, materials: StoichonMaterialTable, temperature: float
+) -> Vector3:
+	if atmosphere == null or materials == null:
+		return Vector3.ZERO
+	var density := number_density(atmosphere, temperature)
+	var total := Vector3.ZERO
+	for key in atmosphere.species:
+		var material := materials.by_name(String(key))
+		if material == null:
+			continue
+		total += material.rayleigh * (float(atmosphere.species[key]) * density)
+	return total
+
+
+## The mix's **absorption** coefficient, 1/m. The exact mirror of `rayleigh_coefficient`, and zero
+## everywhere until the material table carries visible absorption cross-sections — which is a **named
+## gap**, not a value of zero (see `StoichonSpecies.absorption`).
+##
+## **Absorption uses the scattering species' scale height**, i.e. it is treated as well mixed with the
+## air. That is right for methane in Titan's atmosphere and **wrong for ozone**, which sits in a layer
+## around 25 km rather than following the air's exponential. The error is a thinner ozone column at
+## low sun than a well-mixed ozone would give — named here rather than modelled.
+static func absorption_coefficient(
+	atmosphere: StoichonAtmosphere, materials: StoichonMaterialTable, temperature: float
+) -> Vector3:
+	if atmosphere == null or materials == null:
+		return Vector3.ZERO
+	var density := number_density(atmosphere, temperature)
+	var total := Vector3.ZERO
+	for key in atmosphere.species:
+		var material := materials.by_name(String(key))
+		if material == null:
+			continue
+		total += material.absorption * (float(atmosphere.species[key]) * density)
+	return total
+
+
+## **The single-scattering albedo**, per channel: how much of the light the air removes it gives back as
+## scattering rather than losing to absorption.
+##
+## It is the one number that decides whether a thick air behaves like a mirror or a filter, and it is
+## what the two-stream limit is built on (`k = sqrt(3(1-w)(1-wg))`, which is zero when `w` is one).
+## **Exactly 1 when the table carries no absorption**, which is where this starts — conservative
+## scattering is the assumption until a measurement says otherwise.
+##
+## **`aerosols` is the caller stating what its air is made of, and the default is the shader's case.**
+## The sky draws an aerosol haze on every body, from `MIE_COEFFICIENT` — one Earth-authored volume
+## coefficient, because aerosols are a named gap in the material table — so the air the *eye* sees does
+## have Mie extinction and `omega` must count it. An **albedo** is a different question: it is a property
+## of the body's own composition, and handing an Earth haze to a near-vacuum is the failure that put
+## Triton's clear-sky albedo past 1.0 and made every temperature on it NaN. `clear_sky_albedo()` therefore
+## passes `false`, so its `omega` and its optical depth are built from the same gases.
+static func single_scatter_albedo(
+	atmosphere: StoichonAtmosphere, materials: StoichonMaterialTable, temperature: float,
+	aerosols := true
+) -> Vector3:
+	var scattering := rayleigh_coefficient(atmosphere, materials, temperature)
+	var absorption := absorption_coefficient(atmosphere, materials, temperature)
+	var mie := Vector3.ONE * MIE_COEFFICIENT if aerosols else Vector3.ZERO
+	var extinction := scattering + mie + absorption
+	return Vector3(
+		(scattering.x + mie.x) / maxf(extinction.x, 1.0e-30),
+		(scattering.y + mie.y) / maxf(extinction.y, 1.0e-30),
+		(scattering.z + mie.z) / maxf(extinction.z, 1.0e-30)
+	)
+
+
+## The pressure at a height, hydrostatic on a single exponential: `P(h) = P0 * exp(-h / H)`.
+##
+## **One scale height, taken at the surface, and it degrades past a scale height or two.** That is the
+## whole of the approximation, and it is the reason the deck check is a *height* against the literature's
+## altitude ranges: the sources publish a pressure level, so a height has to be converted to compare, and
+## this conversion is only good while the level is within a couple of scale heights of the ground.
+## Measured against the two cases that have both numbers: **Earth's cloud base comes to 0.84 bar against
+## a real cumulus base near 0.9**, where the level is 0.18 of a scale height up — but **Venus's comes to
+## 3.5 bar where the real deck sits near 0.7–1**, because that level is 3.3 scale heights up and one
+## exponential cannot span that (the real pressure falls by a factor of 92 over 50 km, an effective
+## scale height of ~11 km against the surface's 15.9).
+static func pressure_at(height: float, surface_pressure: float, air_scale_height: float) -> float:
+	if air_scale_height <= 0.0 or surface_pressure <= 0.0:
+		return 0.0
+	return surface_pressure * exp(-height / air_scale_height)
+
+
+## **The air mass along a ray at a given elevation** — a spherical exponential atmosphere's path integral,
+## which is the Chapman function. This is the law the shaders' `star_air_transmittance` transcribes.
+##
+## **A closed-form approximation, and that is deliberate.** The exact integral has no elementary form, and a
+## march over it is a loop per fragment — which is what the code this replaces did, at eight *uniform* steps
+## over a chord that at the limb is ~2,000 km, i.e. 250 km a step against an 8.5 km scale height. It
+## under-integrated the one case that matters and it cost a loop to do it.
+##
+##     m(μ) = 1 / sqrt(μ² + 2H/(πR))
+##
+## One constant, derived from the scale height and the radius: it is `1` overhead and `sqrt(πR/2H)` at the
+## horizon — 34 for Earth against Chapman's 38 — and stays within ~20 % of it in between. Checked against the
+## published values for R/H ≈ 750: 2.0 at μ = 0.5 (true 2.0), 9.6 at 0.1 (9.6), 17.3 at 0.05 (~17),
+## 34 at 0 (38). **Prefer the approximation** — Evert, 2026-10-25: *"if there is a fast approximation, that
+## is to be preferred over an expensive exact simulation."* A factor of 1.1 in the optical depth at the
+## horizon is a shade of red in a sunset; a loop per fragment on every body with air is a frame.
+## **The denominator is FLOORED, and that is not defensive padding — it is the bug that made Luna glow.**
+## An airless body has a zero scale height, so the horizon term is zero, and at the horizon `mu` clamps to zero
+## too: `1/sqrt(0)` is infinity, the caller multiplies it by a zero column and gets `0 * inf = NaN`, and the
+## NaN goes into `ALBEDO` and out through the tonemap as a bloomed white halo. **A zero scale height must give a
+## finite air mass, so that the caller's own zero can multiply it away.** The floor is on the *term* rather than
+## an early return so that this file and the shader transcribe each other exactly — a shader has no early
+## return that is not a branch.
+static func air_mass(cos_elevation: float, scale_height: float, radius: float) -> float:
+	var horizon_term := maxf(2.0 * scale_height / (PI * maxf(radius, 1.0)), 1.0e-12)
+	var mu := clampf(cos_elevation, 0.0, 1.0)
+	return 1.0 / sqrt(mu * mu + horizon_term)
+
+
+## **How far below the vertical horizon the star can be and still reach a point at `altitude`**, as the
+## sine of that angle: `sqrt(1 − (R/(R+h))²)`. Zero at the surface, 1.2° at 1.4 km and 1.8° at 3 km on
+## Earth. **This is what lets a cloud stay lit after the ground beside it has gone dark** — sunset seen from
+## a mountaintop, and it is geometry rather than a knob: the tangent clears the ground for a point above it.
+static func horizon_dip(altitude: float, radius: float) -> float:
+	if radius <= 0.0:
+		return 0.0
+	var ratio := radius / (radius + maxf(altitude, 0.0))
+	return sqrt(maxf(1.0 - ratio * ratio, 0.0))
+
+
+## **The optical depth along the star's own ray**, from a point at `altitude` out of the air: the vertical
+## column above the point (`H·exp(−h/H)`) times the air mass through the star's elevation — measured from that
+## point's own horizon, so a star below the vertical horizon but above the dip still gets a path, a very long
+## and very red one.
+##
+## **Rayleigh's scale height is used for it and the caller multiplies absorption by the same column**, which is
+## not right for ozone (it sits in a 25 km layer rather than following the air) and is exactly what
+## `air_shell.gdshader`'s march does. **Agreeing with the shell matters more than being right**: the ground
+## and the sky over it are one integral, and two laws for one optical depth is how they would come to
+## disagree about how thick the air is.
+static func sun_optical_depth(
+	cos_elevation: float, altitude: float, scale_height: float, radius: float
+) -> float:
+	if scale_height <= 0.0:
+		return 0.0
+	var height := maxf(altitude, 0.0)
+	var column := scale_height * exp(-height / scale_height)
+	var mu := cos_elevation + horizon_dip(height, radius)
+	return column * air_mass(mu, scale_height, radius)
+
+
+## **What survives the trip in**, per channel — `exp(−τ)` for the extinction, which is scattering plus
+## absorption for the Rayleigh column and Mie for its own. The same expression the pass applies to its sun
+## path, so a ridge lit near the terminator and the sky above it cannot disagree about the air.
+##
+## **Per channel and not a scalar**, because that discrepancy *is* the sunset: on Earth at the horizon the
+## blue is cut by ~140× and the red by ~7×, so the light that arrives is orange and dim rather than white.
+static func sun_transmittance(
+	rayleigh: Vector3, rayleigh_height: float, absorption: Vector3,
+	mie: float, mie_height: float, cos_elevation: float, altitude: float, radius: float
+) -> Vector3:
+	var tau_r := sun_optical_depth(cos_elevation, altitude, rayleigh_height, radius)
+	var tau_m := sun_optical_depth(cos_elevation, altitude, mie_height, radius)
+	return Vector3(
+		exp(-(rayleigh.x + absorption.x) * tau_r - mie * tau_m),
+		exp(-(rayleigh.y + absorption.y) * tau_r - mie * tau_m),
+		exp(-(rayleigh.z + absorption.z) * tau_r - mie * tau_m)
+	)
+
+
+## One species' condensation level — **where a cloud deck sits, derived rather than authored.**
+##
+## The parameter is the height at which the species reaches its own `condensation_temperature` in the
+## `T(h)` profile. Every species already carries that number: it is the same one the greenhouse
+## calibration is fixed against, so nothing new is authored here.
+##
+## **Three regimes, and two of them are not "no deck".**
+##
+## | | |
+## |---|---|
+## | `LEVEL` | the profile crosses the condensation temperature above the ground: there is a height, and a deck could sit on it |
+## | `DEEP` | it **does** condense, but below the depth this model represents — a real deck rather than a haze, and Jupiter's water cloud is one |
+## | `NONE` | the troposphere never gets cold enough: the condensate is confined to the tropopause or above, and there is no tropospheric deck at all |
+class Condensation:
+	extends RefCounted
+
+	enum Regime {
+		LEVEL, ## a height where the species reaches its condensation temperature
+		DEEP, ## it condenses, but **below the depth this model represents** — see `MODELLED_PRESSURE_MULTIPLE`
+		NONE, ## never cold enough in the modelled column
+	}
+
+	var species := ""
+	var regime := Regime.NONE
+	## **How it came to exist**, which is not decoration: the engine can only find the first kind by
+	## crossing a temperature, and a caller that treats them alike will place a photochemical deck at
+	## whichever altitude happens to be cold enough.
+	enum Formation {
+		CONDENSATION, ## a gas in the mix, where `T(h)` crosses its own `T_cond` — the ordinary case
+		REACTION, ## not in the mix: a product of two gases that meet at that level (NH\u2084SH)
+		DEPOSITION, ## the solid form of a gas in the mix, at the **top of the convective column** — cirrus
+	}
+	var formation := Formation.CONDENSATION
+	## Metres above the surface. Only meaningful for `LEVEL`.
+	var height := 0.0
+	## Pascals, from `pressure_at` — **an approximation that degrades with height**, see there.
+	var pressure := 0.0
+	## **How deep the deck is, in metres — the top is `height + thickness`.** Only meaningful for
+	## `LEVEL`, and zero where the regime is not one, which is this module's convention for *not stated*.
+	##
+	## The **condensate scale height**: the height over which the saturation mixing ratio falls by e, from
+	## Clausius-Clapeyron along the body's own lapse —
+	##
+	##     d(ln e_s)/dh = −L Γ / (R T²)   ⇒   H_w = (R / L) · T_base² / Γ
+	##
+	## capped by the tropopause, because a cloud cannot rise past it. **The one exception is a `DEPOSITION`
+	## level, which sits AT the tropopause** and so is not capped by it at all — see
+	## [method _deposition_level_for], where the cap would be exactly zero. `R` and `L` are both **molar**
+	## (`latent_heat` is J/mol), which is what makes `R/L` a reciprocal temperature and `H_w` metres.
+	##
+	## Measured against the real decks: **Earth comes out 1,604 m** against cumulus bases 1–2 km and tops
+	## 2–3 km, on the conservative side because `Γ` is the *dry* adiabat (9.78 K/km against a real 6.5);
+	## **Jupiter 3,969 m** against an ammonia deck several times that, because a convective deck is organised
+	## and `H_w` is a condensation scale; and **Venus 160 m against a real 20 km deck** — photochemical
+	## H₂SO₄ and not the CO₂ this model condenses, the same cause as its base being right for the wrong
+	## molecule, made worse here because that base sits against the tropopause so the **cap** binds rather
+	## than the scale. All three measured 2026-10-20 by `tests/test_clouds.gd`.
+	var thickness := 0.0
+
+
+## Every condensation level in a body's air, **highest first** — so the first `LEVEL` is the deck seen
+## from outside.
+##
+## Inputs are the two a caller already has or can already derive: the surface gravity and the equilibrium
+## temperature. Everything else — the surface temperature, the lapse rate, the tropopause, the scale
+## height — is this module's own and is computed here, so a caller cannot get one of them inconsistent
+## with the other three.
+##
+## **`equilibrium` must be `equilibrium_temperature()`, never `reference_temperature()`.** The latter
+## returns what content *pinned* as a mean surface temperature, and the tropopause is the skin temperature
+## of the **equilibrium** one — so passing the pinned surface here takes `tropopause_temperature` to
+## 0.8409 of a 737 K Venus, a 620 K ceiling, and **`NONE` for every species on the planet**: Venus's deck
+## disappears entirely (measured 2026-10-20, while adding `thickness`). The two functions are one letter
+## apart in name and 518 K apart in meaning.
+static func condensation_levels(
+	atmosphere: StoichonAtmosphere,
+	materials: StoichonMaterialTable,
+	gravity: float,
+	equilibrium: float,
+	body: StoichonSystemBody = null
+) -> Array:
+	var levels: Array = []
+	if atmosphere == null or materials == null:
+		return levels
+	var lapse := lapse_rate(atmosphere, materials, gravity)
+	if lapse <= 0.0:
+		return levels
+	var surface := surface_temperature(atmosphere, materials, gravity, equilibrium)
+	# **A PINNED surface temperature is the surface**, and ignoring it was the bug that hid the giants'
+	# decks: `systems/sol.tres` has carried `mean_surface_temperature` for all four since they were
+	# authored, and `reference_temperature` honoured it while this function — the one that actually places
+	# a deck — called `surface_temperature` directly. Jupiter derived 119 K against its pinned 165 K, and
+	# ammonia can never condense under that.
+	if body != null and body.overrides != null and body.overrides.set.has("mean_surface_temperature"):
+		surface = body.overrides.mean_surface_temperature
+	var ceiling := tropopause_temperature(equilibrium)
+	var air_height := scale_height(atmosphere, materials, surface, gravity)
+	for key in atmosphere.species:
+		var material := materials.by_name(String(key))
+		if material == null or material.condensation_temperature <= 0.0:
+			continue
+		levels.append(_level_for(
+			material, Condensation.Formation.CONDENSATION, surface, ceiling, lapse, atmosphere, air_height,
+			materials
+		))
+	# **A species that forms IN SITU is looked for in the TABLE, not in the mix** — see
+	# `StoichonSpecies.formed_from`. It exists only where every one of its reactants is present, and a
+	# species that is both an input and a product is skipped here because the loop above already made its
+	# level.
+	for material in materials.species:
+		if material == null or material.condensation_temperature <= 0.0:
+			continue
+		if material.formed_from.is_empty() or atmosphere.species.has(material.species_name):
+			continue
+		var all_present := true
+		for reactant in material.formed_from:
+			if not atmosphere.species.has(reactant):
+				all_present = false
+				break
+		if not all_present:
+			continue
+		levels.append(_level_for(
+			material, Condensation.Formation.REACTION, surface, ceiling, lapse, atmosphere, air_height,
+			materials
+		))
+	# **The solid forms, at the top of the convective column.** A saturated column can hold only ONE water
+	# cloud: above its condensation level the vapour is already at saturation, so cooling it further keeps
+	# it saturated and ice is reached within a kilometre of the liquid deck, not eight. Real cirrus is high
+	# because the air up there is **not in equilibrium** — convection carried the vapour up and left it — so
+	# the level is where rising air stops rising: the **tropopause**, which is the clamp `temperature_at`
+	# already applies. Its height is `(surface - ceiling) / lapse`, so it needs no new number, and it moves
+	# with the body's own composition and gravity.
+	for key in atmosphere.species:
+		var gas := materials.by_name(String(key))
+		if gas == null or gas.solid_form.is_empty():
+			continue
+		var solid := materials.by_name(gas.solid_form)
+		# **Cold enough up there to be solid at all**, which is the only gate that can be stated honestly:
+		# the solid's own melting point against the ceiling. A body whose tropopause is warmer than that
+		# contributes nothing, which is how "no ice deck" is said rather than a deck guessed into place.
+		if solid == null or solid.melting_temperature <= 0.0 or ceiling >= solid.melting_temperature:
+			continue
+		var deposition := _deposition_level_for(solid, surface, ceiling, lapse, atmosphere, air_height)
+		if deposition != null:
+			levels.append(deposition)
+	levels.sort_custom(func(a: Condensation, b: Condensation) -> bool: return a.height > b.height)
+	return levels
+
+
+## **The condensation temperature at the PARTIAL pressure the species is actually at.**
+##
+## `condensation_temperature` is the 1-atm reference (see `StoichonSpecies`), and a trace gas is not at
+## 1 atm: ammonia is 0.26 % of Jupiter's air, so its **263 Pa** partial pressure condenses it at
+## **159 K, not the table's 240 K**. That 80 K is the difference between Jupiter having an ammonia deck
+## and having none — at the 1-atm value the gas is "below its condensation point everywhere", which for
+## the substance that *makes* Jupiter's visible cloud is plainly wrong.
+##
+## Clausius-Clapeyron, `1/T = 1/T_ref - (R/L)*ln(p/p_ref)`. **A species with no `latent_heat` keeps the
+## old behaviour** rather than being guessed at.
+static func condensation_temperature_at(
+	material: StoichonSpecies, fraction: float, total_pressure: float
+) -> float:
+	var reference := material.condensation_temperature
+	if reference <= 0.0 or material.latent_heat <= 0.0 or fraction <= 0.0 or total_pressure <= 0.0:
+		return reference
+	var partial := fraction * total_pressure
+	if partial >= ATMOSPHERIC_PRESSURE:
+		return reference
+	return 1.0 / (
+		1.0 / reference
+			- (GAS_CONSTANT / material.latent_heat) * log(partial / ATMOSPHERIC_PRESSURE)
+	)
+
+
+## **How far below the reference level the model represents the troposphere**, as a multiple of the
+## reference pressure. **One stated calibration, and nothing per body** — which is deliberate: systems
+## will be generated procedurally, so a depth that had to be authored per giant would be a depth that
+## could be authored *impossible*. Twenty bar is where a gas giant's water cloud sits, and it is where
+## the model stops claiming to know.
+const MODELLED_PRESSURE_MULTIPLE := 20.0
+
+
+## One `Condensation` record for a species against the profile it has to sit in.
+##
+## **Factored out because there are two ways to arrive here** — a gas in the mix, and a product of two of
+## them — and the regime arithmetic is identical either way. Duplicating it would mean the two formation
+## paths could disagree about where a level is.
+static func _level_for(
+	material: StoichonSpecies,
+	formation: int,
+	surface: float,
+	ceiling: float,
+	lapse: float,
+	atmosphere: StoichonAtmosphere,
+	air_height: float,
+	materials: StoichonMaterialTable
+) -> Condensation:
+	var level := Condensation.new()
+	level.species = material.species_name
+	level.formation = formation
+	var fraction: float = atmosphere.species.get(material.species_name, 0.0)
+	var freezing := condensation_temperature_at(material, fraction, atmosphere.surface_pressure)
+	if freezing <= ceiling:
+		level.regime = Condensation.Regime.NONE
+	else:
+		# **The same arithmetic whether the level is above or below the reference**, and that unification is
+		# the point: `(surface - freezing)/lapse` is positive for a deck overhead and negative for one
+		# underneath, and both are real. A negative height is not a fog — it is a deck deeper than the
+		# datum, which is every giant's water cloud.
+		level.height = (surface - freezing) / lapse
+		level.pressure = pressure_at(level.height, atmosphere.surface_pressure, air_height)
+		var deepest := -air_height * log(MODELLED_PRESSURE_MULTIPLE)
+		level.regime = Condensation.Regime.LEVEL if level.height >= deepest else Condensation.Regime.DEEP
+		if level.regime == Condensation.Regime.LEVEL:
+			# **The condensate scale height, capped by the tropopause.** The second term is the same
+			# arithmetic as `height` with the ceiling in place of the base temperature, so the two cannot
+			# use different profiles — and it is asked for only where the base is above the ground, since a
+			# `DEEP` deck's top is not a thing this model has a height for.
+			#
+			# **A species with no `latent_heat` gets no thickness**, which is the same reading the table gives
+			# a zero everywhere else: *not stated*. Without the guard the division would be infinite and the
+			# tropopause cap would quietly become the answer.
+			#
+			# `ponytail:` the table states ONE latent heat per species and does not always say which phase it
+			# is, so a base below `melting_temperature` is still computed with the vapour's number. The ice
+			# entries cannot be reached by name — `water_vapour`'s sibling is `water_ice`, not
+			# `water_vapour_ice`, so a suffix rule would be a guess — and the error is small: Earth's deck is
+			# **1.6 km with the vapour's coefficient against 1.3 with the ice's**, both inside the observed
+			# range. Upgrade path: a `latent_fusion` per species, which is a measurement to collect.
+			if material.latent_heat > 0.0 and lapse > 0.0:
+				level.thickness = maxf(minf(
+					(GAS_CONSTANT / material.latent_heat) * freezing * freezing / lapse,
+					(surface - ceiling) / lapse - level.height
+				), 0.0)
+	return level
+
+
+
+## **A solid form's level, at the top of the convective column.**
+##
+## The height is the tropopause itself — `(surface - ceiling) / lapse`, the point where `temperature_at`
+## stops cooling — and the physical reading is the **cold trap**: ascending air stops rising there, what it
+## carried freezes out, and it stays because nothing removes it. That is why cirrus is a thin sheet at the
+## top of the troposphere while cumulus is a lumpy deck at the base, and it is why the level does not need
+## an authored altitude.
+##
+## **The thickness is NOT capped by the tropopause here, and that is the whole reason this is its own
+## function.** `_level_for` caps at `(surface - ceiling) / lapse - height`, which at this height is
+## **exactly zero** — a deck collapsed onto its own base, which is the fault Venus's 160 m slab produced.
+## The cap means "a cloud cannot rise past the tropopause"; this level is not trying to, so it is the
+## condensate scale height uncapped: `(R / L) * T_ceiling^2 / lapse`, evaluated at the temperature the sheet
+## actually sits in rather than at the base's.
+##
+## `null` where the profile has no troposphere (the clamp is already in force at the ground) or where the
+## height is below the depth the model represents — a height of zero is not a level either way.
+static func _deposition_level_for(
+	solid: StoichonSpecies,
+	surface: float,
+	ceiling: float,
+	lapse: float,
+	atmosphere: StoichonAtmosphere,
+	air_height: float
+) -> Condensation:
+	if lapse <= 0.0:
+		return null
+	var level := Condensation.new()
+	level.species = solid.species_name
+	level.formation = Condensation.Formation.DEPOSITION
+	level.height = (surface - ceiling) / lapse
+	var deepest := -air_height * log(MODELLED_PRESSURE_MULTIPLE)
+	if level.height <= 0.0 or level.height < deepest:
+		return null
+	level.regime = Condensation.Regime.LEVEL
+	level.pressure = pressure_at(level.height, atmosphere.surface_pressure, air_height)
+	# **A solid with no `latent_heat` gets no thickness**, the table's standing reading of *not stated*.
+	if solid.latent_heat > 0.0:
+		level.thickness = maxf((GAS_CONSTANT / solid.latent_heat) * ceiling * ceiling / lapse, 0.0)
+	return level
+
+
+## **The air's own reflection** — the term the albedo derivation was missing, and it is DERIVED rather
+## than collected: every number it needs is already in this module.
+##
+## A clear sky is not transparent. Earth's clear-sky planetary albedo is **0.149** against an all-sky
+## **0.293** (Stephens et al. 2015, *Reviews of Geophysics*, from CERES EAFB global annual means), and
+## the difference between those two is the cloud contribution — **0.144**. So the 0.149 is the surface
+## *plus the air above it*, and a model that counts only the surface is short by most of it.
+##
+## **The derivation, and what it assumes.** Rayleigh and Mie scattering remove light from the beam; the
+## part that goes back out of the top is the fraction single-scattered **upward**. For a Rayleigh phase
+## function the up/down split is symmetric, so **half** of what is scattered once leaves upward — and a
+## scattering optical depth of `tau` therefore reflects `0.5 * omega * (1 - exp(-tau))`, where `omega` is
+## the single-scattering albedo that separates what is *scattered* from what is *absorbed*.
+##
+## **There is NO temperature argument, and that is a result rather than a simplification.** The optical
+## depth is `k(1/m) * H(m)` = `[sigma * p / (k T)] * [k T / (m-bar g)]` = `sigma * p / (m-bar g)` — the
+## temperature cancels exactly, as does the number density, because a hot atmosphere is both thinner and
+## taller. `omega` cancels it the same way, both its terms being proportional to the number density. So
+## the air's reflection depends only on **what it is made of, how much of it there is, and how hard the
+## body pulls** — which is also what stops this from being circular, since `bond_albedo()` is what the
+## equilibrium temperature is computed *from*. A parameter that cannot depend on the temperature cannot
+## depend on itself through it. `tests/test_surface.gd` asserts the independence rather than trusting it.
+##
+## **The Mie share is counted NOWHERE in this function — neither the column nor `omega` — and that is a
+## finding rather than a simplification.** `MIE_COEFFICIENT` is 21e-6 per metre, a *volume* coefficient
+## authored for Earth's air and used by the sky shader as one number for every body, because aerosols are a
+## named gap in the material table. Counting it here gave tiny Triton, whose air is 1.4 Pa of nitrogen, an
+## aerosol optical depth of **0.30** — an Earth-like haze over a near-vacuum — and that pushed its clear-sky
+## albedo past 1.0, at which point `equilibrium_temperature` takes the fourth root of a negative number and
+## every temperature on the body becomes NaN. The suite caught it, which is the only reason it is not in the
+## file.
+##
+## So a body's air reflects what its **own** gases scatter, scaled by its own pressure and gravity. That is
+## now true of the product and not only of the column: until 2026-10-25 the depth counted Rayleigh alone
+## while `omega` came from `single_scatter_albedo()`'s aerosol-inclusive form, so the two halves were built
+## from different gases. Measured over Sol's nine bodies, **only Earth has any absorption, so only Earth's
+## omega ever moved** — 0.911 with the aerosol share against 0.783 without, every other body reading exactly
+## 1.0 either way — and Earth's clear-sky air albedo was **0.0554 with the aerosol share against 0.0524
+## without**, for the measured reference `0.149 - 0.081 = 0.068`. The two errors partly cancelled, which is
+## why it survived: on Earth the mixed product landed nearer the published number, and the total the
+## temperature actually uses barely moved — **0.306 before, 0.305 after**.
+##
+## **It went anyway, and the reason is the project's guiding principle rather than the number.** A
+## composition-blind constant that happens to cancel on the one body it was authored for is not a derivation;
+## it is a calibration that will not travel. Generated systems randomise composition, so the cancellation
+## Earth enjoys exists nowhere else — and an authored constant applied per body is this project's
+## named-fuse bug, already fired once (Triton's NaN).
+##
+## **Aerosols become CONTENT when exactness is wanted**, a per-body field beside `Species.rayleigh` defaulting
+## to zero — which is both the physically honest shape and the one that cannot break a near-vacuum. Chasing
+## last 0.003 of an air term with a new data model is not worth the mechanism, and the number it buys is
+## 0.001 on the total the temperature actually uses.
+##
+## Returned **per channel**, like the coefficient it is built from: a Rayleigh atmosphere reflects blue
+## several times more than red, which is the same fact that makes the sky blue.
+static func clear_sky_albedo(
+	atmosphere: StoichonAtmosphere,
+	materials: StoichonMaterialTable,
+	gravity: float
+) -> Vector3:
+	if atmosphere == null or materials == null or gravity <= 0.0:
+		return Vector3.ZERO
+	# One number is a stand-in for "any temperature", because the result does not have it. Named rather
+	# than passed, so that a caller cannot think it matters.
+	var air_height := scale_height(atmosphere, materials, REFERENCE_TEMPERATURE, gravity)
+	if air_height <= 0.0:
+		return Vector3.ZERO
+	# Scattering only, and only the gases the mix actually has.
+	var depth := rayleigh_coefficient(atmosphere, materials, REFERENCE_TEMPERATURE) * air_height
+	var omega := single_scatter_albedo(atmosphere, materials, REFERENCE_TEMPERATURE, false)
+	return 0.5 * omega * Vector3(
+		1.0 - exp(-depth.x), 1.0 - exp(-depth.y), 1.0 - exp(-depth.z)
+	)
+
+
+## The same number as one scalar over the three channels.
+##
+## **Weighted equally unless a caller says otherwise, and that is a stated simplification rather than a
+## claim.** This is an *energy* question, so weighting by luminance would be wrong — that is the eye's
+## response and not the star's output — and the right weights are Planck's function at the star's
+## effective temperature across these three wavelengths. Equal weights are within about a sixth of that
+## for a solar-type star, and the sensitivity is printed by the suite rather than left implicit.
+static func clear_sky_scalar(
+	atmosphere: StoichonAtmosphere,
+	materials: StoichonMaterialTable,
+	gravity: float,
+	weights: Vector3 = Vector3(1.0 / 3.0, 1.0 / 3.0, 1.0 / 3.0)
+) -> float:
+	var per_channel := clear_sky_albedo(atmosphere, materials, gravity)
+	return per_channel.x * weights.x + per_channel.y * weights.y + per_channel.z * weights.z
+
+
+## The mix's mean molar mass, grams per mole, weighted by mole fraction.
+static func mean_molar_mass(
+	atmosphere: StoichonAtmosphere, materials: StoichonMaterialTable
+) -> float:
+	if atmosphere == null or materials == null:
+		return 0.0
+	var total := 0.0
+	for key in atmosphere.species:
+		var material := materials.by_name(String(key))
+		if material == null:
+			continue
+		total += material.molar_mass * float(atmosphere.species[key])
+	return total
+
+
+## **The air where the eye is**: its pressure and temperature at a height above a body's surface.
+##
+## The same derived numbers the rest of this module computes — the surface temperature, the lapse rate, the
+## tropopause and the scale height — derived HERE from the two inputs a caller can be trusted with: the
+## surface gravity and the equilibrium temperature. `condensation_levels` carries the reasoning for that
+## shape and the 518 K Venus it cost to learn, and it applies word for word: a caller who assembles these
+## from their parts can get one of them inconsistent with the other three.
+##
+## A **pinned** `mean_surface_temperature` is the surface, exactly as it is for a deck.
+##
+## **Its limits are the profile's, and they are the model's rather than this function's**: one exponential
+## for pressure (Venus's real fall is 92x over 50 km, which no single scale height spans) and a DRY adiabat
+## for temperature, which flattens at the tropopause instead of warming above it. Above the top of the air
+## both keep their last value rather than going wild.
+static func conditions_at(
+	atmosphere: StoichonAtmosphere,
+	materials: StoichonMaterialTable,
+	gravity: float,
+	equilibrium: float,
+	height: float,
+	body: StoichonSystemBody = null
+) -> Dictionary:
+	if atmosphere == null or materials == null or gravity <= 0.0 or equilibrium <= 0.0:
+		return {"pressure": 0.0, "temperature": equilibrium, "scale_height": 0.0}
+	var lapse := lapse_rate(atmosphere, materials, gravity)
+	var surface := surface_temperature(atmosphere, materials, gravity, equilibrium)
+	if body != null and body.overrides != null and body.overrides.set.has("mean_surface_temperature"):
+		surface = body.overrides.mean_surface_temperature
+	var air_height := scale_height(atmosphere, materials, surface, gravity)
+	if air_height <= 0.0:
+		return {"pressure": 0.0, "temperature": surface, "scale_height": 0.0}
+	var above := maxf(height, 0.0)
+	return {
+		"pressure": pressure_at(above, atmosphere.surface_pressure, air_height),
+		"temperature": temperature_at(above, surface, lapse, tropopause_temperature(equilibrium)),
+		"scale_height": air_height,
+	}
+
+
+## The altitude over which the air's density falls by 1/e: `kT / (m-bar g)`.
+##
+## Earth comes out at 8.4 km against the 8.5 km the model doc quotes, and `glsl-atmosphere`'s own
+## Earth-like value is 8.0 km — the three agree, which is why this plugs into its shader rather than
+## being fitted to it.
+static func scale_height(
+	atmosphere: StoichonAtmosphere,
+	materials: StoichonMaterialTable,
+	temperature: float,
+	gravity: float
+) -> float:
+	var molar := mean_molar_mass(atmosphere, materials)
+	if molar <= 0.0 or gravity <= 0.0 or temperature <= 0.0:
+		return 0.0
+	var molecule := molar / 1000.0 / AVOGADRO ## kilograms
+	return BOLTZMANN * temperature / (molecule * gravity)
+
+
+## Surface gravity, `GM/r^2`. Content authors mass for every body — see `StoichonSystemBody` — so
+## this needs nothing the derivation stages do not already have.
+static func surface_gravity(body: StoichonSystemBody) -> float:
+	if body == null or body.radius <= 0.0:
+		return 0.0
+	return GRAVITATION * body.mass / (body.radius * body.radius)
+
+
+## **The temperature the coefficients are evaluated at.** In order of authority:
+##
+## 1. **What content pinned.** Content wins everywhere else and it wins here; for the gas giants it is
+##    the only right answer, because they radiate more than they receive and their warmth is
+##    collision-induced absorption rather than molecular bands. A pinned value is a **measured** one,
+##    which is what the model is checked against.
+## 2. **The greenhouse**, `surface_temperature()` — equilibrium plus the warming from the column. This
+##    is what turns Earth's 254 K of insolation into 288 K and Venus's 229 K into 737 K.
+## 3. **Equilibrium**, for a body with no `atmosphere` block at all.
+##
+## **This is the number the whole sky hangs on.** `kRlh` is proportional to 1/T and the scale height to
+## T, so the greenhouse's arrival is visible without touching the shader: Venus's air was 3.2x too
+## dense and 3.2x too shallow until this landed.
+static func reference_temperature(
+	body: StoichonSystemBody,
+	materials: StoichonMaterialTable,
+	luminosity: float,
+	distance: float
+) -> float:
+	if body != null and body.overrides != null \
+		and body.overrides.set.has("mean_surface_temperature"):
+		return body.overrides.mean_surface_temperature
+	var equilibrium := equilibrium_temperature(body, materials, luminosity, distance)
+	if body == null or body.atmosphere == null:
+		return equilibrium
+	return surface_temperature(
+		body.atmosphere, materials, surface_gravity(body), equilibrium
+	)
+
+
+## **Equilibrium temperature — §3.6's first row, and the placeholder for the real thing.** With no
+## greenhouse Earth comes out at 255 K against a measured 288 K, which makes the air about 13% denser
+## than it should be. That is a number to fix, not to hide: when §3.6 lands, this is what it replaces.
+static func equilibrium_temperature(
+	body: StoichonSystemBody,
+	materials: StoichonMaterialTable,
+	luminosity: float,
+	distance: float
+) -> float:
+	if body == null or luminosity <= 0.0 or distance <= 0.0:
+		return 0.0
+	var albedo := StoichonSurfaceModel.bond_albedo(body, materials)
+	# The `4` is the geometry, and it is the difference between 255 K and 1,000 K: a body intercepts
+	# `pi r^2` of the light but radiates from `4 pi r^2` of surface.
+	var absorbed := (1.0 - albedo) * luminosity / (4.0 * PI * distance * distance * 4.0)
+	# **A body's own heat is a second source, and for a giant it is not a correction.** It adds to the
+	# same flux, so it goes in before the fourth root — and because that root compresses, 5.44 W/m2 of
+	# internal heat against 6.25 of sunlight only moves Jupiter from 102 K to 120 K. **The remaining 45 K
+	# to its measured 165 K at 1 bar is NOT this term**: it is H2/He collision-induced absorption, which is
+	# a greenhouse coefficient this table does not carry. Two gaps, named separately so neither can be
+	# mistaken for the other's fix.
+	absorbed += maxf(body.internal_heat_flux, 0.0)
+	return pow(absorbed / STEFAN_BOLTZMANN, 0.25)
+
+
+## How much of the mix actually scatters: the mole fractions with a Rayleigh cross-section, over all
+## of them.
+##
+## **A named gap, not a silent one.** A species whose cross-section is not in the material table
+## contributes nothing to the sky, so this is what says whether the air is complete. **Water vapour
+## is the only remaining gap** — 1% of Earth's air — after hydrogen's cross-section was added for the
+## gas giants (computed from a literature (n−1) and checked against helium first). `test_render.gd`
+## asserts that Earth is the only body short of one.
+static func coverage(atmosphere: StoichonAtmosphere, materials: StoichonMaterialTable) -> float:
+	if atmosphere == null or materials == null:
+		return 0.0
+	var covered := 0.0
+	var total := 0.0
+	for key in atmosphere.species:
+		var fraction := float(atmosphere.species[key])
+		total += fraction
+		var material := materials.by_name(String(key))
+		if material != null and material.rayleigh.length_squared() > 0.0:
+			covered += fraction
+	if total <= 0.0:
+		return 0.0
+	return covered / total

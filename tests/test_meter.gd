@@ -1,5 +1,5 @@
 extends RefCounted
-## The frame metre's arithmetic — Track B2 of [[SpaceSim/Lighting Plan]] §7.
+## The frame metre's arithmetic — Track B2 of [[Stoichon/Lighting Plan]] §7.
 ##
 ## **Three behaviours, none of which needs a GPU**, which is the only part of Track B that can be proved
 ## headlessly: the weighting is selective, the cap bounds one pixel's influence, and the window bounds
@@ -11,7 +11,7 @@ extends RefCounted
 ## thing is**. A metre that passed without that comparison would pass with no weighting at all — which is
 ## exactly the metre Godot ships and the reason metered exposure failed here once already.
 
-const Meter := preload("res://addons/spacesim/lighting/exposure_meter.gd")
+const Meter := preload("res://addons/stoichon/lighting/exposure_meter.gd")
 
 const GRID := 64
 const FLOOR_LEVEL := 0.02 ## What an "empty" frame is made of, in the scene's absolute currency
@@ -30,7 +30,7 @@ func run(h, root: Node) -> void:
 
 
 ## The metre's luminance. **This is the source of truth for an expression that also appears in
-## `SpacesimExposurePass`'s sampling shader** (a compute shader cannot call GDScript), so the coefficients
+## `StoichonExposurePass`'s sampling shader** (a compute shader cannot call GDScript), so the coefficients
 ## are pinned here and any change has to be mirrored there deliberately rather than by accident.
 func _test_luminance(h) -> void:
 	h.check_near(Meter.luminance(Color.WHITE), 1.0, "white is luminance 1", 1e-12)
@@ -136,25 +136,25 @@ func _test_cap(h) -> void:
 	)
 
 
-## **The window.** The bounds are `SpacesimExposure`'s, and they are the reason nothing can run away.
+## **The window.** The bounds are `StoichonExposure`'s, and they are the reason nothing can run away.
 func _test_window(h) -> void:
 	h.check_near(
 		Meter.target_multiplier(Meter.TARGET_AVERAGE), 1.0,
 		"a frame already at middle grey wants no correction", 1e-9
 	)
 	h.check_near(
-		Meter.target_multiplier(0.0), SpacesimExposure.MAX_MULTIPLIER,
+		Meter.target_multiplier(0.0), StoichonExposure.MAX_MULTIPLIER,
 		"an empty frame pins at the boost ceiling rather than dividing by zero", 1e-9
 	)
 	h.check_near(
-		Meter.target_multiplier(1.0e-30), SpacesimExposure.MAX_MULTIPLIER,
+		Meter.target_multiplier(1.0e-30), StoichonExposure.MAX_MULTIPLIER,
 		"and so does one that is merely almost empty", 1e-9
 	)
 	h.check_near(
-		Meter.target_multiplier(1.0e9), SpacesimExposure.MIN_MULTIPLIER,
+		Meter.target_multiplier(1.0e9), StoichonExposure.MIN_MULTIPLIER,
 		"a blinding frame pins at the light-adapted floor", 1e-9
 	)
-	var window := SpacesimExposure.MAX_MULTIPLIER / SpacesimExposure.MIN_MULTIPLIER
+	var window := StoichonExposure.MAX_MULTIPLIER / StoichonExposure.MIN_MULTIPLIER
 	h.check_near(
 		log(window) / log(2.0), 32.0, "and the window between them is the 32 stops Evert asked for", 1e-6
 	)

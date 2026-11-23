@@ -4,20 +4,20 @@ extends RefCounted
 ## Against a real git repository in a temp directory, like the session suite — a save is a commit, and
 ## a browser over mocked commits proves nothing.
 
-const Session := preload("res://addons/spacesim/save/session.gd")
-const Repo := preload("res://addons/spacesim/save/world_repo.gd")
-const SavedGames := preload("res://addons/spacesim/save/saved_games_panel.gd")
-const PlayerPanel := preload("res://addons/spacesim/player/player_panel.gd")
+const Session := preload("res://addons/stoichon/save/session.gd")
+const Repo := preload("res://addons/stoichon/save/world_repo.gd")
+const SavedGames := preload("res://addons/stoichon/save/saved_games_panel.gd")
+const PlayerPanel := preload("res://addons/stoichon/player/player_panel.gd")
 const Ui := preload("res://tests/ui_fixture.gd")
 
 const SYSTEM_PATH := "res://systems/playground.tres"
-const TEST_ROOT := "/tmp/spacesim-saved-games-test"
+const TEST_ROOT := "/tmp/stoichon-saved-games-test"
 
 
 func run(h, root: Node) -> void:
 	print("  saved games")
 	_clean()
-	var system := SpacesimSystemScene.from_file(SYSTEM_PATH)
+	var system := StoichonSystemScene.from_file(SYSTEM_PATH)
 	system.build(root)
 
 	_test_the_screen(h, root, system)
@@ -33,7 +33,7 @@ func run(h, root: Node) -> void:
 
 
 ## The screen itself: what it lists, what it offers, and that a dialog opens inside it.
-func _test_the_screen(h, root: Node, system: SpacesimSystemScene) -> void:
+func _test_the_screen(h, root: Node, system: StoichonSystemScene) -> void:
 	var layer := CanvasLayer.new()
 	root.add_child(layer)
 	var session := _session()
@@ -79,7 +79,7 @@ func _test_the_screen(h, root: Node, system: SpacesimSystemScene) -> void:
 	# what happened while `build_screen` used `set_anchors_preset`, whose default is to keep the rect
 	# a control already has, and a control that has just been made has none.
 	panel._show_save(0)
-	var dialog: SpacesimDialog = panel._dialog
+	var dialog: StoichonDialog = panel._dialog
 	h.check(
 		dialog.size == panel.size,
 		"a dialog covers the screen it is over (%s against %s)" % [str(dialog.size), str(panel.size)]
@@ -99,7 +99,7 @@ func _test_the_screen(h, root: Node, system: SpacesimSystemScene) -> void:
 ## **The order in the column is the browser's shape**: a history chooses what the saves below are
 ## about, so it is above them, and the saves list is the one that grows with the window. Layout has
 ## not run — the suite is synchronous — so this is the column's structure, not its pixels.
-func _test_the_lists_are_stacked(h, root: Node, system: SpacesimSystemScene) -> void:
+func _test_the_lists_are_stacked(h, root: Node, system: StoichonSystemScene) -> void:
 	var layer := CanvasLayer.new()
 	root.add_child(layer)
 	var session := _session()
@@ -122,7 +122,7 @@ func _test_the_lists_are_stacked(h, root: Node, system: SpacesimSystemScene) -> 
 
 ## A history's name is a branch name, so renaming it is a repository operation: it happens now and
 ## the button says Rename.
-func _test_renaming_a_history(h, root: Node, system: SpacesimSystemScene) -> void:
+func _test_renaming_a_history(h, root: Node, system: StoichonSystemScene) -> void:
 	var layer := CanvasLayer.new()
 	root.add_child(layer)
 	var session := _session()
@@ -150,7 +150,7 @@ func _test_renaming_a_history(h, root: Node, system: SpacesimSystemScene) -> voi
 ## The wheel is a scroll, not a choice. **`ItemList` emits `item_clicked` for a wheel notch over an
 ## item** — whatever the button — so scrolling a long list opened the save under the cursor. What is
 ## emitted here is the signal Godot's own `gui_input` emits, with the button it puts in it.
-func _test_the_saves_list_ignores_the_wheel(h, root: Node, system: SpacesimSystemScene) -> void:
+func _test_the_saves_list_ignores_the_wheel(h, root: Node, system: StoichonSystemScene) -> void:
 	var layer := CanvasLayer.new()
 	root.add_child(layer)
 	var session := _session()
@@ -172,7 +172,7 @@ func _test_the_saves_list_ignores_the_wheel(h, root: Node, system: SpacesimSyste
 
 ## **Save lives here, beside the list it writes into.** The world's state is what it writes, and the
 ## row appears where the player is looking.
-func _test_saving_from_this_screen(h, root: Node, system: SpacesimSystemScene) -> void:
+func _test_saving_from_this_screen(h, root: Node, system: StoichonSystemScene) -> void:
 	var layer := CanvasLayer.new()
 	root.add_child(layer)
 	var session := _session()
@@ -199,7 +199,7 @@ func _test_saving_from_this_screen(h, root: Node, system: SpacesimSystemScene) -
 ## **Closing a dialog closes the dialog and nothing else.** A dialog sits over the screen it belongs
 ## to, and a Close that also shut the screen would make dismissing a question cost the list the player
 ## was browsing.
-func _test_a_dialog_close_only_closes_the_dialog(h, root: Node, system: SpacesimSystemScene) -> void:
+func _test_a_dialog_close_only_closes_the_dialog(h, root: Node, system: StoichonSystemScene) -> void:
 	var layer := CanvasLayer.new()
 	root.add_child(layer)
 	var session := _session()
@@ -214,7 +214,7 @@ func _test_a_dialog_close_only_closes_the_dialog(h, root: Node, system: Spacesim
 	panel.closed.connect(func() -> void: closes.append(1))
 
 	panel._show_save(0)
-	var dialog: SpacesimDialog = panel._dialog
+	var dialog: StoichonDialog = panel._dialog
 	h.check(dialog.visible, "a save opens a dialog over the screen")
 	var closers: Array = Ui.buttons(dialog, "Close")
 	h.check(closers.size() == 1, "the dialog has one Close (%d)" % closers.size())
@@ -243,7 +243,7 @@ func _test_a_dialog_close_only_closes_the_dialog(h, root: Node, system: Spacesim
 
 ## Reached from the personal-data screen through a button, which is the whole reason this screen has
 ## no key of its own.
-func _test_the_player_screen_opens_it(h, root: Node, system: SpacesimSystemScene) -> void:
+func _test_the_player_screen_opens_it(h, root: Node, system: StoichonSystemScene) -> void:
 	var layer := CanvasLayer.new()
 	root.add_child(layer)
 	var session := _session()
@@ -266,8 +266,8 @@ func _test_the_player_screen_opens_it(h, root: Node, system: SpacesimSystemScene
 
 
 func _panel(
-	layer: CanvasLayer, session: SpacesimSession, system: SpacesimSystemScene
-) -> SpacesimSavedGamesPanel:
+	layer: CanvasLayer, session: StoichonSession, system: StoichonSystemScene
+) -> StoichonSavedGamesPanel:
 	var panel := SavedGames.new()
 	panel.configure(session.player, session, system)
 	layer.add_child(panel)
@@ -275,7 +275,7 @@ func _panel(
 	return panel
 
 
-func _session() -> SpacesimSession:
+func _session() -> StoichonSession:
 	return Session.new(Repo.new(TEST_ROOT))
 
 

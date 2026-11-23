@@ -2,7 +2,7 @@ extends RefCounted
 ## **The cloud decks: one node per layer, at its own derived altitude, sharing the body's own triangles.**
 ##
 ## All arithmetic and scene-building, no picture. What is checked is the *agreement* between three things
-## that must never drift: the layer content authored in `sol.tres`, the level `SpacesimAtmosphereModel`
+## that must never drift: the layer content authored in `sol.tres`, the level `StoichonAtmosphereModel`
 ## derives for it, and the node the scene builds from both. What it cannot check is the look — that is a
 ## flight — and what it deliberately does not check is anything the update loop bakes, because a headless
 ## run has no renderer to bake with.
@@ -16,11 +16,11 @@ const SOL_PATH := "res://systems/sol.tres"
 
 func run(h, root: Node) -> void:
 	print("  cloud decks")
-	var sol: SpacesimSolarSystem = load(SOL_PATH)
+	var sol: StoichonSolarSystem = load(SOL_PATH)
 	h.check(sol != null, "Sol loads")
 	if sol == null:
 		return
-	var scene := SpacesimSystemScene.from_content(sol)
+	var scene := StoichonSystemScene.from_content(sol)
 	h.check(scene != null, "a scene wraps it")
 	if scene == null:
 		return
@@ -46,7 +46,7 @@ func run(h, root: Node) -> void:
 ##
 ## **The geometry is not here**: a deck's points are the ground's, built by the walk, so they are asserted in
 ## `_test_the_deck_goes_live` where a build has actually landed.
-func _test_earths_stack(h, scene: SpacesimSystemScene) -> void:
+func _test_earths_stack(h, scene: StoichonSystemScene) -> void:
 	var earth := scene.body_by_id("planet:earth")
 	h.check(earth != null and earth.decks.size() == 2,
 		"Earth authors two layers and gets two decks, one per derived level (%d)"
@@ -54,8 +54,8 @@ func _test_earths_stack(h, scene: SpacesimSystemScene) -> void:
 	if earth.decks.size() != 2:
 		return
 	# Highest first, the same order as the content stack.
-	var ice: SpacesimSceneBody.Deck = earth.decks[0]
-	var water: SpacesimSceneBody.Deck = earth.decks[1]
+	var ice: StoichonSceneBody.Deck = earth.decks[0]
+	var water: StoichonSceneBody.Deck = earth.decks[1]
 	h.check(ice.level.species == "water_ice",
 		"the upper deck is ice, at %.0f m" % ice.height)
 	h.check(water.level.species == "water_vapour",
@@ -75,7 +75,7 @@ func _test_earths_stack(h, scene: SpacesimSystemScene) -> void:
 	var titan := scene.body_by_id("m.moon:titan") if scene.body_by_id("m.moon:titan") != null \
 		else scene.body_by_id("m.titan")
 	if titan != null and not titan.decks.is_empty():
-		var claimed: SpacesimSceneBody.Deck = titan.decks[0]
+		var claimed: StoichonSceneBody.Deck = titan.decks[0]
 		h.check(claimed.level.species == "nitrogen" and claimed.level.height > 10000.0,
 			"while a flat deck still claims the highest level (%s at %.0f m)" % [
 				claimed.level.species, claimed.height])
@@ -99,7 +99,7 @@ func _test_earths_stack(h, scene: SpacesimSystemScene) -> void:
 ## **The stacked bodies are the ones that can tell a loop from a field.** Jupiter authors a HAZE above
 ## ammonia above water — three layers, one of which has no condensation level — and the two condensations are
 ## derived from each species' own partial pressure, so they land at different altitudes with air between them.
-func _test_a_stack(h, scene: SpacesimSystemScene) -> void:
+func _test_a_stack(h, scene: StoichonSystemScene) -> void:
 	# **Jupiter is the three-layer case** since 2026-11-03: the broad white zones are a haze above the stack,
 	# which is the one layer the model cannot derive a level for.
 	var jupiter := scene.body_by_id("planet:jupiter")
@@ -107,7 +107,7 @@ func _test_a_stack(h, scene: SpacesimSystemScene) -> void:
 		"Jupiter authors three layers and gets three decks, the top one a haze (%d)"
 			% (jupiter.decks.size() if jupiter != null else -1))
 	if jupiter != null and jupiter.decks.size() == 3:
-		var haze: SpacesimSceneBody.Deck = jupiter.decks[0]
+		var haze: StoichonSceneBody.Deck = jupiter.decks[0]
 		h.check(haze.haze and haze.level.species == "haze",
 			"the highest is the haze, at %.0f m — the top of the stack, which has no condensation level"
 				% haze.height)
@@ -128,8 +128,8 @@ func _test_a_stack(h, scene: SpacesimSystemScene) -> void:
 			"%s authors two layers and gets two decks (%d)" % [id, body.decks.size()])
 		if body.decks.size() != 2:
 			continue
-		var upper: SpacesimSceneBody.Deck = body.decks[0]
-		var lower: SpacesimSceneBody.Deck = body.decks[1]
+		var upper: StoichonSceneBody.Deck = body.decks[0]
+		var lower: StoichonSceneBody.Deck = body.decks[1]
 		h.check(upper.level.species != lower.level.species,
 			"%s's two decks are two condensables, not the same one twice (%s, %s)" % [
 				id, upper.level.species, lower.level.species])
@@ -138,9 +138,9 @@ func _test_a_stack(h, scene: SpacesimSystemScene) -> void:
 				upper.level.height, lower.level.height])
 		# **Different weather, not the same cloud twice**: the field's seed is keyed by the layer, so a stack
 		# is two maps rather than one map at two heights. **Asked of the field, not of a shader uniform** — the
-		# seed's home is `SpacesimCloudField.seed_for`, and the deck no longer carries a copy of it since the
+		# seed's home is `StoichonCloudField.seed_for`, and the deck no longer carries a copy of it since the
 		# noise ladder went.
-		h.check(SpacesimCloudField.seed_for(id, upper.index) != SpacesimCloudField.seed_for(id, lower.index),
+		h.check(StoichonCloudField.seed_for(id, upper.index) != StoichonCloudField.seed_for(id, lower.index),
 			"while each has its own field seed, so the two are different clouds")
 		# **And the deeper deck is drawn first**, because every deck is centred on the same body and a
 		# distance sort cannot separate them.
@@ -151,7 +151,7 @@ func _test_a_stack(h, scene: SpacesimSystemScene) -> void:
 
 ## A body with no air has nothing to condense, and a body with air but no authored deck has nothing to
 ## draw — both are the same empty answer rather than a shell at zero height.
-func _test_who_gets_no_deck(h, scene: SpacesimSystemScene) -> void:
+func _test_who_gets_no_deck(h, scene: StoichonSystemScene) -> void:
 	var luna := scene.body_by_id("moon:luna")
 	h.check(luna != null and luna.decks.is_empty(),
 		"an airless body has no deck (%d)" % (luna.decks.size() if luna != null else -1))
@@ -172,7 +172,7 @@ func _test_who_gets_no_deck(h, scene: SpacesimSystemScene) -> void:
 ## so the see-through parts of the cloud deck you can see right through the planet. We need something to be opaque
 ## there under the clouds."* A giant's interior IS opaque, so a gap between two decks must show darkness and never
 ## stars — and the floor has to sit BELOW every deck, or it z-fights with one.
-func _test_a_surface_less_body_has_a_floor(h, scene: SpacesimSystemScene) -> void:
+func _test_a_surface_less_body_has_a_floor(h, scene: StoichonSystemScene) -> void:
 	for id in ["planet:jupiter", "planet:saturn", "planet:uranus", "planet:neptune"]:
 		var body := scene.body_by_id(id)
 		h.check(body != null and body.interior != null and body.interior_material != null,
@@ -180,7 +180,7 @@ func _test_a_surface_less_body_has_a_floor(h, scene: SpacesimSystemScene) -> voi
 		if body == null or body.interior == null:
 			continue
 		var scale_height: float = body.air.get("rayleigh_scale_height", 0.0)
-		var derived := -scale_height * log(SpacesimAtmosphereModel.MODELLED_PRESSURE_MULTIPLE)
+		var derived := -scale_height * log(StoichonAtmosphereModel.MODELLED_PRESSURE_MULTIPLE)
 		h.check_near(body.interior_depth, derived,
 			"at the depth the model stops claiming to know the troposphere (%.0f m, 20 bar)" % body.interior_depth,
 			1.0e-6)
@@ -203,7 +203,7 @@ func _test_a_surface_less_body_has_a_floor(h, scene: SpacesimSystemScene) -> voi
 		"and a FEATURELESS body has no stack to draw a floor under")
 
 
-func _test_a_deck_below_its_datum(h, scene: SpacesimSystemScene) -> void:
+func _test_a_deck_below_its_datum(h, scene: StoichonSystemScene) -> void:
 	var found := false
 	for body in scene.bodies:
 		for deck in body.decks:
@@ -213,7 +213,7 @@ func _test_a_deck_below_its_datum(h, scene: SpacesimSystemScene) -> void:
 			h.check(deck.node.scale.x > 0.0,
 				"%s's %s deck sits %.0f m below the datum and still has a positive radius" % [
 					body.id, deck.level.species, -deck.height])
-			h.check(not SpacesimBodyRenderer.draws_reference_sphere(body.content),
+			h.check(not StoichonBodyRenderer.draws_reference_sphere(body.content),
 				"and %s draws no reference sphere to hide it behind" % body.id)
 	h.check(found, "at least one body has a deck under its datum, so the case is real")
 
@@ -226,19 +226,19 @@ func _test_a_deck_below_its_datum(h, scene: SpacesimSystemScene) -> void:
 ## It cannot say what the deck looks like — that is a flight — but it can say that a map was baked, that the
 ## threshold came from its own distribution, that the eye's position reached the material, and that turning
 ## the switch off hides it.
-func _test_the_deck_goes_live(h, scene: SpacesimSystemScene, root: Node) -> void:
+func _test_the_deck_goes_live(h, scene: StoichonSystemScene, root: Node) -> void:
 	# **A test that depends on a player setting must set it.** A run of the *game* writes
-	# `$XDG_CONFIG_HOME/spacesim/settings.cfg` on exit, and the suite reads that file — so toggling
+	# `$XDG_CONFIG_HOME/stoichon/settings.cfg` on exit, and the suite reads that file — so toggling
 	# `render.cloud_decks` off in flight and then running the suite turns every check below into an assertion
 	# about nothing (`_update_decks` returns before it publishes, `tau_full` stays unset, and reading it raises
 	# `Nonexistent 'float' constructor`). Restored afterwards, and never saved: a rig may change the world for
 	# one frame, it may not change the player's settings.
-	var was_on: bool = SpacesimSettings.get_value("render.cloud_decks")
-	SpacesimSettings.set_value("render.cloud_decks", true)
+	var was_on: bool = StoichonSettings.get_value("render.cloud_decks")
+	StoichonSettings.set_value("render.cloud_decks", true)
 	var earth := scene.body_by_id("planet:earth")
 	if earth == null or earth.decks.is_empty():
 		h.check(false, "Earth has a deck to drive")
-		SpacesimSettings.set_value("render.cloud_decks", was_on)
+		StoichonSettings.set_value("render.cloud_decks", was_on)
 		return
 	var camera := Camera3D.new()
 	root.add_child(camera)
@@ -256,7 +256,7 @@ func _test_the_deck_goes_live(h, scene: SpacesimSystemScene, root: Node) -> void
 	scene.update_lod(camera)
 	scene.await_patch_builds()
 
-	var deck: SpacesimSceneBody.Deck = earth.decks[0]
+	var deck: StoichonSceneBody.Deck = earth.decks[0]
 	h.check(deck.node.visible, "the deck is visible once the frame has walked it")
 	# **The deck draws the GROUND's mesh, translated to its level** — one tessellation, so a refinement lands in both
 	# and there is no second sphere with a second sagitta to reconcile. Evert, 2026-11-01: *"We need to use that for
@@ -308,7 +308,7 @@ func _test_the_deck_goes_live(h, scene: SpacesimSystemScene, root: Node) -> void
 	h.check(tau_full > 0.0, "the deck's optical depth is published, or its alpha is zero (%.4f)" % tau_full)
 	h.check(is_equal_approx(tau_full, deck.tau),
 		"and it is the layer's own column depth")
-	h.check(deck.material.get_shader_parameter("cover") != SpacesimBodyRenderer.white_texel(),
+	h.check(deck.material.get_shader_parameter("cover") != StoichonBodyRenderer.white_texel(),
 		"sampling that map rather than the white texel")
 	# **ONE tau, and it is the same number everywhere it is used** (2026-11-03). There were two: the deck drew with
 	# `−ln(1 − mean exceedance)` from the map and the shadow cast with `−ln(1 − opacity)` from the content, 3.07x
@@ -329,7 +329,7 @@ func _test_the_deck_goes_live(h, scene: SpacesimSystemScene, root: Node) -> void
 		)
 		if own_map != null:
 			# **Annotated**: a `Dictionary` lookup is a `Variant`, and `:=` on one is a hard parse error.
-			var measured: float = SpacesimCloudMaps.measure(
+			var measured: float = StoichonCloudMaps.measure(
 				own_map.get_image(), other.coverage, other.tau
 			)["opacity"]
 			h.check_near(scene._cloud_maps.opacity_mean_of(earth.id, other.index), measured,
@@ -353,13 +353,13 @@ func _test_the_deck_goes_live(h, scene: SpacesimSystemScene, root: Node) -> void
 	# is recorded in MemPalace and needs re-measuring before the LOD reasoning is trusted again.
 
 	# **One switch, and it hides every deck.** Read through `get_value` every frame, so it is hot.
-	SpacesimSettings.set_value("render.cloud_decks", false)
+	StoichonSettings.set_value("render.cloud_decks", false)
 	scene.update_lod(camera)
 	h.check(not deck.node.visible, "and the switch hides it without touching the map")
-	SpacesimSettings.set_value("render.cloud_decks", true)
+	StoichonSettings.set_value("render.cloud_decks", true)
 	scene.update_lod(camera)
 	h.check(deck.node.visible, "and brings it back")
-	SpacesimSettings.set_value("render.cloud_decks", was_on)
+	StoichonSettings.set_value("render.cloud_decks", was_on)
 	camera.queue_free()
 
 
@@ -367,7 +367,7 @@ func _test_the_deck_goes_live(h, scene: SpacesimSystemScene, root: Node) -> void
 ## between the deck and the surface it darkens: the same map, the same percentile, a depth, and the lever arm
 ## the offset is measured along. What cannot be asserted here is how the shadow looks — one tap of a field in
 ## the star's direction is arithmetic GLSL does, not GDScript.
-func _test_the_deck_casts_a_shadow(h, scene: SpacesimSystemScene) -> void:
+func _test_the_deck_casts_a_shadow(h, scene: StoichonSystemScene) -> void:
 	var earth := scene.body_by_id("planet:earth")
 	if earth == null or earth.decks.is_empty() or earth.mesh_material == null:
 		h.check(false, "Earth has a deck and a land material to shadow")
@@ -378,7 +378,7 @@ func _test_the_deck_casts_a_shadow(h, scene: SpacesimSystemScene) -> void:
 	#
 	# `_shadowing_deck` is private, like every rule this scene derives for itself; it is the rule that is under
 	# test, so it is what the test calls rather than a copy of it.
-	var deck: SpacesimSceneBody.Deck = scene._shadowing_deck(earth)
+	var deck: StoichonSceneBody.Deck = scene._shadowing_deck(earth)
 	h.check(deck != null and deck == earth.decks[earth.decks.size() - 1],
 		"Earth's shadow is cast by the deck nearest the ground, not the ice sheet above it (%s at %.0f m)" % [
 			deck.level.species if deck != null else "none", deck.height if deck != null else 0.0])
@@ -392,7 +392,7 @@ func _test_the_deck_casts_a_shadow(h, scene: SpacesimSystemScene) -> void:
 	for body in scene.bodies:
 		if body.decks.size() <= 1:
 			continue
-		var lowest: SpacesimSceneBody.Deck = body.decks[0]
+		var lowest: StoichonSceneBody.Deck = body.decks[0]
 		for candidate in body.decks:
 			if candidate.height + candidate.thickness < lowest.height + lowest.thickness:
 				lowest = candidate
@@ -410,7 +410,7 @@ func _test_the_deck_casts_a_shadow(h, scene: SpacesimSystemScene) -> void:
 	# to be handed the SHADOWING deck's map and tau, so Earth's ice sheet — its own 0.2 — was darkened by the water
 	# deck's 2.30 and read as a heavy shadow it was not casting. One `deck.tau` now serves the alpha, the base's
 	# light and the shadow, so the two cannot be different numbers again.
-	var ice: SpacesimSceneBody.Deck = earth.decks[0]
+	var ice: StoichonSceneBody.Deck = earth.decks[0]
 	for other in earth.decks:
 		var own := other.tau
 		h.check_near(float((other.material as ShaderMaterial).get_shader_parameter("deck_tau")), own,
@@ -421,8 +421,8 @@ func _test_the_deck_casts_a_shadow(h, scene: SpacesimSystemScene) -> void:
 	# Publish what a landed map would publish, and check the surface took it. **One surface now**: the sea's layer is
 	# gone (2026-10-28) and with it the "both layers" half of this contract — the deck's shadow reaches the ground,
 	# which is the only thing drawn below it.
-	var cover := SpacesimBodyRenderer.white_texel()
-	SpacesimBodyRenderer.apply_deck_shadow(
+	var cover := StoichonBodyRenderer.white_texel()
+	StoichonBodyRenderer.apply_deck_shadow(
 		earth.mesh_material, cover, deck.published_width, 0.843, deck.tau,
 		deck.height + deck.thickness
 	)
@@ -441,8 +441,8 @@ func _test_the_deck_casts_a_shadow(h, scene: SpacesimSystemScene) -> void:
 		# **A shadow does not remove the ambient**, and with one `AO` value driving both the ambient and the
 		# direct light the only way to say that is a floor: below `DECK_SHADOW_FLOOR` the light stops falling.
 		h.check_near(float(material.get_shader_parameter("deck_shadow_floor")),
-			SpacesimBodyRenderer.DECK_SHADOW_FLOOR,
-			"lit from a floor of %.2f, so shade is not night" % SpacesimBodyRenderer.DECK_SHADOW_FLOOR,
+			StoichonBodyRenderer.DECK_SHADOW_FLOOR,
+			"lit from a floor of %.2f, so shade is not night" % StoichonBodyRenderer.DECK_SHADOW_FLOOR,
 			1.0e-9)
 
 	# **And a REFINEMENT reaches it.** The deck's map is republished on every rung, and the shadow's copy has to
@@ -451,7 +451,7 @@ func _test_the_deck_casts_a_shadow(h, scene: SpacesimSystemScene) -> void:
 	var refined := Image.create_empty(8, 4, false, Image.FORMAT_L8)
 	refined.fill(Color(0.5, 0.5, 0.5, 1.0))
 	var refined_texture := ImageTexture.create_from_image(refined)
-	SpacesimBodyRenderer.apply_deck_shadow(
+	StoichonBodyRenderer.apply_deck_shadow(
 		earth.mesh_material, refined_texture, 8, 0.7, deck.tau,
 		deck.height + deck.thickness
 	)
@@ -472,8 +472,8 @@ func _test_the_deck_casts_a_shadow(h, scene: SpacesimSystemScene) -> void:
 	# `covered = smoothstep(threshold ± softness, field)` is the same quantity. **Checked as an absence**, because a
 	# bilinear tap is invisible — it looks like a slightly softer edge, not like a missing function.
 	for path in [
-		"res://addons/spacesim/render/body_deck.gdshader",
-		"res://addons/spacesim/render/deck_shadow.gdshaderinc",
+		"res://addons/stoichon/render/body_deck.gdshader",
+		"res://addons/stoichon/render/deck_shadow.gdshaderinc",
 	]:
 		var code := FileAccess.get_file_as_string(path)
 		var named := String(path).get_file()
@@ -481,7 +481,7 @@ func _test_the_deck_casts_a_shadow(h, scene: SpacesimSystemScene) -> void:
 		h.check(not code.contains("texture(cover, cloud_map_uv(") and not code.contains("texture(deck_cover, deck_shadow_uv("),
 			"%s and does not point-sample it" % named)
 	var kernel := FileAccess.get_file_as_string(
-		"res://addons/spacesim/render/cloud_coverage.gdshaderinc"
+		"res://addons/stoichon/render/cloud_coverage.gdshaderinc"
 	)
 	h.check(kernel.contains("float cloud_coverage(sampler2D map, vec2 uv, vec2 texel, float lod)"),
 		"from one shared kernel, so the shadow cannot be a different cloud from the deck")
@@ -509,12 +509,12 @@ func _test_the_deck_casts_a_shadow(h, scene: SpacesimSystemScene) -> void:
 			1.0, "and a floor of 1.0, which is no shadow by arithmetic as well as by gate", 1.0e-9)
 
 
-func _test_the_cameras_own_column(h, scene: SpacesimSystemScene) -> void:
+func _test_the_cameras_own_column(h, scene: StoichonSystemScene) -> void:
 	var earth := scene.body_by_id("planet:earth")
 	if earth == null or earth.decks.is_empty() or earth.node == null:
 		h.check(false, "Earth has a deck to sample")
 		return
-	var deck: SpacesimSceneBody.Deck = earth.decks[0]
+	var deck: StoichonSceneBody.Deck = earth.decks[0]
 	var top := earth.radius + deck.height + deck.thickness
 	var centre := earth.node.global_position
 
@@ -546,17 +546,17 @@ func _test_the_cameras_own_column(h, scene: SpacesimSystemScene) -> void:
 ##
 ## Nothing in the fog reads a velocity or a previous frame, so travel direction cannot enter it — which means the
 ## ramp itself is what to check, and this checks the numbers the shader will be handed rather than the code.
-func _test_the_fog_ramp(h, scene: SpacesimSystemScene, root: Node) -> void:
+func _test_the_fog_ramp(h, scene: StoichonSystemScene, root: Node) -> void:
 	var earth := scene.body_by_id("planet:earth")
 	if earth == null or earth.decks.is_empty():
 		h.check(false, "Earth has a deck to ramp the fog over")
 		return
-	var deck: SpacesimSceneBody.Deck = earth.decks[0]
+	var deck: StoichonSceneBody.Deck = earth.decks[0]
 	var base := earth.radius + deck.height
 	var top := base + deck.thickness
 	var camera := Camera3D.new()
 	root.add_child(camera)
-	var effect := SpacesimAtmospherePass.new()
+	var effect := StoichonAtmospherePass.new()
 
 	var ramps: Array = []
 	for fraction: float in [0.0, 0.25, 0.5, 0.75, 1.0]:
@@ -598,7 +598,7 @@ func _test_the_fog_ramp(h, scene: SpacesimSystemScene, root: Node) -> void:
 func _test_the_map_carries_a_pyramid(h) -> void:
 	var image := Image.create(64, 32, false, Image.FORMAT_R8)
 	image.fill(Color(0.5, 0.5, 0.5))
-	var texture := SpacesimCloudMaps._map_texture(image)
+	var texture := StoichonCloudMaps._map_texture(image)
 	h.check(texture != null, "a map becomes a texture")
 	var back := texture.get_image()
 	h.check(back != null and back.has_mipmaps(), "and the texture carries a mip pyramid")
@@ -609,7 +609,7 @@ func _test_the_ramp_gain(h) -> void:
 	var palette := Color(0.95, 0.96, 1.0)
 	var luminance := palette.get_luminance()
 	# Earth's deck, at a mean thickness the gain can afford: 0.419 of reflectance over 0.45.
-	var gain := SpacesimBodyRenderer.cloud_gain(0.419, palette, 0.45)
+	var gain := StoichonBodyRenderer.cloud_gain(0.419, palette, 0.45)
 	h.check_near(gain.value * luminance * 0.45, 0.419,
 		"the gain puts the deck's average reflectance on the calibrated albedo", 1.0e-6)
 	h.check_near(gain.achieved, 1.0, "and nothing was given up to do it", 1.0e-9)
@@ -618,16 +618,16 @@ func _test_the_ramp_gain(h) -> void:
 	# gain of 1.29, which would be a cloud reflecting more than white. So the gain stops at 1 and the deck
 	# draws about 78 % of its calibrated reflectance: the honest signal that the field wants more contrast,
 	# reported rather than hidden. It is a property of the field, not a fault in this arithmetic.
-	var low := SpacesimBodyRenderer.cloud_gain(0.419, palette, 0.34)
+	var low := StoichonBodyRenderer.cloud_gain(0.419, palette, 0.34)
 	h.check_near(low.value, 1.0, "a low-contrast field is capped at white", 1.0e-9)
 	h.check(low.achieved > 0.7 and low.achieved < 0.85,
 		"and reaches %.0f %% of the budget, which is the contrast it has" % (low.achieved * 100.0))
 
 	# **A field with almost no contrast is the same ceiling, much further short.**
-	var thin := SpacesimBodyRenderer.cloud_gain(0.419, palette, 0.02)
+	var thin := StoichonBodyRenderer.cloud_gain(0.419, palette, 0.02)
 	h.check_near(thin.value, 1.0, "a field with almost no contrast is capped too", 1.0e-9)
 	h.check(thin.achieved < 0.5, "and reports that it fell short (%.0f %%)" % (thin.achieved * 100.0))
 
 	# **A layer with no albedo draws nothing** rather than a black deck.
-	h.check_near(SpacesimBodyRenderer.cloud_gain(0.0, palette, 0.5).value, 0.0,
+	h.check_near(StoichonBodyRenderer.cloud_gain(0.0, palette, 0.5).value, 0.0,
 		"and a layer with no albedo has no gain at all", 1.0e-9)

@@ -17,20 +17,20 @@ const EPSILON := 0.5
 
 func _init() -> void:
 	for altitude in [1000.0, 10.0]:
-		var chunks := SpacesimPatches.select(
+		var chunks := StoichonPatches.select(
 			RADIUS + altitude, Vector3.UP, RADIUS, PIXEL, EPSILON
 		)
 		var origin := Vector3.UP * RADIUS
-		var flat: Array = SpacesimPatches.arrays_of(chunks, RADIUS, origin)
-		var lines: Array = SpacesimPatches.lines_of(chunks, RADIUS, origin)
+		var flat: Array = StoichonPatches.arrays_of(chunks, RADIUS, origin)
+		var lines: Array = StoichonPatches.lines_of(chunks, RADIUS, origin)
 		var flat_verts: int = (flat[0] as PackedVector3Array).size()
 		var line_verts: int = (lines[0] as PackedVector3Array).size()
 
 		print("%.0f m  %d tri  (%d flat verts, %d line verts)" % [
-			altitude, SpacesimPatches.triangle_count(chunks), flat_verts, line_verts
+			altitude, StoichonPatches.triangle_count(chunks), flat_verts, line_verts
 		])
-		print("  flat  mesh_from         %7.1f ms" % _time(func(): return SpacesimPatches.mesh_from(flat)))
-		print("  WIRE  lines_mesh_from   %7.1f ms" % _time(func(): return SpacesimPatches.lines_mesh_from(lines)))
+		print("  flat  mesh_from         %7.1f ms" % _time(func(): return StoichonPatches.mesh_from(flat)))
+		print("  WIRE  lines_mesh_from   %7.1f ms" % _time(func(): return StoichonPatches.lines_mesh_from(lines)))
 		print("  release the arrays      %7.1f ms  (flat %d B, lines %d B)" % [
 			_time(func(): return _release(flat, lines)),
 			(flat[0] as PackedVector3Array).size() * 12,

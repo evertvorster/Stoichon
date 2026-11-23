@@ -51,7 +51,7 @@ const REFERENCE_LUX := 100000.0
 const HALF_MAX := 65504.0
 const HALF_MIN_NORMAL := 6.103515625e-05
 const HALF_MIN_SUBNORMAL := 5.960464477539063e-08
-## The EV window's ceiling, from `SpacesimExposure.MAX_MULTIPLIER = MIN_MULTIPLIER * 2^32`.
+## The EV window's ceiling, from `StoichonExposure.MAX_MULTIPLIER = MIN_MULTIPLIER * 2^32`.
 const EV_CEILING := 4294967296.0
 
 const VIEW_SIZE := 64
@@ -81,32 +81,32 @@ func _initialize() -> void:
 	_plan()
 
 
-func _body(system: SpacesimSolarSystem, id_fragment: String) -> SpacesimSystemBody:
+func _body(system: StoichonSolarSystem, id_fragment: String) -> StoichonSystemBody:
 	for body in system.bodies:
 		if String(body.id).ends_with(id_fragment):
 			return body
 	return null
 
 
-func _illuminance(luminosity: float, body: SpacesimSystemBody) -> float:
+func _illuminance(luminosity: float, body: StoichonSystemBody) -> float:
 	if body == null or body.orbit == null:
 		return 0.0
-	return SpacesimStarLight.illuminance(luminosity, body.orbit.semi_major_axis)
+	return StoichonStarLight.illuminance(luminosity, body.orbit.semi_major_axis)
 
 
 func _arithmetic() -> void:
 	var loaded: Variant = load(CONTENT_PATH)
-	if loaded == null or not (loaded is SpacesimSolarSystem):
+	if loaded == null or not (loaded is StoichonSolarSystem):
 		print("RANGE: no content at '%s'" % CONTENT_PATH)
 		return
-	var system: SpacesimSolarSystem = loaded
+	var system: StoichonSolarSystem = loaded
 
 	var star := _body(system, ":sol")
 	if star == null:
 		print("RANGE: no star in the content")
 		return
-	var luminosity := SpacesimStarModel.luminosity(star)
-	var table := SpacesimMaterialTable.engine_table()
+	var luminosity := StoichonStarModel.luminosity(star)
+	var table := StoichonMaterialTable.engine_table()
 
 	print("RANGE — part A, arithmetic from the project's own content")
 	print("RANGE: Sol's luminosity        %s W" % String.num_scientific(luminosity))
@@ -128,7 +128,7 @@ func _arithmetic() -> void:
 		])
 
 	# --- the star field, which is the ambient the project actually computes ------------------------
-	var sky := SpacesimStarSky.new()
+	var sky := StoichonStarSky.new()
 	var starfield := 0.0
 	if sky.create():
 		starfield = sky.illuminance(6.5) ## the registry's default `sky.star_depth`
@@ -148,11 +148,11 @@ func _arithmetic() -> void:
 		print("RANGE:")
 		print("RANGE: no Luna in the content; planetshine not computed")
 		return
-	var earth_albedo := SpacesimSurfaceModel.bond_albedo(earth, table)
+	var earth_albedo := StoichonSurfaceModel.bond_albedo(earth, table)
 	var earth_lux := _illuminance(luminosity, earth)
 	# **Full Earth**, i.e. the best case, which is exactly when Luna's near side is in lunar night:
 	# a phase angle of zero.
-	var earth_luminance := SpacesimLuminance.disc_luminance(earth_lux, earth_albedo, 0.0)
+	var earth_luminance := StoichonLuminance.disc_luminance(earth_lux, earth_albedo, 0.0)
 	# Earth's solid angle from Luna. The exact spherical cap at a distance, not the small-angle
 	# approximation, because the point is to trust this number.
 	var d := luna.orbit.semi_major_axis
@@ -301,12 +301,12 @@ func _apply(case: Array) -> void:
 ## The illuminance part A computed for a body, so the render and the arithmetic cannot drift.
 func _level_lux(kind: String) -> float:
 	var loaded: Variant = load(CONTENT_PATH)
-	if loaded == null or not (loaded is SpacesimSolarSystem):
+	if loaded == null or not (loaded is StoichonSolarSystem):
 		return 0.0
-	var system: SpacesimSolarSystem = loaded
+	var system: StoichonSolarSystem = loaded
 	var star := _body(system, ":sol")
 	var body := _body(system, ":" + kind.trim_prefix("level:"))
-	return _illuminance(SpacesimStarModel.luminosity(star), body)
+	return _illuminance(StoichonStarModel.luminosity(star), body)
 
 
 func _process(_delta: float) -> bool:

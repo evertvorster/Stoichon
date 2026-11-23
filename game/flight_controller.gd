@@ -11,28 +11,28 @@ extends Node3D
 ##   aim      : world-space point to point the ship at (tests use this)
 ##   pitch/yaw/roll : radians to rotate by this step (the interactive path uses these)
 
-const TravelScale := preload("res://addons/spacesim/travel/travel_scale.gd")
-const Proximity := preload("res://addons/spacesim/travel/proximity.gd")
+const TravelScale := preload("res://addons/stoichon/travel/travel_scale.gd")
+const Proximity := preload("res://addons/stoichon/travel/proximity.gd")
 
 ## **How many local travel units per second full stick is worth.** The engine owns the UNIT
-## (`SpacesimTravelScale`: one neighbourhood per `TRAVERSE_SECONDS`), and this is the episode's multiple of
+## (`StoichonTravelScale`: one neighbourhood per `TRAVERSE_SECONDS`), and this is the episode's multiple of
 ## it — which is why it lives here and not there. 10 is an inspection budget: fast enough to cross a cloud
 ## deck in one pass, slow enough to stop inside it.
 const TOP_THROTTLE := 10.0
 
 ## The frame tree whose active frame supplies the travel band. Required: a ship without one has
 ## nowhere to fly, so its absence is a programming error rather than a state to handle.
-var frame_tree: SpacesimFrameTree
+var frame_tree: StoichonFrameTree
 
 ## Significant bodies: what sets the local unit.
-var bodies: Array[SpacesimScaleBody] = []
+var bodies: Array[StoichonScaleBody] = []
 
 ## The nearest body as of this step, so one scan serves the readout and the surface constraint
 ## both.
 ##
 ## ponytail: cached for the step rather than queried twice. Re-query if bodies ever move fast
 ## enough to change which one is nearest inside a single step.
-var _nearest_body: SpacesimScaleBody
+var _nearest_body: StoichonScaleBody
 
 # Readouts, for the HUD and for tests.
 var throttle := 0.0
@@ -69,7 +69,7 @@ func step(delta: float, input: Dictionary) -> void:
 	if speed != 0.0:
 		closing = -global_transform.basis.z * speed
 	# **The ship is carried by whatever it is nearest to**, so its speed is relative to that body and
-	# the world does not need to stand still for it to arrive. See `SpacesimTravelScale.carried_step`.
+	# the world does not need to stand still for it to arrive. See `StoichonTravelScale.carried_step`.
 	var carried := Vector3.ZERO if _nearest_body == null else _nearest_body.velocity
 	if closing != Vector3.ZERO or carried != Vector3.ZERO:
 		global_position += TravelScale.carried_step(carried, closing, delta)
@@ -132,7 +132,7 @@ func _constrain_to_surface() -> void:
 		return
 	# **A rock has no node, and is still solid.** Evert, 2026-11-14: *"while not exactly landable, they
 	# should be dockable, which amounts to the same thing."* The constraint is a sphere test against the
-	# nearest body's own radius, and a `SpacesimScaleBody` carries a position whether or not a node does.
+	# nearest body's own radius, and a `StoichonScaleBody` carries a position whether or not a node does.
 	var origin: Vector3 = (
 		_nearest_body.node.global_position if _nearest_body.node != null else _nearest_body.position
 	)

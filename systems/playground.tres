@@ -1,9 +1,9 @@
-[gd_resource type="Resource" script_class="SpacesimSolarSystem" format=3]
+[gd_resource type="Resource" script_class="StoichonSolarSystem" format=3]
 
-[ext_resource type="Script" path="res://addons/spacesim/system/content/solar_system.gd" id="system"]
-[ext_resource type="Script" path="res://addons/spacesim/system/content/framing.gd" id="framing"]
-[ext_resource type="Script" path="res://addons/spacesim/system/content/system_body.gd" id="body"]
-[ext_resource type="Script" path="res://addons/spacesim/system/content/overrides.gd" id="overrides"]
+[ext_resource type="Script" path="res://addons/stoichon/system/content/solar_system.gd" id="system"]
+[ext_resource type="Script" path="res://addons/stoichon/system/content/framing.gd" id="framing"]
+[ext_resource type="Script" path="res://addons/stoichon/system/content/system_body.gd" id="body"]
+[ext_resource type="Script" path="res://addons/stoichon/system/content/overrides.gd" id="overrides"]
 
 ; THE PLAYGROUND — the hand-placed test system.
 ;

@@ -6,6 +6,6 @@ func _initialize() -> void:
 	var radius := 6.371e6
 	var pixel := 1.2966806e-3
 	for altitude in [1.0e5, 5.0e5, 2.0e6, 1.0e7]:
-		var chunks := SpacesimPatches.select(radius + altitude, Vector3.UP, radius, pixel, 0.5)
+		var chunks := StoichonPatches.select(radius + altitude, Vector3.UP, radius, pixel, 0.5)
 		print("ALT %10.0f m : %5d chunks" % [altitude, chunks.size()])
 	quit()

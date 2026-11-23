@@ -1,5 +1,5 @@
 extends RefCounted
-## **The conditions where the observer is** — `SpacesimAtmosphereModel.conditions_at` and the scene's
+## **The conditions where the observer is** — `StoichonAtmosphereModel.conditions_at` and the scene's
 ## `conditions_at`, which is what the HUD's sensor column reads.
 ##
 ## Headless, so what is checked is the arithmetic against the model's own derived numbers, never a picture.
@@ -12,11 +12,11 @@ const SOL_PATH := "res://systems/sol.tres"
 
 func run(h, root: Node) -> void:
 	print("  conditions at the observer")
-	var sol: SpacesimSolarSystem = load(SOL_PATH)
+	var sol: StoichonSolarSystem = load(SOL_PATH)
 	h.check(sol != null, "Sol loads")
 	if sol == null:
 		return
-	var materials := SpacesimMaterialTable.engine_table()
+	var materials := StoichonMaterialTable.engine_table()
 	var earth := _body(sol, "planet:earth")
 	h.check(earth != null, "Earth is authored")
 	if earth == null:
@@ -29,7 +29,7 @@ func run(h, root: Node) -> void:
 	_test_the_scene(h, root)
 
 
-func _body(sol: SpacesimSolarSystem, id: String) -> SpacesimSystemBody:
+func _body(sol: StoichonSolarSystem, id: String) -> StoichonSystemBody:
 	for body in sol.bodies:
 		if body.id == id:
 			return body
@@ -38,14 +38,14 @@ func _body(sol: SpacesimSolarSystem, id: String) -> SpacesimSystemBody:
 
 ## **At the surface the air is the surface.** The pressure is what content states, and the temperature lands
 ## inside the band a body with air has to be in — a wrong profile puts Venus or Mars outside it immediately.
-func _test_the_ground(h, earth: SpacesimSystemBody, materials: SpacesimMaterialTable) -> void:
-	var gravity := SpacesimAtmosphereModel.surface_gravity(earth)
-	var equilibrium := SpacesimAtmosphereModel.equilibrium_temperature(
+func _test_the_ground(h, earth: StoichonSystemBody, materials: StoichonMaterialTable) -> void:
+	var gravity := StoichonAtmosphereModel.surface_gravity(earth)
+	var equilibrium := StoichonAtmosphereModel.equilibrium_temperature(
 		earth, materials, _luminosity(), _distance()
 	)
 	h.check(gravity > 9.0 and gravity < 10.0, "Earth's surface gravity is about 9.8 m/s² (%.3f)" % gravity)
 
-	var air := SpacesimAtmosphereModel.conditions_at(
+	var air := StoichonAtmosphereModel.conditions_at(
 		earth.atmosphere, materials, gravity, equilibrium, 0.0, earth
 	)
 	var surface: float = earth.atmosphere.surface_pressure
@@ -63,15 +63,15 @@ func _test_the_ground(h, earth: SpacesimSystemBody, materials: SpacesimMaterialT
 
 ## **One scale height up is one e-fold**, which is the law and not a fit — so it is the check that says
 ## pressure is being computed from the scale height rather than from something that merely resembles it.
-func _test_one_scale_height(h, earth: SpacesimSystemBody, materials: SpacesimMaterialTable) -> void:
-	var gravity := SpacesimAtmosphereModel.surface_gravity(earth)
-	var equilibrium := SpacesimAtmosphereModel.equilibrium_temperature(
+func _test_one_scale_height(h, earth: StoichonSystemBody, materials: StoichonMaterialTable) -> void:
+	var gravity := StoichonAtmosphereModel.surface_gravity(earth)
+	var equilibrium := StoichonAtmosphereModel.equilibrium_temperature(
 		earth, materials, _luminosity(), _distance()
 	)
-	var ground := SpacesimAtmosphereModel.conditions_at(
+	var ground := StoichonAtmosphereModel.conditions_at(
 		earth.atmosphere, materials, gravity, equilibrium, 0.0, earth
 	)
-	var up := SpacesimAtmosphereModel.conditions_at(
+	var up := StoichonAtmosphereModel.conditions_at(
 		earth.atmosphere, materials, gravity, equilibrium, float(ground["scale_height"]), earth
 	)
 	var ratio: float = up["pressure"] / ground["pressure"]
@@ -84,12 +84,12 @@ func _test_one_scale_height(h, earth: SpacesimSystemBody, materials: SpacesimMat
 
 
 ## Far above the air there is effectively none, and the model must say so rather than crossing zero.
-func _test_thin_air(h, earth: SpacesimSystemBody, materials: SpacesimMaterialTable) -> void:
-	var gravity := SpacesimAtmosphereModel.surface_gravity(earth)
-	var equilibrium := SpacesimAtmosphereModel.equilibrium_temperature(
+func _test_thin_air(h, earth: StoichonSystemBody, materials: StoichonMaterialTable) -> void:
+	var gravity := StoichonAtmosphereModel.surface_gravity(earth)
+	var equilibrium := StoichonAtmosphereModel.equilibrium_temperature(
 		earth, materials, _luminosity(), _distance()
 	)
-	var high := SpacesimAtmosphereModel.conditions_at(
+	var high := StoichonAtmosphereModel.conditions_at(
 		earth.atmosphere, materials, gravity, equilibrium, 200000.0, earth
 	)
 	h.check(high["pressure"] >= 0.0, "200 km up the pressure is not negative (%.6f Pa)" % high["pressure"])
@@ -98,14 +98,14 @@ func _test_thin_air(h, earth: SpacesimSystemBody, materials: SpacesimMaterialTab
 
 ## **An airless body answers zero, not nothing**: the sensor column has to keep its shape, and a moon's
 ## surface is a real place to be standing.
-func _test_airless(h, sol: SpacesimSolarSystem, materials: SpacesimMaterialTable) -> void:
+func _test_airless(h, sol: StoichonSolarSystem, materials: StoichonMaterialTable) -> void:
 	var moon := _body(sol, "moon:luna")
 	if moon == null:
 		h.check(false, "Luna is authored")
 		return
 	h.check(moon.atmosphere == null, "Luna has no air")
-	var gravity := SpacesimAtmosphereModel.surface_gravity(moon)
-	var air := SpacesimAtmosphereModel.conditions_at(null, materials, gravity, 250.0, 0.0, moon)
+	var gravity := StoichonAtmosphereModel.surface_gravity(moon)
+	var air := StoichonAtmosphereModel.conditions_at(null, materials, gravity, 250.0, 0.0, moon)
 	h.check(air["pressure"] == 0.0, "with no air the pressure is zero (%s)" % str(air["pressure"]))
 	h.check(air["temperature"] > 0.0, "and the temperature is still the body's (%.0f K)" % air["temperature"])
 
@@ -113,8 +113,8 @@ func _test_airless(h, sol: SpacesimSolarSystem, materials: SpacesimMaterialTable
 ## **The scene answers for the body nearest the observer**, and its gravity is the EYE's — the whole reason
 ## this is not the surface figure.
 func _test_the_scene(h, root: Node) -> void:
-	var sol: SpacesimSolarSystem = load(SOL_PATH)
-	var scene := SpacesimSystemScene.from_content(sol)
+	var sol: StoichonSolarSystem = load(SOL_PATH)
+	var scene := StoichonSystemScene.from_content(sol)
 	h.check(scene != null, "a scene wraps Sol")
 	if scene == null:
 		return

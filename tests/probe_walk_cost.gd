@@ -7,9 +7,9 @@ func _init() -> void:
 		var chunks: Array = []
 		for _run in 5:
 			var started := Time.get_ticks_usec()
-			chunks = SpacesimPatches.select(R + altitude, Vector3.UP, R, P, 0.5)
+			chunks = StoichonPatches.select(R + altitude, Vector3.UP, R, P, 0.5)
 			best = minf(best, Time.get_ticks_usec() - started)
 		print("%8.0f m  select() %6.1f ms  %6d chunks  %8d tri" % [
-			altitude, best / 1000.0, chunks.size(), SpacesimPatches.triangle_count(chunks)
+			altitude, best / 1000.0, chunks.size(), StoichonPatches.triangle_count(chunks)
 		])
 	quit(0)

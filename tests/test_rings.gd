@@ -36,7 +36,7 @@ func run(h, root: Node) -> void:
 	_test_the_shader_is_told_the_two_vectors_it_multiplies(h, root)
 
 
-func _sol() -> SpacesimSolarSystem:
+func _sol() -> StoichonSolarSystem:
 	return load("res://systems/sol.tres")
 
 
@@ -59,9 +59,9 @@ func _test_three_bands_are_authored(h) -> void:
 
 	# **The gaps are the space between the populations**, which is why they are three of them: the C ring ends
 	# where the B ring starts, and the Cassini division is the 4,590 km between the B and the A ring.
-	var c: SpacesimPopulation = bands[0]
-	var b: SpacesimPopulation = bands[1]
-	var a: SpacesimPopulation = bands[2]
+	var c: StoichonPopulation = bands[0]
+	var b: StoichonPopulation = bands[1]
+	var a: StoichonPopulation = bands[2]
 	h.check_near(c.semi_major_axis.y, b.semi_major_axis.x, "the C ring meets the B ring", 1.0)
 	var division := a.semi_major_axis.x - b.semi_major_axis.y
 	h.check(division > 3.0e6 and division < 6.0e6,
@@ -74,7 +74,7 @@ func _test_three_bands_are_authored(h) -> void:
 	# The direction comes from the loaded system, never from a hardcoded triple — the first version of this had
 	# the orbital-elements frame where the engine's is (X, -Z, -Y), and put the star *in* the plane.
 	var saturn := Vector3(959638100292.751, -55223571194.788, -979217915059.77)
-	var sun_cosine := SpacesimRingModel.cosine(a.ring_axis.normalized(), -saturn.normalized())
+	var sun_cosine := StoichonRingModel.cosine(a.ring_axis.normalized(), -saturn.normalized())
 	h.check(sun_cosine > 0.3 and sun_cosine < 0.4,
 		"the star sits 20 degrees above the ring plane (cos %.3f)" % sun_cosine)
 	var reach := SATURN_RADIUS / sun_cosine
@@ -91,7 +91,7 @@ func _test_three_bands_are_authored(h) -> void:
 ## mean that the shader needs is the area-weighted one.
 func _test_the_cloud_fills_its_band(h) -> void:
 	var band := _sol().population_by_id("population:ring_b")
-	var cloud := SpacesimParticleCloud.of(band)
+	var cloud := StoichonParticleCloud.of(band)
 	h.check(cloud.size() == band.particle_count,
 		"every authored particle exists (%d)" % cloud.size())
 
@@ -133,13 +133,13 @@ func _test_the_cloud_fills_its_band(h) -> void:
 	h.check_near(float(inside) / float(cloud.size()), 0.5, "the cloud is uniform by area", 0.01)
 
 	# **The same ring every load**, and two bands are two different rings.
-	var again := SpacesimParticleCloud.of(band)
+	var again := StoichonParticleCloud.of(band)
 	var same := true
 	for index in range(0, cloud.size(), 977):
 		if not again.positions[index].is_equal_approx(cloud.positions[index]):
 			same = false
 	h.check(same, "the same seed is the same ring")
-	var other := SpacesimParticleCloud.of(_sol().population_by_id("population:ring_a"))
+	var other := StoichonParticleCloud.of(_sol().population_by_id("population:ring_a"))
 	h.check(other.size() > 0 and not other.positions[0].is_equal_approx(cloud.positions[0]),
 		"and a different seed is a different one")
 
@@ -148,7 +148,7 @@ func _test_the_cloud_fills_its_band(h) -> void:
 ## outside the band, inside it, above the plane, and a long way round.
 func _test_the_nearest_is_the_nearest(h) -> void:
 	var band := _sol().population_by_id("population:ring_b")
-	var cloud := SpacesimParticleCloud.of(band)
+	var cloud := StoichonParticleCloud.of(band)
 	var band_middle := (band.semi_major_axis.x + band.semi_major_axis.y) * 0.5
 	var places := [
 		Vector3(0.0, 0.0, 0.0),
@@ -196,16 +196,16 @@ func _test_the_closest_point_is_trigonometry(h) -> void:
 	var outer := 117580000.0
 	var middle := (inner + outer) * 0.5
 	# Inside the band's radius: the closest point is straight out along the bearing.
-	var inside := SpacesimParticleCloud.closest_point(Vector3(middle, 0.0, 0.0), inner, outer)
+	var inside := StoichonParticleCloud.closest_point(Vector3(middle, 0.0, 0.0), inner, outer)
 	h.check(inside.is_equal_approx(Vector3(middle, 0.0, 0.0)), "a point in the band is its own")
 	# Beyond it: clamped to the outer edge, on the same bearing.
-	var beyond := SpacesimParticleCloud.closest_point(Vector3(5.0 * outer, 0.0, 0.0), inner, outer)
+	var beyond := StoichonParticleCloud.closest_point(Vector3(5.0 * outer, 0.0, 0.0), inner, outer)
 	h.check(beyond.is_equal_approx(Vector3(outer, 0.0, 0.0)), "outside, it is the outer edge")
 	# Inside the hole: clamped to the inner edge.
-	var within := SpacesimParticleCloud.closest_point(Vector3(1.0e6, 0.0, 0.0), inner, outer)
+	var within := StoichonParticleCloud.closest_point(Vector3(1.0e6, 0.0, 0.0), inner, outer)
 	h.check(within.is_equal_approx(Vector3(inner, 0.0, 0.0)), "inside the gap, it is the inner edge")
 	# Above the plane: the same bearing, and the height is not part of a band with no thickness.
-	var above := SpacesimParticleCloud.closest_point(Vector3(middle, 0.0, 1.0e7), inner, outer)
+	var above := StoichonParticleCloud.closest_point(Vector3(middle, 0.0, 1.0e7), inner, outer)
 	h.check_near(above.z, 0.0, "the closest point is on the sheet", 1.0e-6)
 	h.check_near(Vector2(above.x, above.y).length(), middle, "and at the ship's own radius", 1.0)
 
@@ -217,18 +217,18 @@ func _test_the_band_is_as_bright_as_saturn_says(h) -> void:
 	for pair in [[0.1, 0.0227], [0.7, 0.0942], [1.2, 0.1142]]:
 		var tau: float = pair[0]
 		var expected: float = pair[1]
-		h.check_near(SpacesimRingModel.reflectance(tau, 1.0, 1.0), expected,
+		h.check_near(StoichonRingModel.reflectance(tau, 1.0, 1.0), expected,
 			"tau %.1f reflects %.4f of a bright surface" % [tau, expected], 0.005)
-	h.check(SpacesimRingModel.reflectance(1.2, 1.0, 1.0) > SpacesimRingModel.reflectance(0.1, 1.0, 1.0),
+	h.check(StoichonRingModel.reflectance(1.2, 1.0, 1.0) > StoichonRingModel.reflectance(0.1, 1.0, 1.0),
 		"a thicker band is brighter than a thin one")
-	h.check(SpacesimRingModel.reflectance(50.0, 0.05, 0.05) <= 1.0,
+	h.check(StoichonRingModel.reflectance(50.0, 0.05, 0.05) <= 1.0,
 		"and nothing reflects more than a bright surface, however thick and however grazing")
 
 	# **And it is dimmer than Saturn's own disc**, which is the thing Evert sees when he says it is too bright.
 	# A body's disc is `illuminance · albedo · phase / pi`; the ring is `illuminance · albedo · R / pi`. One
 	# unit of star light, Saturn's 0.342 albedo, and a phase factor of 0.5 for a half-lit disc.
 	var saturn_disc := 1.0 * 0.342 * 0.5 / PI
-	var ring_b := SpacesimRingModel.radiance(1.0, 0.6, 1.2, 0.34, 0.34)
+	var ring_b := StoichonRingModel.radiance(1.0, 0.6, 1.2, 0.34, 0.34)
 	h.check(ring_b < saturn_disc,
 		"the B ring is dimmer than Saturn's disc at the same light (%.4f against %.4f)" % [ring_b, saturn_disc])
 	h.check(ring_b > saturn_disc * 0.3,
@@ -239,8 +239,8 @@ func _test_the_band_is_as_bright_as_saturn_says(h) -> void:
 	# optical depth is a fractional millionth of the band's — which is the number that says a rock must be drawn
 	# as a rock and not as a piece of a bright sheet.
 	var band := _sol().population_by_id("population:ring_b")
-	var cloud := SpacesimParticleCloud.of(band)
-	var drawn := SpacesimRingModel.drawn_optical_depth(band, cloud.mean_radius())
+	var cloud := StoichonParticleCloud.of(band)
+	var drawn := StoichonRingModel.drawn_optical_depth(band, cloud.mean_radius())
 	h.check(drawn < 1.0e-5,
 		"the 300,000 drawn particles are %.8f of an optical depth, against the band's %.1f — not the band"
 			% [drawn, band.optical_depth])
@@ -249,8 +249,8 @@ func _test_the_band_is_as_bright_as_saturn_says(h) -> void:
 			% (band.optical_depth / drawn))
 
 	# **A shadowed particle keeps a floor** — `R33`: visible and dark, never absent.
-	var lit := SpacesimRingModel.radiance(1.0, 0.4, 1.2, 1.0, 1.0)
-	var unlit := SpacesimRingModel.unlit_radiance(lit)
+	var lit := StoichonRingModel.radiance(1.0, 0.4, 1.2, 1.0, 1.0)
+	var unlit := StoichonRingModel.unlit_radiance(lit)
 	h.check(lit > 0.0, "a lit band has radiance (%.4f)" % lit)
 	h.check(unlit > 0.0 and unlit < lit * 0.2,
 		"and a shadowed one is dark but not gone (%.4f)" % unlit)
@@ -263,15 +263,15 @@ func _test_the_band_is_as_bright_as_saturn_says(h) -> void:
 ## agree: the ring's normal, the planet's own pole, and the authored axis.
 func _test_the_rings_encircle_the_equator(h, root: Node) -> void:
 	var sol := _sol()
-	var scene := SpacesimSystemScene.from_content(sol)
+	var scene := StoichonSystemScene.from_content(sol)
 	if scene == null or scene.build(root) == null:
 		return
 	var saturn := scene.body_by_id("planet:saturn")
-	var band: SpacesimPopulation = sol.population_by_id("population:ring_b")
+	var band: StoichonPopulation = sol.population_by_id("population:ring_b")
 	var view := scene.rings[1]
 	var ring_normal := (view.global_transform.basis * Vector3(0.0, 0.0, 1.0)).normalized()
 	var planet_pole := saturn.node.global_transform.basis.y.normalized()
-	var derived := SpacesimKepler.pole(saturn.content.orbit, saturn.content.axial_tilt)
+	var derived := StoichonKepler.pole(saturn.content.orbit, saturn.content.axial_tilt)
 	h.check_near(ring_normal.dot(planet_pole), 1.0,
 		"the ring's plane is the planet's equator (%.4f)" % ring_normal.dot(planet_pole), 0.001)
 	h.check_near(planet_pole.dot(derived), 1.0,
@@ -279,7 +279,7 @@ func _test_the_rings_encircle_the_equator(h, root: Node) -> void:
 			% planet_pole.dot(derived), 0.001)
 	# **The tilt is the content's own**: Saturn's 26.73 degrees off its orbital plane, and the tilt is what makes
 	# the rings a season rather than a fixed picture.
-	var orbit_normal := SpacesimKepler.pole(saturn.content.orbit, 0.0)
+	var orbit_normal := StoichonKepler.pole(saturn.content.orbit, 0.0)
 	h.check_near(rad_to_deg(planet_pole.angle_to(orbit_normal)), 26.73,
 		"Saturn leans 26.73 degrees off its orbit", 0.05)
 	# **And a body with no tilt sits on its orbit's normal**, which is very nearly the engine's +Y for a planet
@@ -308,7 +308,7 @@ func _test_the_rings_encircle_the_equator(h, root: Node) -> void:
 ## obliquity away from the ship — 23.4 degrees on Earth, 26.7 on Saturn, an eighth of a radius along the surface.
 func _test_the_walk_refines_under_the_ship(h, root: Node) -> void:
 	var sol := _sol()
-	var scene := SpacesimSystemScene.from_content(sol)
+	var scene := StoichonSystemScene.from_content(sol)
 	if scene == null or scene.build(root) == null:
 		return
 	var earth := scene.body_by_id("planet:earth")
@@ -347,7 +347,7 @@ func _test_the_walk_refines_under_the_ship(h, root: Node) -> void:
 ## is put back on them.
 func _test_every_body_shader_is_told_the_same_sun(h, root: Node) -> void:
 	var sol := _sol()
-	var scene := SpacesimSystemScene.from_content(sol)
+	var scene := StoichonSystemScene.from_content(sol)
 	if scene == null or scene.build(root) == null:
 		return
 	var camera := Camera3D.new()
@@ -385,7 +385,7 @@ func _test_every_body_shader_is_told_the_same_sun(h, root: Node) -> void:
 ## **`R8`, `R9`** — the planet's shadow, on the rings and nowhere else.
 func _test_the_shadow_is_the_planets(h, root: Node) -> void:
 	var sol := _sol()
-	var scene := SpacesimSystemScene.from_content(sol)
+	var scene := StoichonSystemScene.from_content(sol)
 	if scene == null or scene.build(root) == null:
 		return
 	h.check(scene.rings.size() == 3, "three bands are drawn (%d)" % scene.rings.size())
@@ -406,22 +406,22 @@ func _test_the_shadow_is_the_planets(h, root: Node) -> void:
 	var behind := saturn_position - to_star * (SATURN_RADIUS * 1.5)
 	var aside := saturn_position + Vector3(0.0, 1.0, 0.0).cross(to_star).normalized() * (SATURN_RADIUS * 1.5)
 	h.check_near(
-		SpacesimLuminance.shadow_fraction(behind, star_position, saturn_position, SATURN_RADIUS, STAR_RADIUS),
+		StoichonLuminance.shadow_fraction(behind, star_position, saturn_position, SATURN_RADIUS, STAR_RADIUS),
 		0.0, "a particle in the planet's wake gets no star light", 0.02
 	)
 	h.check_near(
-		SpacesimLuminance.shadow_fraction(aside, star_position, saturn_position, SATURN_RADIUS, STAR_RADIUS),
+		StoichonLuminance.shadow_fraction(aside, star_position, saturn_position, SATURN_RADIUS, STAR_RADIUS),
 		1.0, "and one beside it gets all of it", 0.02
 	)
 	# **Half-way between, it is a penumbra** — neither 0 nor 1, which is what the two-circle law buys.
 	var edge := saturn_position - to_star * (SATURN_RADIUS * 1.5) + Vector3(0.0, 1.0, 0.0).cross(to_star).normalized() * SATURN_RADIUS
-	var part := SpacesimLuminance.shadow_fraction(edge, star_position, saturn_position, SATURN_RADIUS, STAR_RADIUS)
+	var part := StoichonLuminance.shadow_fraction(edge, star_position, saturn_position, SATURN_RADIUS, STAR_RADIUS)
 	h.check(part > 0.0 and part < 1.0, "the umbra's edge is a penumbra (%.2f)" % part)
 
 	# **What the law sees, measured** — the umbra is where the caster's disc covers the star's, so the count of
 	# particles whose angle to the star is inside the caster's own angular radius is the number the bake must find.
 	var band_b := sol.population_by_id("population:ring_b")
-	var cloud_b := SpacesimParticleCloud.of(band_b)
+	var cloud_b := StoichonParticleCloud.of(band_b)
 	var view_b := scene.rings[1]
 	var inside := 0
 	var min_theta := INF
@@ -456,7 +456,7 @@ func _test_the_shadow_is_the_planets(h, root: Node) -> void:
 ## only 1, right?"*
 func _test_the_band_is_one_draw(h, root: Node) -> void:
 	var sol := _sol()
-	var scene := SpacesimSystemScene.from_content(sol)
+	var scene := StoichonSystemScene.from_content(sol)
 	if scene == null or scene.build(root) == null:
 		return
 	var view := scene.rings[1]
@@ -466,7 +466,7 @@ func _test_the_band_is_one_draw(h, root: Node) -> void:
 		h.check(nodes[0].multimesh.instance_count == view.count(),
 			"holding every particle (%d)" % view.count())
 		var priority := (nodes[0].material_override as ShaderMaterial).render_priority
-		h.check(priority == SpacesimRingView.RING_PRIORITY, "at the ring's one priority (%d)" % priority)
+		h.check(priority == StoichonRingView.RING_PRIORITY, "at the ring's one priority (%d)" % priority)
 		# **And nothing else in that material can take a particle away**: no cut, so no per-particle rejection.
 		h.check((nodes[0].material_override as ShaderMaterial).get_shader_parameter("split_side") == null,
 			"and with no cut to classify a particle out of it")
@@ -481,8 +481,8 @@ func _test_the_band_is_one_draw(h, root: Node) -> void:
 		if body.ocean != null and body.ocean.material_override != null:
 			highest = maxi(highest, int((body.ocean.material_override as Material).render_priority))
 	h.check(highest > -129, "the planet's own layers are here (%d at the top)" % highest)
-	h.check(SpacesimRingView.RING_PRIORITY > highest,
-		"the band draws after all of them (%d > %d)" % [SpacesimRingView.RING_PRIORITY, highest])
+	h.check(StoichonRingView.RING_PRIORITY > highest,
+		"the band draws after all of them (%d > %d)" % [StoichonRingView.RING_PRIORITY, highest])
 
 	root.remove_child(scene.container)
 	scene.container.free()
@@ -496,7 +496,7 @@ func _test_the_band_is_one_draw(h, root: Node) -> void:
 ## *"We spent a long, long time optimizing air and cloud decks, don't mess up their order."*
 func _test_the_layers_cannot_tie(h, root: Node) -> void:
 	var sol := _sol()
-	var scene := SpacesimSystemScene.from_content(sol)
+	var scene := StoichonSystemScene.from_content(sol)
 	if scene == null or scene.build(root) == null:
 		return
 	var layers := {}
@@ -519,11 +519,11 @@ func _test_the_layers_cannot_tie(h, root: Node) -> void:
 		h.check(priority >= -128 and priority <= 128, "%s is inside the engine's range (%d)" % [name, priority])
 		highest = maxi(highest, priority)
 	# **The one relationship the ring depends on**: after everything the planet wears.
-	h.check(SpacesimRingView.RING_PRIORITY > highest,
+	h.check(StoichonRingView.RING_PRIORITY > highest,
 		"the band draws after every layer a planet wears (%d > %d)"
-			% [SpacesimRingView.RING_PRIORITY, highest])
-	h.check(SpacesimRingView.RING_PRIORITY >= -128 and SpacesimRingView.RING_PRIORITY <= 128,
-		"and inside the engine's range (%d)" % SpacesimRingView.RING_PRIORITY)
+			% [StoichonRingView.RING_PRIORITY, highest])
+	h.check(StoichonRingView.RING_PRIORITY >= -128 and StoichonRingView.RING_PRIORITY <= 128,
+		"and inside the engine's range (%d)" % StoichonRingView.RING_PRIORITY)
 
 	root.remove_child(scene.container)
 	scene.container.free()
@@ -533,23 +533,23 @@ func _test_the_layers_cannot_tie(h, root: Node) -> void:
 ## and nothing else.
 func _test_a_spot_becomes_a_rock_by_one_rule(h, root: Node) -> void:
 	var sol := _sol()
-	var scene := SpacesimSystemScene.from_content(sol)
+	var scene := StoichonSystemScene.from_content(sol)
 	if scene == null or scene.build(root) == null:
 		return
 	var view := scene.rings[1]
-	var band: SpacesimPopulation = sol.population_by_id("population:ring_b")
-	var cloud := SpacesimParticleCloud.of(band)
-	var pixel := SpacesimLod.pixel_angle(70.0, 1080.0)
+	var band: StoichonPopulation = sol.population_by_id("population:ring_b")
+	var cloud := StoichonParticleCloud.of(band)
+	var pixel := StoichonLod.pixel_angle(70.0, 1080.0)
 	var centre := scene.body_by_id("planet:saturn").node.global_position
 
 	# **In a band's mid-radius plane**: the nearest spot is offered whatever its size.
 	var middle := (band.semi_major_axis.x + band.semi_major_axis.y) * 0.5
 	var eye := view.global_transform * Vector3(middle, 0.0, 300000.0)
-	var pieces := view.pieces(eye, pixel, SpacesimSystemScene.RING_ROCK_CANDIDATES)
+	var pieces := view.pieces(eye, pixel, StoichonSystemScene.RING_ROCK_CANDIDATES)
 	h.check(pieces.size() >= 1, "the nearest spot is always a body (%d offered)" % pieces.size())
 	if pieces.size() > 0:
 		var first: Dictionary = pieces[0]
-		var index := SpacesimRingView.index_of(String(first["id"]))
+		var index := StoichonRingView.index_of(String(first["id"]))
 		h.check(index >= 0, "and it is a spot, by id (%s)" % String(first["id"]))
 		h.check(String(first["id"]).begins_with("population:ring_b#"), "named after its band")
 		h.check_near(float(first["diameter"]), cloud.radii[index] * 2.0, "with its own diameter", 0.01)
@@ -583,7 +583,7 @@ func _test_a_spot_becomes_a_rock_by_one_rule(h, root: Node) -> void:
 	var near_bodies := view.pieces(close_eye, pixel, 4)
 	h.check(near_bodies.size() >= 1, "close in, a resolvable spot is a body (%d)" % near_bodies.size())
 	if near_bodies.size() > 0:
-		h.check(SpacesimRingView.index_of(String(near_bodies[0]["id"])) == biggest,
+		h.check(StoichonRingView.index_of(String(near_bodies[0]["id"])) == biggest,
 			"and it is the big component the eye is beside")
 
 	# **The splat is switched off for the ones that are** (`R26`) — and only for those.
@@ -603,15 +603,15 @@ func _test_a_spot_becomes_a_rock_by_one_rule(h, root: Node) -> void:
 ## and it is a rock on the HUD.
 func _test_a_rock_is_a_body_that_sets_the_unit(h, root: Node) -> void:
 	var sol := _sol()
-	var scene := SpacesimSystemScene.from_content(sol)
+	var scene := StoichonSystemScene.from_content(sol)
 	if scene == null or scene.build(root) == null:
 		return
-	var band: SpacesimPopulation = sol.population_by_id("population:ring_b")
+	var band: StoichonPopulation = sol.population_by_id("population:ring_b")
 	var view := scene.rings[1]
 	var manager := scene.ring_bodies[1]
 	var camera := Camera3D.new()
 	root.add_child(camera)
-	var pixel := SpacesimLod.pixel_angle(70.0, 1080.0)
+	var pixel := StoichonLod.pixel_angle(70.0, 1080.0)
 	var middle := (band.semi_major_axis.x + band.semi_major_axis.y) * 0.5
 	var eye := view.global_transform * Vector3(middle, 0.0, 200000.0)
 
@@ -620,7 +620,7 @@ func _test_a_rock_is_a_body_that_sets_the_unit(h, root: Node) -> void:
 	var rocks := manager.rocks()
 	h.check(rocks.size() >= 1, "a rock exists as a body as soon as it is the nearest spot (%d)" % rocks.size())
 	if rocks.size() > 0:
-		var rock: SpacesimSceneBody = rocks[0]
+		var rock: StoichonSceneBody = rocks[0]
 		h.check(rock.rock, "and it is marked as a rock rather than a place")
 		h.check(rock.node != null, "with a node, so the HUD can mark it")
 		h.check(rock.scale_body != null, "and a scale body, which is what slows the ship")
@@ -632,7 +632,7 @@ func _test_a_rock_is_a_body_that_sets_the_unit(h, root: Node) -> void:
 			var to_surface := rock.scale_body.surface_distance_to(from)
 			h.check(to_surface > 0.0 and to_surface < 1.0e6,
 				"and it is near enough to set a small unit (%.0f km)" % [to_surface / 1.0e3])
-			var unit := SpacesimTravelScale.local_length(to_surface, 10.0, 1.0e11)
+			var unit := StoichonTravelScale.local_length(to_surface, 10.0, 1.0e11)
 			h.check(unit < 1.0e6, "the local unit really is small near it (%.0f m)" % unit)
 
 	# **`R25`: the label is what a person reads, and it is the node's own name** — the markers draw `node.name`, so
@@ -668,7 +668,7 @@ func _pixel(camera: Camera3D) -> float:
 	var viewport := camera.get_viewport()
 	if viewport == null:
 		return 0.0
-	return SpacesimLod.pixel_angle(camera.fov, float(viewport.size.y))
+	return StoichonLod.pixel_angle(camera.fov, float(viewport.size.y))
 
 
 ## **A rock body leaves nothing behind.** Evert, 2026-11-18, after the churn was fixed: *"the flickering of the
@@ -680,15 +680,15 @@ func _pixel(camera: Camera3D) -> float:
 ## looks like. So: build and drop the same rock fifty times and assert every count comes back.
 func _test_a_rock_body_leaves_nothing_behind(h, root: Node) -> void:
 	var sol := _sol()
-	var scene := SpacesimSystemScene.from_content(sol)
+	var scene := StoichonSystemScene.from_content(sol)
 	if scene == null or scene.build(root) == null:
 		return
-	var population: SpacesimPopulation = sol.population_by_id("population:ring_b")
-	var manager := SpacesimFragmentBodies.new(population, scene)
+	var population: StoichonPopulation = sol.population_by_id("population:ring_b")
+	var manager := StoichonFragmentBodies.new(population, scene)
 	root.add_child(manager)
 	var camera := Camera3D.new()
 	root.add_child(camera)
-	var pixel := SpacesimLod.pixel_angle(70.0, 1080.0)
+	var pixel := StoichonLod.pixel_angle(70.0, 1080.0)
 	var piece := {
 		"id": "%s#1" % population.id, "position": Vector3(1.0e8, 0.0, 0.0), "diameter": 500.0,
 	}
@@ -736,14 +736,14 @@ func _test_a_rock_body_leaves_nothing_behind(h, root: Node) -> void:
 ## What it cannot say is what the band on screen looks like. That is the flight's to answer.
 func _test_the_light_side_is_the_side_the_star_is_on(h, root: Node) -> void:
 	var sol := _sol()
-	var scene := SpacesimSystemScene.from_content(sol)
+	var scene := StoichonSystemScene.from_content(sol)
 	if scene == null or scene.build(root) == null:
 		return
 	var saturn := scene.body_by_id("planet:saturn")
 	var centre := saturn.node.global_position
 	var view := scene.rings[1]
-	var band: SpacesimPopulation = sol.population_by_id("population:ring_b")
-	var cloud := SpacesimParticleCloud.of(band)
+	var band: StoichonPopulation = sol.population_by_id("population:ring_b")
+	var cloud := StoichonParticleCloud.of(band)
 	var star_position := scene.star().node.global_position
 	var to_star := (star_position - centre).normalized()
 
@@ -780,7 +780,7 @@ func _test_the_light_side_is_the_side_the_star_is_on(h, root: Node) -> void:
 	for index in range(0, cloud.size(), 53):
 		var world: Vector3 = view.global_transform * cloud.positions[index]
 		var starward := (world - centre).dot(to_star) > 0.0
-		var lit := SpacesimLuminance.shadow_fraction(
+		var lit := StoichonLuminance.shadow_fraction(
 			world, star_position, centre, saturn.radius, scene.star().radius
 		) > 0.5
 		if starward:
@@ -807,7 +807,7 @@ func _test_the_light_side_is_the_side_the_star_is_on(h, root: Node) -> void:
 ## so both are asserted against what the shader used to compute.
 func _test_the_shader_is_told_the_two_vectors_it_multiplies(h, root: Node) -> void:
 	var sol := _sol()
-	var scene := SpacesimSystemScene.from_content(sol)
+	var scene := StoichonSystemScene.from_content(sol)
 	if scene == null or scene.build(root) == null:
 		return
 	var saturn := scene.body_by_id("planet:saturn")
@@ -817,7 +817,7 @@ func _test_the_shader_is_told_the_two_vectors_it_multiplies(h, root: Node) -> vo
 
 	var camera := Camera3D.new()
 	root.add_child(camera)
-	var pixel_angle := SpacesimLod.pixel_angle(70.0, 1080.0)
+	var pixel_angle := StoichonLod.pixel_angle(70.0, 1080.0)
 	camera.global_position = centre + Vector3(1.0, 0.3, 0.2).normalized() * 1.64e8
 	camera.look_at(centre, Vector3.UP)
 	view.update(pixel_angle, 1.0, Color(0.4, 0.4, 0.4), centre, star_position, camera.global_position, camera)

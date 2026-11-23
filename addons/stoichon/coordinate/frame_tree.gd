@@ -1,0 +1,144 @@
+class_name StoichonFrameTree
+extends Node3D
+## Owns the coordinate frames and moves an observer between them as it crosses thresholds.
+##
+## The frame hierarchy is the scene tree, so Godot resolves the transforms and a switch is a
+## reparent that preserves the observer's pose. This node decides *when* a switch happens and which
+## frame is current.
+
+## Emitted after a switch, with the frames involved.
+signal frame_changed(observer: Node3D, from_frame: StoichonFrame, to_frame: StoichonFrame)
+
+## The node whose frame membership is tracked.
+@export var observer: Node3D
+
+## Evaluate on every physics tick. Turn off to drive the tree from elsewhere; `evaluate()` stays
+## safe to call at any time either way.
+@export var automatic: bool = true
+
+## The frame the observer is currently in.
+var active_frame: StoichonFrame
+
+## Frames by id, so a save that names one can find it again. Registered as frames are created — by
+## the world for its own, and later by assets for their interiors.
+var _frames: Dictionary = {}
+
+var _rules: Array[StoichonTransitionRule] = []
+
+
+func register(frame: StoichonFrame) -> void:
+	if not frame.frame_id.is_empty():
+		_frames[frame.frame_id] = frame
+
+
+## The frame with this id, or null. Used when a save names a frame and the loader has to find it.
+func frame_by_id(id: String) -> StoichonFrame:
+	return _frames.get(id)
+
+
+## The frame this id names, or the nearest ancestor of it that exists, so
+## `planet:terra/surface` falls back towards the system frame. **A save that names a frame the world
+## no longer has is placed at the frame that remains, at its origin** — the stored position would
+## mean something else in another frame, so it is not used.
+func resolve_frame(id: String) -> StoichonFrame:
+	var candidate := id
+	while not candidate.is_empty():
+		var frame: StoichonFrame = _frames.get(candidate)
+		if frame != null:
+			return frame
+		var cut := candidate.rfind("/")
+		if cut <= 0:
+			break
+		candidate = candidate.substr(0, cut)
+	return _frames.get(StoichonFrame.SYSTEM_ID)
+
+
+func add_rule(rule: StoichonTransitionRule) -> void:
+	_rules.append(rule)
+
+
+## **Let a frame go.** A frame that exists only while something else does — a body that comes and goes,
+## a rock in a population — owes the tree its rules back, and may be the observer's own coordinate space
+## when it goes.
+##
+## The observer is put back in the system frame, keeping its global transform: that is the same path a
+## save load uses, and it is the only place left to stand. A rule that outlived its frame would hold a
+## reference to a freed node and be asked about a position in it.
+func discard(frame: StoichonFrame) -> void:
+	if frame == null:
+		return
+	if not frame.frame_id.is_empty() and _frames.get(frame.frame_id) == frame:
+		_frames.erase(frame.frame_id)
+	for index in range(_rules.size() - 1, -1, -1):
+		var rule: StoichonTransitionRule = _rules[index]
+		if rule.from_frame == frame or rule.to_frame == frame:
+			_rules.remove_at(index)
+	if active_frame == frame:
+		# **The nearest enclosing frame, found by walking the tree rather than the registry** — a frame
+		# need not be registered (a rock's is not), and the parent of a body's frame is the body's node,
+		# whose own parent is the system frame.
+		var enclosing: Node = frame.get_parent()
+		while enclosing != null and not (enclosing is StoichonFrame):
+			enclosing = enclosing.get_parent()
+		if enclosing != null:
+			enter_frame(enclosing as StoichonFrame)
+
+
+## Put a node into a frame at a position in that frame. Continuity is not wanted here: a save says
+## where something is, so the transform is set from it rather than preserved — which is what
+## [method enter_frame] does for the observer when it crosses a threshold.
+func place_in_frame(subject: Node3D, frame: StoichonFrame, position: Vector3) -> void:
+	if subject == null or frame == null:
+		return
+	if subject.get_parent() != frame:
+		if subject.get_parent() == null:
+			frame.add_child(subject)
+		else:
+			subject.reparent(frame, false)
+	subject.position = position
+	# **A teleport, not motion.** A save says where something is, so without this the interpolator
+	# would render it gliding in from wherever it used to be. Called *after* moving, which is the order
+	# the engine asks for.
+	#
+	# **The interpolated transform is read first, on purpose.** `get_global_transform_interpolated()`
+	# creates the pump that the reset then talks to, and the engine asks for it to have been read at
+	# least once before a reset — otherwise a followed node can streak on first sight. `game/player_ship`
+	# does the same on the same path; this is where a save load goes.
+	subject.get_global_transform_interpolated()
+	subject.reset_physics_interpolation()
+
+
+## Move the observer into `frame` without consulting any rule. Used for the initial placement.
+func enter_frame(frame: StoichonFrame) -> void:
+	var previous := active_frame
+	if observer != null:
+		if observer.get_parent() == null:
+			frame.add_child(observer)
+		elif observer.get_parent() != frame:
+			# keep_global_transform: the observer does not move when its coordinate space changes.
+			observer.reparent(frame, true)
+			# The pose is preserved, but the interpolator holds a *global* transform across the change
+			# of parent, and `Node.reparent` warns that with `physics/common/physics_interpolation` on
+			# a reparent can be rendered as a glide to the new position.
+			observer.reset_physics_interpolation()
+	active_frame = frame
+	if previous != null and previous != frame:
+		frame_changed.emit(observer, previous, frame)
+
+
+## Switch frames if the observer has crossed a threshold. Safe to call every tick.
+func evaluate() -> void:
+	if observer == null or active_frame == null:
+		return
+	var outer_position := observer.global_position
+	for rule in _rules:
+		if rule.from_frame != active_frame:
+			continue
+		if rule.matches(outer_position):
+			enter_frame(rule.to_frame)
+			return
+
+
+func _physics_process(_delta: float) -> void:
+	if automatic:
+		evaluate()

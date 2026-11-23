@@ -22,13 +22,13 @@ func run(h, root: Node) -> void:
 	print("  platform")
 
 	# **The modes are declared settings**, which is what makes the key, the HUD and the screen one value.
-	h.check(SpacesimSettings.REGISTRY.has(MODE_KEY), "render.mode is a declared setting")
-	h.check(SpacesimSettings.REGISTRY.has(TINT_KEY), "render.depth_tint is a declared setting")
+	h.check(StoichonSettings.REGISTRY.has(MODE_KEY), "render.mode is a declared setting")
+	h.check(StoichonSettings.REGISTRY.has(TINT_KEY), "render.depth_tint is a declared setting")
 	h.check(
-		SpacesimSettings.REGISTRY.has("render.ev_compensation"),
+		StoichonSettings.REGISTRY.has("render.ev_compensation"),
 		"and render.ev_compensation, so the EV can be turned off for a geometry judgement"
 	)
-	var choices: Array = SpacesimSettings.REGISTRY[MODE_KEY]["choices"]
+	var choices: Array = StoichonSettings.REGISTRY[MODE_KEY]["choices"]
 	h.check(
 		choices.size() == 3 and choices.has("wireframe") and choices.has("flat") and choices.has("rendered"),
 		"with three modes: %s" % str(choices)
@@ -37,13 +37,13 @@ func run(h, root: Node) -> void:
 	# --- the chunk colours the tint reads ------------------------------------------------------
 	# **A hue per level, and distinct between levels** — the whole point of the tint is that a boundary between two
 	# levels is visible, so two adjacent depths must not come out the same colour.
-	var shallow := SpacesimPatches.depth_tint(2)
-	var deeper := SpacesimPatches.depth_tint(3)
+	var shallow := StoichonPatches.depth_tint(2)
+	var deeper := StoichonPatches.depth_tint(3)
 	h.check(not shallow.is_equal_approx(deeper),
 		"two adjacent levels are different colours (%s against %s)" % [shallow.to_html(false), deeper.to_html(false)])
 
-	var sol: SpacesimSolarSystem = load(SOL_PATH)
-	var scene := SpacesimSystemScene.from_content(sol)
+	var sol: StoichonSolarSystem = load(SOL_PATH)
+	var scene := StoichonSystemScene.from_content(sol)
 	if scene == null or sol == null:
 		h.check(false, "Sol loads for the platform half")
 		return
@@ -55,13 +55,13 @@ func run(h, root: Node) -> void:
 	var camera := Camera3D.new()
 	camera.fov = FOV
 	root.add_child(camera)
-	var pixel := SpacesimLod.pixel_angle(camera.fov, float(camera.get_viewport().size.y))
+	var pixel := StoichonLod.pixel_angle(camera.fov, float(camera.get_viewport().size.y))
 	# A screen radius that puts Earth well inside the mesh tier.
 	var distance := earth.radius / sin(atan(300.0 * pixel))
 	camera.global_position = earth.node.global_position + Vector3(distance, 0.0, 0.0)
 
 	# --- `flat` is the ground's own material ---------------------------------------------------
-	SpacesimSettings.set_value(MODE_KEY, "flat")
+	StoichonSettings.set_value(MODE_KEY, "flat")
 	scene.wireframe = false
 	scene.flat_shaded = true
 	scene.update_lod(camera)
@@ -76,12 +76,12 @@ func run(h, root: Node) -> void:
 		"with chunks and a deepest level for the HUD to show")
 
 	# --- `wireframe` swaps in the unshaded line material ----------------------------------------
-	SpacesimSettings.set_value(MODE_KEY, "wireframe")
+	StoichonSettings.set_value(MODE_KEY, "wireframe")
 	scene.wireframe = true
 	scene.update_lod(camera)
 	scene.await_patch_builds()
 	h.check(earth.mesh.visible, "wireframe still draws the body")
-	h.check(earth.mesh.material_override == SpacesimBodyRenderer.wireframe_material(),
+	h.check(earth.mesh.material_override == StoichonBodyRenderer.wireframe_material(),
 		"as unshaded lines — white everywhere by construction, which the viewport's own wireframe is not")
 
 	# --- and the DECKS are wireframes too, because they are the same mesh --------------------------
@@ -91,16 +91,16 @@ func run(h, root: Node) -> void:
 	# wants only the surfaces turns the decks off and keeps the view. Evert, 2026-11-01: *"if cloud decks are on,
 	# and I switch to wireframe mode, I want to see the decks. I can turn them off separately if I want to see just
 	# the surfaces."*
-	var decks_were := bool(SpacesimSettings.get_value("render.cloud_decks"))
-	SpacesimSettings.set_value("render.cloud_decks", true)
+	var decks_were := bool(StoichonSettings.get_value("render.cloud_decks"))
+	StoichonSettings.set_value("render.cloud_decks", true)
 	scene.update_lod(camera)
 	scene.await_patch_builds()
 	scene.update_lod(camera)
 	h.check(not earth.decks.is_empty(), "Earth has a deck to draw (%d)" % earth.decks.size())
 	if not earth.decks.is_empty():
-		var wire_deck: SpacesimSceneBody.Deck = earth.decks[0]
+		var wire_deck: StoichonSceneBody.Deck = earth.decks[0]
 		h.check(wire_deck.node.visible, "and in the wireframe view the deck is drawn rather than hidden")
-		h.check(wire_deck.node.material_override == SpacesimBodyRenderer.wireframe_material(),
+		h.check(wire_deck.node.material_override == StoichonBodyRenderer.wireframe_material(),
 			"in the same unshaded line material the ground wears")
 		h.check(
 			(wire_deck.node.mesh as ArrayMesh).surface_get_primitive_type(0) == Mesh.PRIMITIVE_LINES,
@@ -108,10 +108,10 @@ func run(h, root: Node) -> void:
 		h.check_near((wire_deck.node.position as Vector3).length(), earth.radius + wire_deck.height,
 			"sitting on its own condensation level (%.0f m)" % wire_deck.height, 1.0)
 		# **And the switch still owns it on its own**, so the view can be the surfaces alone.
-		SpacesimSettings.set_value("render.cloud_decks", false)
+		StoichonSettings.set_value("render.cloud_decks", false)
 		scene.update_lod(camera)
 		h.check(not wire_deck.node.visible, "while `render.cloud_decks` off hides it and leaves the ground's lines")
-	SpacesimSettings.set_value("render.cloud_decks", decks_were)
+	StoichonSettings.set_value("render.cloud_decks", decks_were)
 
 	# --- the three things a wireframe draws, each switchable on its own ---------------------------
 	# **The SUBDIVISION, the SURFACE and the DECKS are three consumers of one tessellation**: the datum lattice at
@@ -132,26 +132,26 @@ func run(h, root: Node) -> void:
 		(division.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array)
 			== (earth.mesh.mesh.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array),
 		"with the same vertices as the surface's wireframe while nothing is translated")
-	SpacesimSettings.set_value("render.wireframe_sphere", false)
+	StoichonSettings.set_value("render.wireframe_sphere", false)
 	scene.update_lod(camera)
 	h.check(not division.visible, "and its own switch hides it")
-	SpacesimSettings.set_value("render.wireframe_sphere", true)
-	SpacesimSettings.set_value("render.wireframe_surface", false)
+	StoichonSettings.set_value("render.wireframe_sphere", true)
+	StoichonSettings.set_value("render.wireframe_surface", false)
 	scene.update_lod(camera)
 	h.check(division.visible and not earth.mesh.visible,
 		"so the subdivision can be seen without the surface over it")
-	SpacesimSettings.set_value("render.wireframe_surface", true)
+	StoichonSettings.set_value("render.wireframe_surface", true)
 	scene.update_lod(camera)
 	h.check(division.visible and earth.mesh.visible, "and both back together")
 	# **The sphere is a wireframe's subject only.** In `flat` it would be a ball drawn over the ground.
-	SpacesimSettings.set_value(MODE_KEY, "flat")
+	StoichonSettings.set_value(MODE_KEY, "flat")
 	scene.wireframe = false
 	scene.flat_shaded = true
 	scene.update_lod(camera)
 	h.check(not division.visible, "and it is not drawn outside a wireframe")
 
 	# --- `rendered` is the real surface, on the same mesh and the same material ------------------
-	SpacesimSettings.set_value(MODE_KEY, "rendered")
+	StoichonSettings.set_value(MODE_KEY, "rendered")
 	scene.wireframe = false
 	scene.flat_shaded = false
 	scene.update_lod(camera)
@@ -164,24 +164,24 @@ func run(h, root: Node) -> void:
 		"with `flat` off, so the fragment reads the map rather than the albedo", 1.0e-6)
 
 	# --- the tint is published only when the setting moves --------------------------------------
-	SpacesimSettings.set_value(MODE_KEY, "flat")
+	StoichonSettings.set_value(MODE_KEY, "flat")
 	scene.flat_shaded = true
-	SpacesimSettings.set_value(TINT_KEY, false)
+	StoichonSettings.set_value(TINT_KEY, false)
 	scene.update_lod(camera)
 	scene.await_patch_builds()
 	var material := earth.mesh_material as ShaderMaterial
 	h.check_near(float(material.get_shader_parameter("tint_amount")), 0.0,
 		"with the tint off, the multiplier is zero and the picture is the surface's own", 1.0e-6)
-	SpacesimSettings.set_value(TINT_KEY, true)
+	StoichonSettings.set_value(TINT_KEY, true)
 	scene.update_lod(camera)
 	h.check_near(float(material.get_shader_parameter("tint_amount")), 1.0,
 		"and with it on, the vertex colours carry the tree", 1.0e-6)
 
 	# Leave the settings as they were found: this suite now owns its file (`tests/run.sh` sets a scratch
 	# `XDG_CONFIG_HOME`), but a rig run outside it must not inherit a debug mode.
-	SpacesimSettings.set_value(TINT_KEY, false)
-	SpacesimSettings.set_value(MODE_KEY, "flat")
-	# **Free the scene HERE, as every other suite does.** `SpacesimSystemScene.new()` wires `tree_exiting` to
+	StoichonSettings.set_value(TINT_KEY, false)
+	StoichonSettings.set_value(MODE_KEY, "flat")
+	# **Free the scene HERE, as every other suite does.** `StoichonSystemScene.new()` wires `tree_exiting` to
 	# `await_patch_builds` and `close()`, and that is the only supported teardown: it joins the pool task the tint above
 	# just requested, and frees the bake device. **This suite did not free its container**, so the scene was torn down
 	# by `get_tree().quit()` with a `WorkerThreadPool` task still running — the task outlives the tree, and the engine

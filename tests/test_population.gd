@@ -25,6 +25,10 @@ func run(h, root: Node) -> void:
 	_test_a_fragment_is_an_irregular_body(h)
 	_test_the_belt_reaches_the_marker_pool(h, root)
 	_test_a_fragment_becomes_a_body(h, root)
+	_test_the_rocks_are_the_population(h)
+	_test_two_builds_give_the_same_rocks(h)
+	_test_the_index_answers_like_a_linear_scan(h)
+	_test_far_outside_the_band_there_is_nothing(h)
 
 
 func _belt() -> StoichonPopulation:
@@ -437,6 +441,142 @@ func _test_a_fragment_becomes_a_body(h, root: Node) -> void:
 	bodies.free()
 	root.remove_child(camera)
 	camera.free()
+
+
+## **The rocks are the population**, built once, and every one of them is where the band says it can be.
+##
+## Sol's belt is 1.1 million at or above 1 km, which is the count the floor buys — so this is also the check
+## that the floor and the count are one number and not two.
+func _test_the_rocks_are_the_population(h) -> void:
+	var belt := _belt()
+	belt.size_floor = belt.reference_size
+	var started := Time.get_ticks_usec()
+	var rocks := StoichonPopulationRocks.of(belt)
+	var build_ms := float(Time.get_ticks_usec() - started) / 1000.0
+
+	h.check(rocks.count() == belt.count,
+		"one rock per object at or above the floor (%d rocks, built in %.0f ms)" % [rocks.count(), build_ms])
+	h.check(build_ms < 20000.0, "and building a million of them is not a stall (%.0f ms)" % build_ms)
+
+	# Every rock at or above the floor, and every one inside the band — sampled, because the whole set is a
+	# million trigonometric tests.
+	var step := maxi(1, rocks.count() / 500)
+	var outside := 0
+	var sampled := 0
+	var smallest := INF
+	var largest := 0.0
+	for rock in range(0, rocks.count(), step):
+		sampled += 1
+		if not StoichonPopulationField.in_band(belt, rocks.position_of(rock)):
+			outside += 1
+		smallest = minf(smallest, rocks.diameter_of(rock))
+		largest = maxf(largest, rocks.diameter_of(rock))
+	h.check(outside == 0, "every rock is inside the band's own test (%d of %d outside)" % [outside, sampled])
+	h.check(smallest >= belt.reference_size, "none is smaller than the floor (%.0f m)" % smallest)
+	h.check(largest <= belt.size_ceiling, "and none is over the ceiling (%.0f m)" % largest)
+
+	# N(>D) ~ D^-2.5 anchored at 1 km: the median is 1.32 km, so most of the belt is barely over the floor.
+	var median := rocks.diameter_of(rocks.count() / 2)
+	h.check(median > 1000.0 and median < 3000.0, "most rocks are a kilometre or so across (median %.0f m)" % median)
+	h.check(rocks.designation_of(0) == "A-000001", "and the first is named from its index")
+
+	# The mean spacing at this floor is 4.9 million km, so the nearest rock to a point in the middle of the
+	# belt is millions of kilometres away — not on top of the ship.
+	var middle := Vector3(2.7 * AU, 0.0, 0.0)
+	var nearest := rocks.nearest(middle)
+	h.check(nearest >= 0, "a point in the belt has a nearest rock")
+	if nearest >= 0:
+		var away := middle.distance_to(rocks.position_of(nearest))
+		h.check(away > 1.0e9 and away < 2.0e10,
+			"millions of km away, as the density says (%.1f M km)" % (away / 1.0e9))
+
+
+## **A rock is the same rock the next time the system loads.** The whole point of the change: coming back
+## to a place gives the same rocks, where the old field invented a new set every time.
+func _test_two_builds_give_the_same_rocks(h) -> void:
+	var first := StoichonPopulationRocks.of(_small_band())
+	var second := StoichonPopulationRocks.of(_small_band())
+	h.check(first.count() == second.count(), "two builds hold the same number of rocks")
+	var identical := true
+	for rock in first.count():
+		identical = identical and first.position_of(rock) == second.position_of(rock)
+	h.check(identical, "at identical positions, to the last bit")
+
+	# And a different seed is a different belt, or the seed is not doing anything.
+	var other := _small_band()
+	other.seed_value = 109
+	var third := StoichonPopulationRocks.of(other)
+	h.check(third.position_of(0) != first.position_of(0), "and another seed places different rocks")
+
+
+## **The grid against a linear scan over every rock.** The index is the one piece of this that could be
+## wrong without looking wrong — a missed cell is a nearest rock that is not the nearest — so it is checked
+## against the answer that cannot be wrong, on a band small enough to scan outright.
+func _test_the_index_answers_like_a_linear_scan(h) -> void:
+	var band := _small_band()
+	var rocks := StoichonPopulationRocks.of(band)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var mismatches := 0
+	var single := 0
+	for _query in 40:
+		var local := _random_in_band(rng, band)
+		var wanted := _linear_nearest(rocks, local, 5)
+		var found := rocks.nearest_n(local, 5)
+		if found.size() != wanted.size():
+			mismatches += 1
+			continue
+		for at in found.size():
+			# Distances, not indices: two rocks can be equally near and then either order is right.
+			var a := local.distance_squared_to(rocks.position_of(found[at]))
+			var b := local.distance_squared_to(rocks.position_of(wanted[at]))
+			if not is_equal_approx(a, b):
+				mismatches += 1
+		var one: int = rocks.nearest(local)
+		if found.is_empty() or one != found[0]:
+			single += 1
+	h.check(mismatches == 0, "the grid finds the same five rocks a linear scan does (%d wrong)" % mismatches)
+	h.check(single == 0, "and nearest is nearest_n of one (%d wrong)" % single)
+
+
+## **Outside the band there is nothing, and the query says so cheaply.** One AU from the Sun is Earth; a
+## walk that refuses to stop would pay for the whole grid every tick.
+func _test_far_outside_the_band_there_is_nothing(h) -> void:
+	var rocks := StoichonPopulationRocks.of(_small_band())
+	var started := Time.get_ticks_usec()
+	var found := rocks.nearest(Vector3(AU, 0.0, 0.0), 1.0e9)
+	var elapsed := float(Time.get_ticks_usec() - started)
+	h.check(found == -1, "no rock within a reach that does not cover the belt")
+	h.check(elapsed < 50000.0, "and the query gives up rather than walking the grid (%.2f ms)" % (elapsed / 1000.0))
+
+
+## A thousand rocks in Sol's band — the real geometry, few enough to scan outright.
+func _small_band() -> StoichonPopulation:
+	var population := _belt()
+	population.count = 1000
+	population.size_floor = population.reference_size
+	return population
+
+
+func _random_in_band(rng: RandomNumberGenerator, band: StoichonPopulation) -> Vector3:
+	var radius := rng.randf_range(band.semi_major_axis.x, band.semi_major_axis.y)
+	var azimuth := rng.randf() * TAU
+	var half := sin(deg_to_rad(band.inclination.y))
+	var height := rng.randf_range(-half * radius, half * radius)
+	var across := sqrt(maxf(0.0, radius * radius - height * height))
+	return Vector3(across * cos(azimuth), across * sin(azimuth), height)
+
+
+## The answer that cannot be wrong, written independently of the grid: sort every rock by its distance.
+func _linear_nearest(rocks: StoichonPopulationRocks, local: Vector3, n: int) -> Array[int]:
+	var pairs: Array = []
+	for rock in rocks.count():
+		pairs.append(Vector2(local.distance_squared_to(rocks.position_of(rock)), float(rock)))
+	pairs.sort_custom(func(a: Vector2, b: Vector2) -> bool: return a.x < b.x)
+	var out: Array[int] = []
+	for at in mini(n, pairs.size()):
+		out.append(int(pairs[at].y))
+	return out
 
 
 ## The camera's pixel angle, as `update_lod` computes it — the tests hand their own camera in, so they need the

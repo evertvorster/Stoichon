@@ -314,6 +314,47 @@ vectors — where it is and the direction of travel), `phase`, `rate` (radians/s
 fragments per cubic metre — a mean spacing of **105,000 km** — and the field draws two dozen of them inside
 **188,000 km**.
 
+### `StoichonPopulationRocks` — `RefCounted`
+
+**The rocks a population has — built once, at fixed positions, and never changed again.** This replaces
+the flow of invented fragments as the belt's source. Evert, 2026-11-23: *"maybe we can select a floor size
+so we end up with around 300,000 to 1,000,000 objects. We can then just instantiate them, and track the
+closest one to the player ... The mechanism of spawning in stuff seems broken."*
+
+**The count is the floor.** `N(>D)` falls as `D^-size_index`, so a floor of 1 km gives Sol 1.1 million rocks
+4.9 million km apart, and 3 km gives 70 thousand 12 million km apart. There is no second, invented
+population below the floor: a rock that is nearest is nearest until the ship flies past it, and coming back
+to a place gives the same rocks.
+
+**Positions are in the parent body's frame**, exactly as `StoichonPopulationField`'s were, so a caller adds
+the parent's position. Nothing moves (S8) — the orbit a rock will take is not stored, because nothing reads
+it.
+
+| Member | |
+|---|---|
+| `static of(population) -> StoichonPopulationRocks` | build the set: `population.count` rocks, uniform by volume in the band, diameters from the power law, ids from the index |
+| `count() -> int` | how many |
+| `position_of(rock) -> Vector3` | parent-frame position |
+| `diameter_of(rock) -> float` | metres |
+| `designation_of(rock) -> String` | `A-000001` — from the index, so the same build gives the same rock the same name, and `StoichonFragmentBodies` seeds its shape from it |
+| `nearest(local, reach = INF) -> int` | the nearest rock, or `-1` when there is none within `reach` |
+| `nearest_n(local, n, reach = INF) -> Array[int]` | the nearest `n`, nearest first — the travel unit reads the first and the HUD the rest |
+| `pieces(parent_position, which) -> Array[Dictionary]` | the chosen rocks as `{id, position, diameter}` — the shape `StoichonFragmentBodies` takes |
+| `const NOMINAL_PER_CELL` | 12 — the cell edge is derived from the density so a cell holds this many |
+
+**The query is a voxel grid, not `StoichonParticleCloud`'s radius/bearing walk.** A ring is a flat sheet
+with a bearing structure; a belt is a thick shell, and a third dimension would make that two orderings into
+three. **Both stops are exact**: every rock in a cell at Chebyshev distance `k` from the query's own cell is
+at least `(k − 1)` cells away, so a shell whose lower bound is already worse than the worst rock kept cannot
+improve the answer. `reach` bounds the answer as well as the walk, so a caller outside the belt does not pay
+for a scan of the whole grid.
+
+**The band's vertical axis is `z`** — `in_band` and `volume_of` both say so. A builder that puts the height
+in `y` produces rocks outside the band's own test, which is how that was found.
+
+`Best` is an inner class: the `n` best kept in order, and the shape that lets the shell walk write into one
+accumulator (GDScript has no out-parameters, and a lambda captures by value).
+
 ### `StoichonFragmentBodies` — `Node3D`
 
 **The rocks you can see, as bodies.** One `StoichonSceneBody` per live fragment, built by

@@ -102,11 +102,18 @@ var _broken := false
 ## Whether the body meshes are being drawn as wireframes — see [method set_wireframe].
 var _wireframe := false
 
-## **One field per population, each with the body it orbits.** A population is not a body, so it has no
-## node, no frame and no geometry — it has a density, and the field makes fragments out of it around
-## the ship. The parent is what the fragments orbit, so the two arrays are parallel.
-var _fields: Array[StoichonPopulationField] = []
-var _field_parents: Array[StoichonSceneBody] = []
+## **One per belt population: the nearest rock, as a place, with no body behind it.** `S3` — a rock is significant
+## from the moment it exists, so the speed falls as the ship enters the belt before anything resolves. Nothing is
+## created or destroyed: this object lives for the session and its position is updated. A population with no
+## rock within reach is placed at infinity, which the travel scale already reads as the band's maximum.
+##
+## The rock sets themselves live on the scene, beside the rings' clouds — a population's geometry is the
+## scene's business, and only the travel unit and the ship are this file's.
+var _rock_spots: Array[StoichonScaleBody] = []
+
+## **The nearest few rocks of each population, chosen this tick.** What the bodies are made from, so the search
+## is done once a tick and not again per consumer.
+var _rock_near: Array = []
 
 ## **The rocks you can see**: one [StoichonFragmentBodies] per belt population, each holding a real
 ## [StoichonSceneBody] per live fragment. The rings' managers live on the scene, because a ring is built whole
@@ -136,7 +143,7 @@ func _ready() -> void:
 	_system.build(self)
 	_ship = PlayerShip.create()
 	PlayerShip.place(_system, _ship)
-	_build_fields()
+	_build_belt_spots()
 	_markers = StoichonMarkers.new()
 	_markers.name = "Markers"
 	# The HUD is built after this, and the marker overlay needs its rectangles to place labels clear
@@ -497,15 +504,25 @@ func _apply_settings() -> void:
 		StoichonSettings.get_value("exposure.adaptation_rate")
 	)
 	_atmosphere_pass.fog_gain = float(StoichonSettings.get_value("fog.gain"))
-	_markers.rebuild_pool(int(StoichonSettings.get_value("markers.pool_size")))
 	_markers.font_size = int(StoichonSettings.get_value("markers.font_size"))
 	_markers.margin = float(StoichonSettings.get_value("markers.margin"))
 	_markers.selected_color = StoichonSettings.get_value("markers.selected_color")
+	# **One queue per kind of marker**, each with its own budget: a swarm of rocks cannot spend a moon's slot and
+	# forty places cannot starve the belt. See `StoichonMarkers.choose`.
+	_markers.budgets = {
+		StoichonMarkers.Priority.PRIMARY: int(StoichonSettings.get_value("markers.place_count")),
+		StoichonMarkers.Priority.CONTEXT: int(StoichonSettings.get_value("markers.moon_count")),
+		StoichonMarkers.Priority.ASTEROID: int(StoichonSettings.get_value("markers.rock_count")),
+	}
+	var pool := 4
+	for rank in _markers.budgets:
+		pool += int(_markers.budgets[rank])
+	_markers.rebuild_pool(pool)
 
 
 func _on_setting_changed(key: String, _value: Variant) -> void:
 	match key:
-		"camera.fov", "markers.pool_size", "markers.font_size", "markers.margin", "markers.selected_color", "exposure.range_stops", "exposure.adaptation_rate", "fog.gain":
+		"camera.fov", "markers.place_count", "markers.moon_count", "markers.rock_count", "markers.font_size", "markers.margin", "markers.selected_color", "exposure.range_stops", "exposure.adaptation_rate", "fog.gain":
 			_apply_settings()
 		# The HUD's switches are visibility, so they are read by the readout's own refresh — which is
 		# once every `HUD_INTERVAL`, and would otherwise leave a toggle looking broken for a moment.
@@ -576,7 +593,7 @@ func _physics_process(delta: float) -> void:
 
 	# **Before the step**, so the ship is slowed by the fragments that are there now rather than by the
 	# ones that were there last tick.
-	_update_fields(delta)
+	_update_rock_sets()
 	_ship.step(delta, input)
 	# **Both clocks, one second at a time** — Evert, 2026-11-08. The world's runs faster only when
 	# relativistic travel lands, and `StoichonSession.advance` is the one place either of them moves.
@@ -597,6 +614,16 @@ func _physics_process(delta: float) -> void:
 ## orbital frame, so this is a budget for geometry — and it is also the budget for NAMES now that a rock is only
 ## named once it is one of these. Four is what a band puts on screen as resolvable shapes at once.
 const BODIES_PER_RING := 4
+
+## **How many rocks of one belt may be bodies at once.** The same budget as a band's, at a larger number because
+## a belt's rocks are spread across millions of kilometres rather than a sheet: this is how many of the nearest
+## are built as shapes, and the nearest of them is what the HUD names.
+const BODIES_PER_BELT := 24
+
+## **How far a belt's rocks are looked for.** The unit is `nearest / 10 s`, so a rock this far away already puts
+## it at the system frame's own ceiling — beyond here a rock cannot change anything, and the stop keeps a query
+## from walking the whole grid when the ship is nowhere near the band.
+const ROCK_REACH := 1.0e11
 
 const HUD_INTERVAL := 0.1
 
@@ -798,31 +825,19 @@ func _place_observer_from_session() -> void:
 
 ## The ambient group is the frame's business: other bodies matter while you are out in space, and
 ## stop mattering once you are busy landing on one of them.
-## **A population is not a body**: it has no node, no frame and no geometry. It has a density, and a
-## field makes fragments out of that density around the ship — one field per population, each paired
-## with the body its fragments orbit, because that orbit is what gives them their motion.
-func _build_fields() -> void:
-	for population in _system.content.populations:
-		# **A sheet is generated whole, so it is not a density.** A ring has every particle at build and its own
-		# manager for the spots that resolve; a field here would make up a second set of rocks inside it,
-		# and today only a zero `inclination` hides that — `volume_of` comes out 0 and the field stays
-		# empty. The one flag that says which mechanism owns a population is `particle_count`.
-		if population.particle_count > 0:
-			continue
-		var parent_id := population.parent_id
-		if parent_id.is_empty():
-			var star := _system.content.star()
-			parent_id = star.id if star != null else ""
-		var parent := _system.body_by_id(parent_id)
-		if parent == null:
-			push_warning("%s orbits '%s', which is not in the system" % [population.id, parent_id])
-			continue
-		_fields.append(StoichonPopulationField.new(population))
-		_field_parents.append(parent)
-		var bodies := StoichonFragmentBodies.new(population, _system)
-		bodies.name = "Fragments_%s" % population.id.replace(":", "_")
-		add_child(bodies)
-		_fragment_bodies.append(bodies)
+## **A population is not a body**: it has no node, no frame and no geometry. The scene places its rocks once
+## and draws them; what this file keeps is one place per population, for the travel unit and the readout.
+func _build_belt_spots() -> void:
+	for index in _system.belts.size():
+		var spot := StoichonScaleBody.new(null, 0.0)
+		spot.solid = false
+		_rock_spots.append(spot)
+		_rock_near.append([])
+		var population := _system.belt_populations[index]
+		var manager := StoichonFragmentBodies.new(population, _system)
+		manager.name = "Fragments_%s" % population.id.replace(":", "_")
+		add_child(manager)
+		_fragment_bodies.append(manager)
 	# One place per band, kept alive for the session: the travel unit's reference near a ring.
 	for _ring in _system.rings:
 		var spot := StoichonScaleBody.new(null, 0.0)
@@ -835,17 +850,27 @@ func _build_fields() -> void:
 	_ship.bodies = _scale_bodies
 
 
-## Advance every population. **In the physics tick**, because a fragment is what sets the local travel
-## unit — where it is belongs to the same clock as the ship it is slowing down.
-func _update_fields(delta: float) -> void:
+## Advance every population. **In the physics tick**, because a rock is what sets the local travel unit —
+## where it is belongs to the same clock as the ship it is slowing down.
+func _update_rock_sets() -> void:
 	var eye := _ship.global_position
-	for index in _fields.size():
-		var parent := _field_parents[index]
-		if parent.node == null:
+	for index in _system.belts.size():
+		var parent := _system.belt_parents[index]
+		if parent == null or parent.node == null:
 			continue
-		_fields[index].update(
-			parent.node.global_position, StoichonKepler.mu_of(parent.content.mass), eye, delta
-		)
+		var here := parent.node.global_position
+		var near: Array[int] = _system.belts[index].nearest_n(eye - here, BODIES_PER_BELT, ROCK_REACH)
+		_rock_near[index] = near
+		var spot := _rock_spots[index]
+		if near.is_empty():
+			spot.position = Vector3(INF, INF, INF)
+			spot.radius = 0.0
+			spot.name = ""
+		else:
+			var nearest := near[0]
+			spot.position = here + _system.belts[index].position_of(nearest)
+			spot.radius = _system.belts[index].diameter_of(nearest) * 0.5
+			spot.name = _system.belts[index].designation_of(nearest)
 	_sync_rocks()
 
 
@@ -868,6 +893,9 @@ func _sync_rocks() -> void:
 	# **And each band's nearest spot**, a place without a body: `S3`, the speed falls as the ship closes on a band,
 	# before anything resolves. It has no marker of its own, so it is not in `rocks()`.
 	for spot in _ring_spots:
+		wanted.append(spot)
+	# **And each belt's nearest rock, the same way** — a rock is a place before it is a shape.
+	for spot in _rock_spots:
 		wanted.append(spot)
 	_scale_bodies = wanted
 	_ship.bodies = _scale_bodies
@@ -900,11 +928,12 @@ func _update_rocks(eye: Vector3, pixel: float) -> void:
 		return
 	var rings_marked: Array[Dictionary] = []
 	for index in _fragment_bodies.size():
-		var parent := _field_parents[index]
+		var parent := _system.belt_parents[index]
 		if parent == null or parent.node == null:
 			continue
 		_fragment_bodies[index].update(
-			_fields[index].pieces(parent.node.global_position), eye, _camera, pixel, _system.wireframe
+			_system.belts[index].pieces(parent.node.global_position, _rock_near[index]),
+			eye, _camera, pixel, _system.wireframe
 		)
 	# **What else is near**, so a ring can tell whether it is what the ship is flying through. The system's own
 	# bodies only: a rock's nearest spot is what is being compared, not another rock.
@@ -949,28 +978,41 @@ func _update_markers(camera: Camera3D) -> void:
 	if in_space:
 		context = _system.significant_nodes()
 	# **Rocks are places' equals on the HUD and are ranked as asteroids within it** — one list, from the one
-	# registry, so a ring's spot and a belt's fragment travel the same path as a moon and differ only in rank.
-	# **A rock earns a label only once it is being drawn as a body.** A splat is a smear of light; a shape is a
-	# thing you can see, and naming it is the point at which its name tells you something. Evert, 2026-11-21:
-	# *"Maybe we just don't label them at all unless we are starting to resolve them with actual bodies?"*
+	# registry, so a ring's spot and a belt's rock travel the same path as a moon and differ only in rank.
 	#
-	# **The test is the rock's own apparent size**, not its membership of a list. `ids()` was the wrong question:
-	# a band's NEAREST spot is always a body — `pieces()` keeps it by distance so the travel unit has something to
-	# close on (`S3`) — so every band was handing the HUD one name at any range, which is exactly the three
-	# "Saturn Rock" labels in the report at 138 Mm.
+	# **A belt's rock is labelled by distance, a band's only once it resolves.**
+	#
+	# The belt draws nothing at all — it is invisible except for its markers — so a name is the only way to find one,
+	# and the rock you are about to arrive at is worth naming first. This replaces the rule that any rock had to be
+	# resolving into a shape before it was named (2026-11-21).
+	#
+	# **A band is different: it is drawn.** From a distance you see a ring, and a rock in it that is a fraction of a
+	# pixel has nothing to point at — so the band's rocks are named only as they resolve. Evert, 2026-11-23:
+	# *"Saturn's rocks show on the HUD when I'm near Earth as well. I think once the rings are not resolveable, we don't
+	# need to see the rocks on the HUD either."*
+	#
+	# The budgets are what keep either from being a swarm: `markers.rock_count` rocks at most, the nearest of them,
+	# and `choose` guarantees the nearest object of ANY kind is marked whatever its queue is set to.
 	var pixel_angle := _pixel_angle()
 	var rock_nodes := {}
-	for body in rocks():
-		if body.node == null:
-			continue
-		var distance := camera.global_position.distance_to(body.node.global_position)
-		var screen := StoichonLod.screen_radius_pixels(
-			StoichonLod.angular_radius(body.radius, distance), pixel_angle
-		)
-		if screen < StoichonIrregularBody.RESOLVE_PIXELS:
-			continue
-		context.append(body.node)
-		rock_nodes[body.node] = true
+	for manager in _fragment_bodies:
+		for body in manager.rocks():
+			if body.node == null:
+				continue
+			context.append(body.node)
+			rock_nodes[body.node] = true
+	for manager in _system.ring_bodies:
+		for body in manager.rocks():
+			if body.node == null:
+				continue
+			var distance := camera.global_position.distance_to(body.node.global_position)
+			var screen := StoichonLod.screen_radius_pixels(
+				StoichonLod.angular_radius(body.radius, distance), pixel_angle
+			)
+			if screen < StoichonIrregularBody.RESOLVE_PIXELS:
+				continue
+			context.append(body.node)
+			rock_nodes[body.node] = true
 	_markers.rocks = rock_nodes
 	_markers.context_targets = context
 	_markers.targets = _ring_marked

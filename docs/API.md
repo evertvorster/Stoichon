@@ -314,6 +314,47 @@ vectors — where it is and the direction of travel), `phase`, `rate` (radians/s
 fragments per cubic metre — a mean spacing of **105,000 km** — and the field draws two dozen of them inside
 **188,000 km**.
 
+### `StoichonPopulationRocks` — `RefCounted`
+
+**The rocks a population has — built once, at fixed positions, and never changed again.** This replaces
+the flow of invented fragments as the belt's source. Evert, 2026-11-23: *"maybe we can select a floor size
+so we end up with around 300,000 to 1,000,000 objects. We can then just instantiate them, and track the
+closest one to the player ... The mechanism of spawning in stuff seems broken."*
+
+**The count is the floor.** `N(>D)` falls as `D^-size_index`, so a floor of 1 km gives Sol 1.1 million rocks
+4.9 million km apart, and 3 km gives 70 thousand 12 million km apart. There is no second, invented
+population below the floor: a rock that is nearest is nearest until the ship flies past it, and coming back
+to a place gives the same rocks.
+
+**Positions are in the parent body's frame**, exactly as `StoichonPopulationField`'s were, so a caller adds
+the parent's position. Nothing moves (S8) — the orbit a rock will take is not stored, because nothing reads
+it.
+
+| Member | |
+|---|---|
+| `static of(population) -> StoichonPopulationRocks` | build the set: `population.count` rocks, uniform by volume in the band, diameters from the power law, ids from the index |
+| `count() -> int` | how many |
+| `position_of(rock) -> Vector3` | parent-frame position |
+| `diameter_of(rock) -> float` | metres |
+| `designation_of(rock) -> String` | `A-000001` — from the index, so the same build gives the same rock the same name, and `StoichonFragmentBodies` seeds its shape from it |
+| `nearest(local, reach = INF) -> int` | the nearest rock, or `-1` when there is none within `reach` |
+| `nearest_n(local, n, reach = INF) -> Array[int]` | the nearest `n`, nearest first — the travel unit reads the first and the HUD the rest |
+| `pieces(parent_position, which) -> Array[Dictionary]` | the chosen rocks as `{id, position, diameter}` — the shape `StoichonFragmentBodies` takes |
+| `const NOMINAL_PER_CELL` | 12 — the cell edge is derived from the density so a cell holds this many |
+
+**The query is a voxel grid, not `StoichonParticleCloud`'s radius/bearing walk.** A ring is a flat sheet
+with a bearing structure; a belt is a thick shell, and a third dimension would make that two orderings into
+three. **Both stops are exact**: every rock in a cell at Chebyshev distance `k` from the query's own cell is
+at least `(k − 1)` cells away, so a shell whose lower bound is already worse than the worst rock kept cannot
+improve the answer. `reach` bounds the answer as well as the walk, so a caller outside the belt does not pay
+for a scan of the whole grid.
+
+**The band's vertical axis is `z`** — `in_band` and `volume_of` both say so. A builder that puts the height
+in `y` produces rocks outside the band's own test, which is how that was found.
+
+`Best` is an inner class: the `n` best kept in order, and the shape that lets the shell walk write into one
+accumulator (GDScript has no out-parameters, and a lambda captures by value).
+
 ### `StoichonFragmentBodies` — `Node3D`
 
 **The rocks you can see, as bodies.** One `StoichonSceneBody` per live fragment, built by
@@ -381,10 +422,13 @@ thickness is 10⁻⁸ of a pixel at every distance a ring is visible from.
 
 ### `StoichonRingView` — `Node3D`
 
-**A band, drawn**: one `MultiMesh` of point quads written once, and **two draw nodes holding it** — the half
-in front of the planet and the half behind, cut on the plane through the planet's centre at right angles to
-the eye. A planet's air is transparent with the depth test off, so one draw cannot be both in front of it
-and behind it; both draws hold every particle and each collapses the other side in its vertex stage.
+**A band, drawn**: one `MultiMesh` of point quads written once, held by **one draw node**. The band used to be
+cut in two on the plane through the planet's centre at right angles to the eye — the half in front of the
+planet and the half behind — because a planet's air is transparent with the depth test off, so one draw
+cannot be both in front of it and behind it. **That is retired**: the planet's own body hides the far half by
+depth, so the cut bought only the haze over the far limb, and it cost every ordering fault this feature had —
+ending with a classification that hid the whole front half at some camera positions. One draw, at
+`RING_PRIORITY`, after everything the planet wears.
 
 | Member | |
 |---|---|
@@ -395,7 +439,7 @@ and behind it; both draws hold every particle and each collapses the other side 
 | `bake_shadow(star_position, caster_position, caster_radius, star_radius) -> float` | **once**: the planet's shadow per particle, with `StoichonLuminance.shadow_fraction`. Returns the shaded fraction, so a caller can say what happened |
 | `spot_id(index)`, `static index_of(id)` | **one identity per spot**: `population:ring_b#12345` is the particle index, the body key and the shape seed at once |
 | `light()`, `shader_parameter(name)`, `shaded_fraction` | what the shader is told, for the tests |
-| `const FAR_PRIORITY` / `NEAR_PRIORITY` | −100 / +100 — outside the planet's whole transparent stack, see Render layers |
+| `const RING_PRIORITY` | **100** — one draw, after every layer the planet wears. The dust sheet sits at `RING_PRIORITY - 1` (99). There is no far/near pair any more |
 
 **The shader blends, it does not add.** `blend_mix` is `R33`: an additive draw cannot show a dark thing, so a
 particle in the planet's shadow would add nothing and stop existing. Each particle carries a share of
@@ -764,16 +808,18 @@ planet's node, so their distances are equal to the metre. Equal priority therefo
 
 | Draw | Priority |
 |---|---|
-| a ring's far half | **−100** (`StoichonRingView.FAR_PRIORITY`) |
-| a body's interior surface | **−90** (`StoichonBodyRenderer.INTERIOR_RENDER_PRIORITY`) |
 | the sea | **−8** (`OCEAN_RENDER_PRIORITY`) |
-| cloud decks, one per condensed species | **−index**, so 0 and down |
-| a body's air shell | **+8** (`AIR_RENDER_PRIORITY`) |
-| a ring's near half | **+100** (`StoichonRingView.NEAR_PRIORITY`) |
+| a body's interior surface | **0** (`INTERIOR_RENDER_PRIORITY`) |
+| a body's air shell | **0** (`AIR_RENDER_PRIORITY`) |
+| cloud decks, one per condensed species | **`DECK_PRIORITY_BASE − layer`**, so 0 and down |
+| a ring's dust sheet | **99** (`RING_PRIORITY - 1`) |
+| a ring's rocks, and a belt's | **100** (`StoichonRingView.RING_PRIORITY`) |
 
-The engine's whole range is **−128 … +128**; outside it a priority is *refused* and the material keeps 0,
-which is exactly the tie this table exists to prevent (measured 2026-11-03). `tests/test_rings.gd` asserts
-the table is strictly increasing and inside the range, so a tie cannot come back.
+**The air and a cloud deck can both be 0, and that tie is left standing** — Evert's instruction: the air and
+the first deck are not to be shuffled here. What the tests assert is the part the ring depends on: every
+priority is inside **−128 … +128** (a value outside it is *refused* and the material keeps 0, measured
+2026-11-03), and `RING_PRIORITY` is above every layer a planet wears. `tests/test_rings.gd` is that check; it
+deliberately does not assert the order among the planet's own layers.
 
 **The air at 0 and the first cloud deck at 0 is what that cost.** Evert, 2026-11-15: *"I still see ordering
 effects, but not always... there is more than just the atmosphere, there are cloud decks and the internal
@@ -963,7 +1009,7 @@ screen-space budget in one place.
 | Member | |
 |---|---|
 | `Priority` | `CONTEXT`, `ASTEROID`, `PRIMARY`, `MISSION`, `SELECTED` — **a candidate is `{id, position, text, priority, parent, ring}`, not a `Node3D`**, so a thing with no node (a fragment) is as drawable as a planet. **`ASTEROID` is above `CONTEXT`**: a rock you are flying among outranks a moon on the far side of the system, and nothing outranks a place. At the bottom it was unreachable — Sol has 40 significant bodies, so a 24-slot pool was full before a fragment was considered, and the first flight showed a slowed ship and no asteroid markers |
-| `pool_size: int` | the cap, and the screen-space budget |
+| `budgets: Dictionary` | **one budget per kind of marker**: a `Priority` to a count. A rank with no entry is unlimited; `MISSION` and `SELECTED` are never truncated. **The nearest object of any kind is always marked**, whatever its queue is set to |
 | `font_size: int`, `margin: float` | applied from the settings; `margin` is the inset the labels are fitted inside |
 | `selected_color: Color` | the selected target's own colour — see `markers.selected_color` |
 | `colour_of(priority) -> Color` | that colour for `SELECTED`, `StoichonOverlay.COLOR` otherwise |
@@ -973,7 +1019,7 @@ screen-space budget in one place.
 | `const NO_PARENT` | the parent id of a target that orbits nothing this overlay knows about |
 | `refresh(camera) -> void` | rebuild the set, place its labels, hand the rings to the overlay; call once a frame |
 | `orbits: Dictionary` | moon node → the [StoichonSceneBody] it orbits; handed in once, a fact about the system |
-| `static choose(candidates, limit) -> Array[Dictionary]` | the keyed union for one frame, by `id`; highest priority wins, then nearest |
+| `static choose(candidates, budgets) -> Array[Dictionary]` | **one queue per kind of object**, by `id`: the keyed union first (highest priority wins, so a body in two groups gets one label), then each rank truncated to its own budget, highest rank first and each nearest-first within itself |
 | every mark draws a ring | **there is no fragment-shaped marker.** The ring is the object's screen position and that is as true of a rock as of a moon; Evert, 2026-11-14: *"I like the ring."* The only thing a fragment's label adds is its diameter, which is in the entry's `text` |
 | `static clamp_to_edge(point, size, margin) -> Vector2` | the edge point in a direction — **and the point itself when it is already inside** |
 | `static screen_direction(camera, target) -> Vector2` | viewport direction, valid behind the camera |
@@ -1055,12 +1101,25 @@ nothing is free: an overlapping label still says where something is, and a missi
 
 **And a place has no range limit.** Markers are capped and ordered by distance, which is right for *details* and
 wrong for *places*: a system full of nearby moons spent the whole budget and the star fell off the list past a few
-hundred gigametres, a distance limit nobody had written as one. `Priority.PRIMARY` is the tier for anything that is
-not a moon — the star, the planets — and the cap is `max(pool_size, primaries)`, so the marker pool grows to fit the
-places in the system. A **moon** is a detail with no gate of its own: which moons are named is decided by the distance ordering, so the
-nearest fill whatever the pool has left after the places. Evert, 2026-11-12: *"when close to a body, I might be
-flying in between the moons, so I want the list of moons to be marked to be calculated from the moons that are
-closest to me"* — and the default pool is 24, because twelve could not name a planet's moons while flying among them.
+hundred gigametres, a distance limit nobody had written as one.
+
+**One pool was the wrong shape, and the tiers were a symptom of it.** Forty bodies in Sol fill a twenty-four slot
+pool before a rock is considered — which is why rocks had to be ranked above moons to be seen at all — and in the
+other direction a swarm of rocks could displace a moon. Each kind has its own queue now, and spends nothing but its
+own budget: `markers.place_count`, `markers.moon_count`, `markers.rock_count`. Evert, 2026-11-23: *"Maybe we should
+have multiple queues for markers, like nearest X amount, then significant X amount, moons x amount."*
+
+**A moon is a detail with no gate of its own**: which moons are named is decided by the distance ordering inside its
+queue, so the nearest fill it. Evert, 2026-11-12: *"when close to a body, I might be flying in between the moons, so
+I want the list of moons to be marked to be calculated from the moons that are closest to me."*
+
+**A belt's rock is labelled by distance; a band's only once it resolves.** The belt draws nothing at all — it is
+invisible except for its markers — so a name is the only way to find one, and the rock you are about to arrive at is
+worth naming first. Evert, 2026-11-23: *"we should display the marker when it's the closest object, and not only when
+the asteroid gets a body."* A **band** is drawn: from a distance you see a ring, and a rock in it that is a fraction
+of a pixel has nothing to point at — Evert, the same day: *"Saturn's rocks show on the HUD when I'm near Earth as
+well. I think once the rings are not resolveable, we don't need to see the rocks on the HUD either."* So the band's
+rocks keep the `RESOLVE_PIXELS` gate on the rock's own apparent size, and the belt's do not.
 
 ### A moon gives up its label, not its ring — but only where the two compete
 
@@ -1128,7 +1187,7 @@ INI via `ConfigFile`, machine read and written. Keys are `section.key`, which is
 fov=85.0
 range_space=Vector2(50, 50000000000)
 [markers]
-pool_size=8
+rock_count=8
 ```
 
 **Sparse and self-cleaning.** A value equal to its declared default is erased rather than written,
@@ -1199,7 +1258,9 @@ on change (`camera.fov`, the marker pool and font size).
 | `hud.debug` | player | **true** — the information block in the top left, which is **diagnostics now**: system, player, date, settings path, mode, nearest, local unit, state and the mesh's counts. **The ship's own readings live in the strip** (altitude, speed, throttle, target, frame), not here — the strip is the flying view's instrument panel and the block is what replaces it when asked for. Off hides the label, which is the point — the block is what a developer reads and a player stops seeing |
 | `hud.fps` | player | **true** — the frame rate, top right |
 | `hud.key_hints` | player | **true** — the three lines of key reminders under the readout. Read from the bindings, so a rebound key is right here without anyone editing text; off is a HUD with no reminders in it |
-| `markers.pool_size` | player | **24** — how many markers the pool holds. It is a budget for **details**: the places in a system (the star and the planets) are always marked and the pool grows to fit them, so this number only decides how many moons and mission targets get a name. Doubled from 12 on 2026-11-12, which could not name a planet's moons while you flew among them |
+| `markers.place_count` | player | **16** — how many places (the star and the planets) may be marked. A budget and not a cap on content: a system with more places than this has the nearest ones named |
+| `markers.moon_count` | player | **24** — how many moons. Doubled from 12 on 2026-11-12, which could not name a planet's moons while you flew among them |
+| `markers.rock_count` | player | **4** — how many rocks of a population (a belt's rocks, a ring's spots). The one you are about to arrive at is always marked whatever this says |
 | `markers.font_size` | player | 17 — the HUD's own size, so markers read as part of the screen |
 | `markers.margin` | player | 24.0 — breathing room; labels are fitted inside it, so it is not the clearance a clamped pointer needed |
 | `markers.selected_color` | player | `Color(1.0, 0.9, 0.3)` — the one thing on the overlay that stands out, so it can be made to stand out against what it is seen against |

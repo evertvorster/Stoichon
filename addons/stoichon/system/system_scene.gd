@@ -192,6 +192,7 @@ func build(parent: Node) -> StoichonSystemScene:
 	# `StoichonSurfaceDistribution.prepare()` exists to remove.
 	_distributions.close()
 	_build_rings()
+	_build_belts()
 	_bake_ring_shadows()
 	# **Every task added must be awaited before the engine goes away**, or the exit segfaults with no
 	# output at all — the pool has to free what the task allocated. A rebuild is milliseconds, so the join
@@ -218,6 +219,19 @@ var ring_bodies: Array[StoichonFragmentBodies] = []
 const RING_ROCK_CANDIDATES := 24
 var _ring_parents: Array[StoichonSceneBody] = []
 var _ring_probes: Array[StoichonSystemBody] = []
+
+## **Every population that is a set of rocks rather than a sheet** — the belt. A population's mechanism is
+## decided by one flag: `particle_count > 0` is a ring, and a ring is generated whole. Parallel arrays, as
+## the rings' are, plus the probe a rock's colour comes from if it is ever drawn.
+##
+## **A belt is not drawn.** Its rocks are 2.7 million km apart and a kilometre across, which is a thousandth
+## of a pixel at every distance the eye can be from one — and a `MultiMesh` position is `float32`, so a splat
+## at 3 x 10^11 m is quantised to 32 km and cannot line up with the body it stands in for. The HUD marker is
+## how a rock is found; a body is what is drawn when you arrive. Evert, 2026-11-23: *"I don't think we need to
+## display the splats at all, and just a marker on the HUD could be enough."*
+var belts: Array[StoichonPopulationRocks] = []
+var belt_populations: Array[StoichonPopulation] = []
+var belt_parents: Array[StoichonSceneBody] = []
 
 
 ## **Every band whose content says it is a sheet**: a particle cloud, a view that draws it, and a body manager
@@ -303,6 +317,24 @@ func update_rings(pixel: float, observer: Vector3, camera: Camera3D = null) -> v
 		var illuminance := StoichonRadiance.light_lux(star_light.lux_at((centre - star_position).length()))
 		rings[index].planet_radius = parent.radius
 		rings[index].update(pixel, illuminance, tint, centre, star_position, observer, camera)
+
+
+## **Every population whose content is a set of rocks**: the set, placed once from the population's own floor.
+func _build_belts() -> void:
+	for population in content.populations:
+		if population.particle_count > 0:
+			continue
+		var parent_id := population.parent_id
+		if parent_id.is_empty():
+			var star_body := star()
+			parent_id = star_body.id if star_body != null else ""
+		var parent := body_by_id(parent_id)
+		if parent == null or parent.node == null:
+			push_warning("%s orbits '%s', which has no node" % [population.id, parent_id])
+			continue
+		belts.append(StoichonPopulationRocks.of(population))
+		belt_populations.append(population)
+		belt_parents.append(parent)
 
 
 func body_by_id(id: String) -> StoichonSceneBody:

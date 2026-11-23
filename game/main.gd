@@ -102,16 +102,13 @@ var _broken := false
 ## Whether the body meshes are being drawn as wireframes — see [method set_wireframe].
 var _wireframe := false
 
-## **One rock set per population, each with the body it orbits.** A population is not a body, so it has no
-## node, no frame and no geometry — it has a floor, and the set places every rock it has once. The parent is
-## what they orbit, so these arrays are parallel.
-var _rock_sets: Array[StoichonPopulationRocks] = []
-var _rock_parents: Array[StoichonSceneBody] = []
-
-## **One per population: the nearest rock, as a place, with no body behind it.** `S3` — a rock is significant
+## **One per belt population: the nearest rock, as a place, with no body behind it.** `S3` — a rock is significant
 ## from the moment it exists, so the speed falls as the ship enters the belt before anything resolves. Nothing is
 ## created or destroyed: this object lives for the session and its position is updated. A population with no
 ## rock within reach is placed at infinity, which the travel scale already reads as the band's maximum.
+##
+## The rock sets themselves live on the scene, beside the rings' clouds — a population's geometry is the
+## scene's business, and only the travel unit and the ship are this file's.
 var _rock_spots: Array[StoichonScaleBody] = []
 
 ## **The nearest few rocks of each population, chosen this tick.** What the bodies are made from, so the search
@@ -146,7 +143,7 @@ func _ready() -> void:
 	_system.build(self)
 	_ship = PlayerShip.create()
 	PlayerShip.place(_system, _ship)
-	_build_rock_sets()
+	_build_belt_spots()
 	_markers = StoichonMarkers.new()
 	_markers.name = "Markers"
 	# The HUD is built after this, and the marker overlay needs its rectangles to place labels clear
@@ -766,6 +763,7 @@ func _update_view(delta: float) -> void:
 	# shader reads. Everything else about a ring was baked when the system was built.
 	var pixel := _pixel_angle()
 	_system.update_rings(pixel, observer, _camera)
+	_system.update_belts(pixel, _camera)
 	# **The rocks, advanced with the same rules and in the same frame as the bodies** — `update_lod` is where a
 	# moon's extraction threshold and wireframe are decided, so a rock's belong beside it.
 	_update_rocks(observer, pixel)
@@ -818,33 +816,19 @@ func _place_observer_from_session() -> void:
 
 ## The ambient group is the frame's business: other bodies matter while you are out in space, and
 ## stop mattering once you are busy landing on one of them.
-## **A population is not a body**: it has no node, no frame and no geometry. It has a floor, and a rock set
-## places every rock it has once — one set per population, each paired with the body its rocks orbit.
-func _build_rock_sets() -> void:
-	for population in _system.content.populations:
-		# **A sheet is generated whole, so it is not a fixed set of rocks.** A ring has every particle at build
-		# and its own manager for the spots that resolve. The one flag that says which mechanism owns a
-		# population is `particle_count`.
-		if population.particle_count > 0:
-			continue
-		var parent_id := population.parent_id
-		if parent_id.is_empty():
-			var star := _system.content.star()
-			parent_id = star.id if star != null else ""
-		var parent := _system.body_by_id(parent_id)
-		if parent == null:
-			push_warning("%s orbits '%s', which is not in the system" % [population.id, parent_id])
-			continue
-		_rock_sets.append(StoichonPopulationRocks.of(population))
-		_rock_parents.append(parent)
+## **A population is not a body**: it has no node, no frame and no geometry. The scene places its rocks once
+## and draws them; what this file keeps is one place per population, for the travel unit and the readout.
+func _build_belt_spots() -> void:
+	for index in _system.belts.size():
 		var spot := StoichonScaleBody.new(null, 0.0)
 		spot.solid = false
 		_rock_spots.append(spot)
 		_rock_near.append([])
-		var bodies := StoichonFragmentBodies.new(population, _system)
-		bodies.name = "Fragments_%s" % population.id.replace(":", "_")
-		add_child(bodies)
-		_fragment_bodies.append(bodies)
+		var population := _system.belt_populations[index]
+		var manager := StoichonFragmentBodies.new(population, _system)
+		manager.name = "Fragments_%s" % population.id.replace(":", "_")
+		add_child(manager)
+		_fragment_bodies.append(manager)
 	# One place per band, kept alive for the session: the travel unit's reference near a ring.
 	for _ring in _system.rings:
 		var spot := StoichonScaleBody.new(null, 0.0)
@@ -861,12 +845,12 @@ func _build_rock_sets() -> void:
 ## where it is belongs to the same clock as the ship it is slowing down.
 func _update_rock_sets() -> void:
 	var eye := _ship.global_position
-	for index in _rock_sets.size():
-		var parent := _rock_parents[index]
+	for index in _system.belts.size():
+		var parent := _system.belt_parents[index]
 		if parent == null or parent.node == null:
 			continue
 		var here := parent.node.global_position
-		var near: Array[int] = _rock_sets[index].nearest_n(eye - here, BODIES_PER_BELT, ROCK_REACH)
+		var near: Array[int] = _system.belts[index].nearest_n(eye - here, BODIES_PER_BELT, ROCK_REACH)
 		_rock_near[index] = near
 		var spot := _rock_spots[index]
 		if near.is_empty():
@@ -875,9 +859,9 @@ func _update_rock_sets() -> void:
 			spot.name = ""
 		else:
 			var nearest := near[0]
-			spot.position = here + _rock_sets[index].position_of(nearest)
-			spot.radius = _rock_sets[index].diameter_of(nearest) * 0.5
-			spot.name = _rock_sets[index].designation_of(nearest)
+			spot.position = here + _system.belts[index].position_of(nearest)
+			spot.radius = _system.belts[index].diameter_of(nearest) * 0.5
+			spot.name = _system.belts[index].designation_of(nearest)
 	_sync_rocks()
 
 
@@ -935,11 +919,11 @@ func _update_rocks(eye: Vector3, pixel: float) -> void:
 		return
 	var rings_marked: Array[Dictionary] = []
 	for index in _fragment_bodies.size():
-		var parent := _rock_parents[index]
+		var parent := _system.belt_parents[index]
 		if parent == null or parent.node == null:
 			continue
 		_fragment_bodies[index].update(
-			_rock_sets[index].pieces(parent.node.global_position, _rock_near[index]),
+			_system.belts[index].pieces(parent.node.global_position, _rock_near[index]),
 			eye, _camera, pixel, _system.wireframe
 		)
 	# **What else is near**, so a ring can tell whether it is what the ship is flying through. The system's own

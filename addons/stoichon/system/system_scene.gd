@@ -192,6 +192,7 @@ func build(parent: Node) -> StoichonSystemScene:
 	# `StoichonSurfaceDistribution.prepare()` exists to remove.
 	_distributions.close()
 	_build_rings()
+	_build_belts()
 	_bake_ring_shadows()
 	# **Every task added must be awaited before the engine goes away**, or the exit segfaults with no
 	# output at all — the pool has to free what the task allocated. A rebuild is milliseconds, so the join
@@ -218,6 +219,15 @@ var ring_bodies: Array[StoichonFragmentBodies] = []
 const RING_ROCK_CANDIDATES := 24
 var _ring_parents: Array[StoichonSceneBody] = []
 var _ring_probes: Array[StoichonSystemBody] = []
+
+## **Every population that is a set of rocks rather than a sheet** — the belt. A population's mechanism is
+## decided by one flag: `particle_count > 0` is a ring, and a ring is generated whole. Parallel arrays, as
+## the rings' are, plus the draw and the probe its colour comes from.
+var belts: Array[StoichonPopulationRocks] = []
+var belt_populations: Array[StoichonPopulation] = []
+var belt_parents: Array[StoichonSceneBody] = []
+var belt_views: Array[StoichonBeltCloud] = []
+var _belt_probes: Array[StoichonSystemBody] = []
 
 
 ## **Every band whose content says it is a sheet**: a particle cloud, a view that draws it, and a body manager
@@ -303,6 +313,64 @@ func update_rings(pixel: float, observer: Vector3, camera: Camera3D = null) -> v
 		var illuminance := StoichonRadiance.light_lux(star_light.lux_at((centre - star_position).length()))
 		rings[index].planet_radius = parent.radius
 		rings[index].update(pixel, illuminance, tint, centre, star_position, observer, camera)
+
+
+## **Every population whose content is a set of rocks**: the set, placed once from the population's own floor,
+## a view that draws it, and a probe its colour comes from.
+func _build_belts() -> void:
+	for population in content.populations:
+		if population.particle_count > 0:
+			continue
+		var parent_id := population.parent_id
+		if parent_id.is_empty():
+			var star_body := star()
+			parent_id = star_body.id if star_body != null else ""
+		var parent := body_by_id(parent_id)
+		if parent == null or parent.node == null:
+			push_warning("%s orbits '%s', which has no node" % [population.id, parent_id])
+			continue
+		var rocks := StoichonPopulationRocks.of(population)
+		var view := StoichonBeltCloud.of(rocks, population)
+		parent.node.add_child(view)
+		belts.append(rocks)
+		belt_populations.append(population)
+		belt_parents.append(parent)
+		belt_views.append(view)
+		# **The rocks are made of something**, and the same probe a ring's particles get: a body with the
+		# population's coverage, so the bond albedo and the hue come out of the same derivation a moon's do.
+		var probe := StoichonFragmentBodies.content_for(population, "%s/rock" % population.id, 1.0)
+		var surface := StoichonSurface.new()
+		surface.coverage = population.composition.duplicate()
+		probe.surface = surface
+		_belt_probes.append(probe)
+
+
+## **The belt, once a drawn frame** — the same four numbers a band gets, from the middle of the band.
+##
+## The rocks span 2.1 to 3.3 AU, so the star's light on them varies by a factor of 2.5 and one number for
+## the whole population is taken at its middle. That is named rather than modelled: a per-rock illuminance
+## would mean a third custom-data channel and a divide in the vertex stage for a difference no eye separates
+## in a scatter of kilometre rocks.
+func update_belts(pixel: float, camera: Camera3D = null) -> void:
+	if belts.is_empty() or star_light == null:
+		return
+	var star_body := star()
+	if star_body == null or star_body.node == null:
+		return
+	var star_position := star_body.node.global_position
+	for index in belts.size():
+		var parent := belt_parents[index]
+		if parent == null or parent.node == null:
+			continue
+		var probe := _belt_probes[index]
+		var albedo := StoichonSurfaceModel.bond_albedo(probe, _materials())
+		var hue := StoichonSurfaceModel.color(probe, _materials()).srgb_to_linear()
+		var tint := hue * (albedo / maxf(hue.get_luminance(), 1.0e-4))
+		var band := belt_populations[index].semi_major_axis
+		var illuminance := StoichonRadiance.light_lux(star_light.lux_at((band.x + band.y) * 0.5))
+		belt_views[index].update(
+			pixel, illuminance, tint, parent.node.global_position, star_position, camera
+		)
 
 
 func body_by_id(id: String) -> StoichonSceneBody:

@@ -96,6 +96,9 @@ var _fps: Label
 var _skip_next_motion := false
 ## Whether the body nodes are drawn at all — the debug key that hides them.
 var _bodies_visible := true
+## **Set when the world could not be opened, and then the process quits.** The frame loops check it because
+## a `get_tree().quit()` is honoured at the end of the frame, and `_ready` has already returned by then.
+var _broken := false
 ## Whether the body meshes are being drawn as wireframes — see [method set_wireframe].
 var _wireframe := false
 
@@ -190,7 +193,13 @@ func _ready() -> void:
 	_session = Session.for_world(_system.name)
 	var brought_up := _session.start(_system)
 	if not brought_up["ok"]:
+		# **Stop, rather than run on a player that was never loaded.** Everything below this point is the
+		# input map, the controls and the three screens, so carrying on leaves a game that answers no key
+		# and cannot save — while the save itself is untouched and `git -C <world> log` still has it.
 		push_error("cannot open the world's repository: %s" % brought_up["reason"])
+		_broken = true
+		get_tree().quit()
+		return
 	_player = _session.player
 	_place_observer_from_session()
 	_place_camera()
@@ -527,6 +536,8 @@ func _capture_mouse() -> void:
 
 
 func _process(delta: float) -> void:
+	if _broken:
+		return
 	var frames := Engine.get_frames_per_second()
 	if frames <= 0:
 		_fps.text = "-- fps"
@@ -538,7 +549,7 @@ func _process(delta: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if _screen != null:
+	if _broken or _screen != null:
 		return
 
 	# **The degrees of freedom produce this frame's contribution each**, in radians for a rotation and a

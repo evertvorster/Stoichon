@@ -79,6 +79,11 @@ func start(system: SpacesimSystemScene) -> Dictionary:
 		if load_last():
 			message = "the last save"
 			return {"ok": true, "reason": ""}
+		# **A world that is there and cannot be read is a stop, not a new game.** Falling through to
+		# `create_history` is how an unreadable `state.json` became an empty player: the history it asks
+		# for already exists, so the refusal arrived as a name clash and the game carried on with nothing
+		# loaded. The save is the player's, so it is left exactly where it is for them to look at.
+		return {"ok": false, "reason": "no save at %s can be read" % repo.root}
 	else:
 		# The reference field is named "world" on disk — the persistence sense, not the system.
 		var created := repo.create({"world": system.name, "content_version": system.content_version()})

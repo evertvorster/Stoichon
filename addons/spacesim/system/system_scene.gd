@@ -1512,6 +1512,14 @@ func update_lod(camera: Camera3D, eye: Variant = null) -> void:
 	# here because every law below is in radians. Read through `get_value` every frame so it is hot, and handed down as
 	# an argument — a pool thread may not read settings.
 	var facet_angle := deg_to_rad(float(SpacesimSettings.get_value("lod.facet_angle")))
+	# **The three switches the loop below reads per body**, read once here instead. They are hot — the settings
+	# change is seen on the next frame — and loop-invariant, so reading them inside the loop was a string split
+	# and two dictionary lookups per body per frame (Sol has forty significant bodies) for an answer that
+	# cannot change within the frame.
+	var wire_sphere := bool(SpacesimSettings.get_value("render.wireframe_sphere"))
+	var wire_surface := bool(SpacesimSettings.get_value("render.wireframe_surface"))
+	var air_on := bool(SpacesimSettings.get_value("render.atmosphere_volume"))
+	var show_decks := bool(SpacesimSettings.get_value("render.cloud_decks"))
 	# **The interpolated eye**, because this runs once a drawn frame and `get_global_transform()` is
 	# only accurate to the most recent physics tick. It is the same transform the camera is drawn with,
 	# so the level chosen belongs to the frame on screen — see `game/main.gd::_update_view`.
@@ -1549,12 +1557,10 @@ func update_lod(camera: Camera3D, eye: Variant = null) -> void:
 			continue
 		# How much of the air this body's shell draws, from the gate below — read again when it is published.
 		var air_strength := 0.0
-		# **Five things a body may draw, and each has its own switch**: the surface, the datum lattice it is built on,
-		# each cloud deck (its switch is `_update_decks`'s, one function down, because it owns the maps too), the air's
-		# shell, and the point of light. **The sphere is a wireframe's subject only** — outside one the surface is the
-		# visible thing and a ball under it would only hide it.
-		var wire_sphere := bool(SpacesimSettings.get_value("render.wireframe_sphere"))
-		var wire_surface := bool(SpacesimSettings.get_value("render.wireframe_surface"))
+		# **Five things a body may draw, and each has its own switch**, all four read at the top of this function: the
+		# surface, the datum lattice it is built on, each cloud deck (whose switch `_update_decks` is handed, because it
+		# owns the maps too), the air's shell, and the point of light. **The sphere is a wireframe's subject only** —
+		# outside one the surface is the visible thing and a ball under it would only hide it.
 		# **A body with no surface draws no ground, because it has none.** Evert, 2026-11-02: *"You can hide it on
 		# planets with no surface."* The vertex sphere still EXISTS and is still built — the decks and the sea are
 		# copies of its ARRAYS, not of this node, so hiding it costs them nothing — and the wireframe view still
@@ -1593,7 +1599,7 @@ func update_lod(camera: Camera3D, eye: Variant = null) -> void:
 			air_strength = smoothstep(
 				SpacesimLod.AIR_RING_FADE.x, SpacesimLod.AIR_RING_FADE.y, ring
 			)
-			if not bool(SpacesimSettings.get_value("render.atmosphere_volume")):
+			if not air_on:
 				air_strength = 0.0
 			body.air_shell.visible = not is_point and air_strength > 0.0
 		for deck in body.decks:
@@ -1608,7 +1614,7 @@ func update_lod(camera: Camera3D, eye: Variant = null) -> void:
 		if body.mesh == null:
 			continue
 		_publish_body_frame(body, camera, observer, pixel, air_strength)
-		_update_decks(body, observer, distance)
+		_update_decks(body, observer, distance, show_decks)
 		# **The surface is a PATCH TREE, not a sphere at one level.** Evert, 2026-10-17: *"it suddenly
 		# switches to a higher density of triangles, but once only, and for the whole sphere"* — which is
 		# what one level per body is. `SpacesimPatches` refines where the eye is and culls over the limb,
@@ -2112,13 +2118,14 @@ func _publish_body_frame(
 ## **The eye is handed over in the deck's model space**, divided by the top radius here, in double precision:
 ## a deck node's model space is a unit sphere, so nothing astronomical ever reaches a `float`.
 func _update_decks(
-	body: SpacesimSceneBody, observer: Vector3, distance: float
+	body: SpacesimSceneBody, observer: Vector3, distance: float, show_decks: bool
 ) -> void:
 	if body.decks.is_empty():
 		return
-	# **Read through `get_value` so the switch stays hot.** One switch for this mechanism, and it reads no
-	# other one — `show_decks = render.cloud_decks and not volume` made "turn the decks on" a lie.
-	if not bool(SpacesimSettings.get_value("render.cloud_decks")):
+	# **One switch for this mechanism, and it reads no other one** — `show_decks = render.cloud_decks and not volume`
+	# made "turn the decks on" a lie. **Read by the caller and handed in**, because this runs once per body and the
+	# value cannot change within the frame.
+	if not show_decks:
 		for deck in body.decks:
 			deck.node.visible = false
 		return

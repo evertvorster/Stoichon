@@ -314,6 +314,14 @@ func open(path := "") -> void:
 		# A corrupt or unreadable file must not stop the game: fall back to defaults.
 		push_warning("settings: cannot read '%s' (%s); using defaults" % [_path, error_string(error)])
 		_file = ConfigFile.new()
+		# **And keep the file, rather than replacing it.** [method save] writes the whole file, so the next
+		# change would erase every value that was still readable in it — and the file is the player's to
+		# edit, so a typo is the likeliest reason it will not parse.
+		var moved := DirAccess.rename_absolute(_path, _path + ".broken")
+		if moved != OK:
+			push_warning(
+				"settings: cannot set the unreadable file aside (%s)" % error_string(moved)
+			)
 
 
 func path() -> String:
@@ -387,11 +395,18 @@ func set_value(key: String, value: Variant, save_now := false) -> bool:
 		return false
 
 	var parts := _split(key)
-	if _same(coerced, row["default"]):
-		# Godot logs an error for erasing from a section that was never there, so check first —
-		# and a setting left at its default is the common case, not the exception.
-		if _file.has_section_key(parts[0], parts[1]):
-			_file.erase_section_key(parts[0], parts[1])
+	var stored := _file.has_section_key(parts[0], parts[1])
+	var at_default := _same(coerced, row["default"])
+	# **Nothing to write when the file already says this.** A value at its default is stored as an absent
+	# key, so "the file agrees" is either "stored and equal" or "absent and at the default" — and in both
+	# cases there is nothing to write and nothing to erase. Without this, pressing Apply on a row nobody
+	# touched marked the store dirty and rewrote the file at exit.
+	if at_default and not stored:
+		return true
+	if not at_default and stored and _same(coerced, _file.get_value(parts[0], parts[1], null)):
+		return true
+	if at_default:
+		_file.erase_section_key(parts[0], parts[1])
 	else:
 		_file.set_value(parts[0], parts[1], coerced)
 	_dirty = true

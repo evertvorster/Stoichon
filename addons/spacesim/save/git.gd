@@ -39,7 +39,11 @@ func run(arguments: Array) -> Dictionary:
 	)
 	command.append_array(PackedStringArray(arguments))
 	var captured: Array = []
-	var code := OS.execute("git", command, captured, true)
+	# **Stdout only — stderr is not the working tree.** With `read_stderr` on, one git warning (dubious ownership,
+	# a CRLF notice) landed in `lines`, so `is_clean()` answered "dirty" and every save refused with "nothing has
+	# changed since the last save" — a message that blames the world for git's own note. Nothing here reads git's
+	# error text: every caller states its own reason.
+	var code := OS.execute("git", command, captured, false)
 	# OS.execute appends the program's whole output as ONE string, not one element per line — the
 	# splitting is ours to do.
 	var lines := PackedStringArray()

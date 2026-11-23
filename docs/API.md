@@ -2,7 +2,29 @@
 
 > **This file documents the engine as it is.** Only interfaces that exist in the code are listed
 > here. Design, planning and bug-hunting notes live in the project notes (Obsidian,
-> `Notes/Projects/SpaceSim/`) — not in this repo.
+> `Notes/Projects/Programming/SpaceSim/`) — not in this repo.
+
+**One row per section, in file order.** A section is a subsystem; a subsystem's *why* is in the vault, and
+that is what `Notes/Projects/Programming/SpaceSim/Where to read.md` maps.
+
+| Section | What is in it |
+|---|---|
+| [The addon](#the-addon) | `plugin.cfg`/`plugin.gd`, and why nothing depends on the plugin being on |
+| [Update rule](#update-rule) | this file changes in the same commit as the interface, and an on-disk format is interface |
+| [Coordinate frames](#coordinate-frames) | `SpacesimFrame`, the one-way transition rules, the frame tree |
+| [Travel unit](#travel-unit) | speed derived from the distance to the nearest body, and the motion it is carried by |
+| [Solar system](#solar-system) | content, the built scene, the derivation, Kepler, populations, rings, the LOD walk |
+| [Lighting](#lighting) | the star as a physical light, the exposure window, the frame metre |
+| [Render layers](#render-layers) | the transparent stack's declared priority order, then what a body looks like |
+| [Navigation](#navigation) | the marker overlay, the band, the strip's groups |
+| [Settings](#settings) | the registry, the file on disk, the store, the display and its three sizes |
+| [Screens](#screens) | the chrome every full-screen modal shares, actions, bindings, devices, the dialogs |
+| [Only names are editable](#only-names-are-editable) | what a player may type, and which button commits it |
+| [`SpacesimPlayer`](#spacesimplayer) | the player's own state and what a save holds |
+| [Save and load](#save-and-load) | git-backed saves, histories, the session, the two clocks, locations |
+| [The game](#the-game) | what `game/` adds: input, the camera, the screens, the readout |
+| [Tests](#tests) | the headless suite, the shader check, the screenshot rig |
+| [See also](#see-also) | where the rest of the documentation is |
 
 ## The addon
 
@@ -757,7 +779,7 @@ the table is strictly increasing and inside the range, so a tie cannot come back
 effects, but not always... there is more than just the atmosphere, there are cloud decks and the internal
 surface of Saturn as well, and they need to be properly ordered."*
 
-## Render layers
+### What a body looks like
 
 `addons/spacesim/render/` — what a body looks like. Everything these shaders are given comes from **the
 derivation**, so a shader cannot quietly disagree with the model.

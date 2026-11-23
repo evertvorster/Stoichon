@@ -221,9 +221,13 @@ the playground flight test drives ~120000 steps.
 
 ## Documentation
 
-- [`docs/API.md`](docs/API.md) — the engine as it is. Updated with the code.
+- [`docs/API.md`](docs/API.md) — the engine as it is, one section per subsystem, with a contents table.
+  Updated with the code.
 - Design, planning and bug-hunting notes live in the project notes vault (Obsidian,
-  `Notes/Projects/SpaceSim/`), not in this repo.
+  `Notes/Projects/Programming/SpaceSim/`), not in this repo. **Start at its `Where to read.md`:** one row
+  per subsystem naming the document that governs it, the code it lives in and the tests that hold it.
+- [`AGENTS.md`](AGENTS.md) — the short list of rules that bite when working in this tree, and which
+  documents to read first.
 
 ## License
 

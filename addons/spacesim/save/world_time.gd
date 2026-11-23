@@ -31,7 +31,11 @@ const SECONDS_SINCE_BANG := 435084631200000000
 ## The divergence is a real design (`Relativity and the Two Clocks` §1: `v_eff = c·tanh(v_f/c)`, and the
 ## world's clock advances by `v_f / v_eff` per second of the crew's), and **it is not built**. When it is,
 ## this function is where it lands and everything that advances a clock already goes through it.
-static func clock_rate(_fantastical_speed: float) -> float:
+##
+## **It takes no argument, and that is the honest signature today.** The rate is a function of the ship's speed,
+## and nothing in the session holds one — so the day this stops returning 1.0, the caller gains a parameter it
+## has to be given. It used to take `_fantastical_speed`, and the one call site was handing it a frame delta.
+static func clock_rate() -> float:
 	return 1.0
 
 

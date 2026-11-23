@@ -268,7 +268,9 @@ func advance(seconds: float) -> void:
 
 	# The world's, at `clock_rate` times the crew's. **Accumulated the same way and carried separately**, so
 	# the two cannot drift apart by rounding — the only thing that may separate them is the rate itself.
-	_world_fraction += seconds * SpacesimWorldTime.clock_rate(seconds)
+	# **No argument**: the rate is a function of the ship's speed, which the session does not hold, so it takes
+	# none until relativity gives it one (see `SpacesimWorldTime.clock_rate`).
+	_world_fraction += seconds * SpacesimWorldTime.clock_rate()
 	var world_whole := int(floor(_world_fraction))
 	_world_fraction -= float(world_whole)
 	world_time += world_whole

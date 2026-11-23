@@ -121,12 +121,13 @@ const REGISTRY := {
 	# `show_decks = render.cloud_decks and not volume` broke for a whole day. Off hides every deck and bakes
 	# nothing.
 	#
-	# **A deck owns a unit icosphere scaled to its base radius**, so its model space is a unit sphere — which is what
-	# `body_deck.gdshader` assumes — and its geometry is independent of the ground's patch walk. (It drew on the
-	# ground's own mesh until 2026-10-28, which broke when that lattice started carrying metres, and which also meant
-	# a deck only ever covered the cap the walk covered.) **Off by default because the clouds rung owns the tuning**,
-	# not because it does not draw: the layer's light (`§D6`), multiple decks (`§D9`) and the near regime are still
-	# open. Turn it on to see where the deck's look stands.
+	# **A deck draws the ground's OWN patch mesh translated to its level** — the same lattice, the same chunks,
+	# the same index array — so one tessellation serves the surface and every deck over it, and a refinement
+	# cannot land in one and not the other. (It wore a unit icosphere scaled to its base radius until
+	# 2026-11-01, which made it a second geometry that could disagree with the ground about which triangles
+	# exist.) **Off by default because the clouds rung owns the tuning**, not because it does not draw: the
+	# layer's light (`§D6`), the near regime, and a fog that reads the deck the eye is inside are still open.
+	# Turn it on to see where the deck's look stands.
 	"render.cloud_decks": {"default": false, "scope": Scope.PLAYER, "tab": "troubleshooting"},
 	"camera.range_atmosphere": {
 		"default": Vector2(0.5, 1.0e7), "scope": Scope.PLAYER, "min": Vector2(0.001, 1.0), "tab": "hud"
@@ -185,8 +186,10 @@ const REGISTRY := {
 	# --- **the testing platform's three modes**, and each answers a different question. `flat` is the workhorse: the
 	# silhouette and the topology with nothing over them — the body's derived albedo and not one texture read, which is
 	# what the ground drew before it had a surface stack. `wireframe` shows the subdivision itself. **`rendered` is the
-	# real surface**: the whole-body map, its near-field tiles, the detail ladder and the relief. All three are the same
-	# mesh and the same material; the mode is a uniform and a line material, never a second geometry.
+	# real surface**: the land is the FIELD ITSELF, evaluated per pixel at the resolution the pixel can resolve and
+	# coloured from the derived ramp — there is no map, no tile and no ladder, because the raster was deleted on
+	# 2026-10-28 and the field is what replaced it. All three are the same mesh and the same material; the mode is a
+	# uniform, plus a line material for the wireframe, never a second geometry.
 	"render.mode": {"default": "flat", "scope": Scope.PLAYER, "choices": ["wireframe", "flat", "rendered"],
 		"tab": "troubleshooting"},
 	# **Tint each patch by its chunk's depth**, so the tree is legible at a glance: where it refines, where it stops, and
@@ -221,10 +224,11 @@ const REGISTRY := {
 	# shell's top, both fixed by geometry. Evert, 2026-10-21: *"maybe this should be a tunable so that I can
 	# iterate and find something that looks like I expect."*
 	#
-	# **PARKED 2026-11-02: nothing reads it.** The fog lived in the atmosphere pass, which no longer draws; the
-	# setting stays so that a saved settings file does not change shape, and so the parked fog can come back with
-	# its one free number. Evert, 2026-11-02: *"we can cut it out and re-implement it once we have the layers
-	# working, as we might not need it at all."*
+	# **Parked on 2026-11-02 and live again on 2026-11-03** (`07ed5c1`). The pass left the compositor with the
+	# air, and came back for the fog alone: Evert, 2026-11-03: *"Can we re-enable fog? We disabled it for reasons
+	# when doing the layered atmosphere shaders."* `main.gd::_apply_settings` reads this and `_update_fog` hands
+	# it to the pass, so it is a live control; the air march in the same effect is the part that is still
+	# unreachable (`MARCHES_DECK`). Zero is "do not draw" and costs no dispatch at all.
 	"fog.gain": {"default": 2.0, "scope": Scope.PLAYER, "min": 0.0, "max": 8.0,
 		"tab": "troubleshooting"},
 	# --- the HUD's own parts. **Each is a separate switch because each is a different annoyance**:

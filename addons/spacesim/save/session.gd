@@ -34,9 +34,10 @@ var world_time: int = 0
 ## the world's and currently ticks with it: Evert, 2026-11-08: *"The clock should be ticking, one second at
 ## a time. When we do relativistic travel, the universe clock will be running faster."*
 ##
-## **Not written to the save yet.** `Relativity and the Two Clocks` §8 lists what the save carries as open,
-## so a loaded history starts its player clock where the world's is rather than at zero — the honest
-## default, and one line to change when the format gains the field.
+## **Saved with everything else**, as `FIELD_PLAYER_TIME` beside the world's: [method _write] puts it into the
+## envelope and [method _apply] reads it back. A save written before the field existed carries one number, and
+## the honest reading of that is the two clocks had not diverged yet — which was true, because the world's
+## clock only ever moved while the player was away.
 var player_time: int = 0
 
 ## The sub-second remainder of each clock. Separate, because the two clocks will not always advance at the

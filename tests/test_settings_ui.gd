@@ -35,18 +35,14 @@ func run(h, root: Node) -> void:
 
 
 ## **A registry row that cannot be what it says it is** would fail silently somewhere far away, so the
-## shape is checked here: a dotted key, a validator the code knows, choices that include the row's own
-## default.
+## shape is checked here: a dotted key, and choices that include the row's own default.
 func _test_registry_is_sound(h) -> void:
-	var unknown: Array[String] = []
 	var undotted: Array[String] = []
 	var bad_choices: Array[String] = []
 	for key in Settings.declared_keys():
 		var row: Dictionary = Settings.REGISTRY[key]
 		if not String(key).contains("."):
 			undotted.append(key)
-		if row.has("validator") and not Settings.KNOWN_VALIDATORS.has(row["validator"]):
-			unknown.append(key)
 		# A row offering choices that does not include its own default would open showing nothing, and a
 		# row that offers a list but names one we cannot build would fall back to a text box silently.
 		var listed: Variant = row.get("choices", null)
@@ -58,7 +54,6 @@ func _test_registry_is_sound(h) -> void:
 		bad_choices.is_empty(),
 		"every row that offers choices offers its own default%s" % Fixture.detail(bad_choices)
 	)
-	h.check(unknown.is_empty(), "every declared validator exists%s" % Fixture.detail(unknown))
 	h.check(undotted.is_empty(), "every key is sectioned%s" % Fixture.detail(undotted))
 
 

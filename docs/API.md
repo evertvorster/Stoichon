@@ -1343,7 +1343,7 @@ An edit that does not parse is **coloured and staged nowhere**, so a typo cannot
 | `set_value(key, value, save_now := false) -> bool` | the only way to write a setting; false if refused |
 | `save(force := false) -> bool` | write, if there is anything to write |
 | `static declared_keys()`, `scope_of(key)`, `default_of(key)` | |
-| `static TABS` | the tabs the settings screen shows, in order: `display`, `hud`, `bindings`, `devices`, `troubleshooting`, `rest`. **`bindings` and `devices` hold no settings** — the actions and the gamepads are drawn by the screen itself |
+| `static TABS` | the tabs the settings screen shows, in order: `display`, `hud`, `flight`, `bindings`, `devices`, `troubleshooting`, `rest`. **`flight`, `bindings` and `devices` hold no settings** — the four degrees of freedom, the actions and the gamepads are drawn by the screen itself |
 | `static tab_title(tab) -> String` | what a tab is called on screen — its key capitalised, except `hud`, which is an acronym |
 | `static tab_of(key) -> String` | which tab a row is filed in; **a row that names none is in `rest`** |
 | `static is_acceptable(key, value) -> bool` | whether the store would accept it — what the screen asks before staging |

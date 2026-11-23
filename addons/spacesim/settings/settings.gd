@@ -28,13 +28,6 @@ extends Node
 enum Scope { PLAYER }
 
 
-## The named checks [method _passes_validator] knows. A row naming anything else is a mistake in
-## the registry, not a silently skipped check.
-## Named checks the bounds cannot express. **Empty since the bindings left**: the only validator was
-## `key_binding`, and a binding is no longer a setting — `SpacesimBindingsStore.stage` refuses a text it
-## cannot parse, at the point where it is edited.
-const KNOWN_VALIDATORS := []
-
 ## Every setting the engine knows, with the single declaration of its default.
 ##
 ## Keys are `section.key`, which is how they appear in the file, and this file is one machine-written
@@ -336,8 +329,9 @@ static func declared_keys() -> Array:
 	return REGISTRY.keys()
 
 
-## The tabs, in the order they appear. `bindings` and `devices` are drawn by the screen itself — the
-## actions and the attached gamepads are not settings — so nothing is filed under them.
+## The tabs, in the order they appear. `bindings`, `devices` and `flight` are drawn by the screen itself — the
+## actions, the attached gamepads and the four degrees of freedom are not settings — so nothing is filed under
+## them.
 ##
 ## **A row that declares no `tab` is in `rest`, and `rest` is always last**: a setting nobody has filed yet waits there rather than falling off the screen, and
 ## that list is where the next grouping is decided from. A tab nothing was filed into is not built, so
@@ -489,17 +483,7 @@ static func _acceptable_row(row: Dictionary, value: Variant) -> bool:
 	var coerced: Variant = _coerce(value, row["default"])
 	if typeof(coerced) != typeof(row["default"]):
 		return false
-	if not _within(row, coerced):
-		return false
-	return _passes_validator(row, coerced)
-
-
-## Named checks the bounds cannot express — and the extension point for the relational ones that
-## min/max cannot either, such as a near plane having to stay below a far plane.
-static func _passes_validator(row: Dictionary, _value: Variant) -> bool:
-	match String(row.get("validator", "")):
-		_:
-			return true
+	return _within(row, coerced)
 
 
 ## A value from a file or the world, made safe: coerced when it is merely a whole number stored

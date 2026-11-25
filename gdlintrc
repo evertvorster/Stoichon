@@ -1,0 +1,30 @@
+# gdlint's config, found by walking up from the directory it is run in — so run `gdlint addons game
+# tests tools` from the repo root and this applies to all of it.
+#
+# **What is disabled, and why: lint is only useful if a run can be read.** With the defaults the
+# project produced 5 455 findings and 5 404 of them were two rules about how a file is laid out, so a
+# real find — an argument nothing reads, a resource loaded twice, a line the parser chokes on — was
+# invisible. These are the rules that were producing that noise:
+#
+#   max-line-length          5 287 findings. The long line is deliberate here: a member's doc block
+#                            carries the measurement that settled a constant, and wrapping it to fit a
+#                            column is how a why-comment becomes a what-comment.
+#   class-definitions-order  112. It wants consts before vars; these files interleave declarations
+#                            with the doc blocks that belong to them, and reordering would move a
+#                            block away from the declaration it documents — the one GDScript trap that
+#                            is invisible to the parser and to --check-only.
+#   max-file-lines           system_scene.gd and main.gd are known-big and are being split for other
+#                            reasons, not to satisfy a line count.
+#   max-public-methods       same file, same reason.
+#   expression-not-assigned  the two findings are `camera.global_transform` in tests/profile_costs.gd:
+#                            calling it IS the measurement, and binding it to a name would let the
+#                            compiler fold it.
+#
+# Everything else stays on. The rules that have already earned their place: unused-argument (it found
+# four real ones), duplicated-load, mixed-tabs-and-spaces, trailing-whitespace, unnecessary-pass.
+disable:
+- max-line-length
+- class-definitions-order
+- max-file-lines
+- max-public-methods
+- expression-not-assigned

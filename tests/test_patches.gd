@@ -416,7 +416,7 @@ func _test_the_lattice_merge_matches_a_rebuild(h) -> void:
 static func _triangle_set(arrays: Array) -> Dictionary:
 	var vertices: PackedVector3Array = arrays[0]
 	var indices: PackedInt32Array = arrays[1]
-	var set := {}
+	var seen := {}
 	for at in range(0, indices.size(), 3):
 		var points: Array = [
 			vertices[indices[at]], vertices[indices[at + 1]], vertices[indices[at + 2]]
@@ -429,8 +429,8 @@ static func _triangle_set(arrays: Array) -> Dictionary:
 		var key := ""
 		for step in 3:
 			key += str(points[(start + step) % 3])
-		set[key] = true
-	return set
+		seen[key] = true
+	return seen
 
 
 ## **A rebuild is cache lookups, not geometry** — the claim chunking exists to make, stated as counts

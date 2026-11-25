@@ -482,10 +482,19 @@ static func deck_material(
 ## break it made a thick atmosphere paint a solid blue shell over the planet's own clouds — worse than the fault.
 ## Whoever next opens that stack should read the palace first (`Stoichon`, key `cloud-decks`, `atmosphere`), and
 ## fly it on its own branch.
-const INTERIOR_RENDER_PRIORITY := 0
+## **A DIAGNOSTIC BRANCH, not a settled order.** The air and the first deck were both 0 — the tie this file's
+## note above argues with — and Evert's flight report is decks that *flicker in and out on camera rotation*,
+## which is what an unstable sort on equal priorities looks like. So the three materials are given distinct
+## values, and NOTHING is ordered by the eye: if the flicker stops, the tie was the flicker and the remaining
+## problem is the one `Atmospheric Shell Stack Plan`'s S4 exists for (order recomputed from the eye's radius,
+## never built). If it does not stop, the tie is innocent and the 2026-10-20 rotation-triggered air dimming is
+## the same fault, which was never explained.
+##
+## One flight decides it. Do not merge this to `main` on its own: it fixes one view and breaks the other.
+const INTERIOR_RENDER_PRIORITY := -16
 const OCEAN_RENDER_PRIORITY := -8
 const AIR_RENDER_PRIORITY := 0
-const DECK_PRIORITY_BASE := 0
+const DECK_PRIORITY_BASE := -1
 
 
 static func interior_material(body: StoichonSceneBody, palette: Color) -> ShaderMaterial:

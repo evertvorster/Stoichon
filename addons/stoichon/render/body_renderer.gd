@@ -501,7 +501,9 @@ static func deck_material(
 ## deck — which is thin, which is why it reads acceptably — and it is not the fix; it is the least-wrong
 ## static order while S3/S4 are designed.
 ##
-## Do not merge this to `main` on its own.
+## Evert flew this one too (2026-11-25): *"It looks pretty good, actually, both on Saturn and on Earth."* So this
+## is the order to keep until S3/S4 land — not a settled stack, but the least-wrong one, and the first time the
+## deck has been reliably visible on a thick atmosphere at all.
 const INTERIOR_RENDER_PRIORITY := -16
 const OCEAN_RENDER_PRIORITY := -8
 const AIR_RENDER_PRIORITY := 0

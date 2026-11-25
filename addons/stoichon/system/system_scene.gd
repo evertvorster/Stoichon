@@ -2558,6 +2558,13 @@ func _begin_publish(body: StoichonSceneBody, arrays: Array, lines: bool, publish
 		(record["directions"] as PackedVector3Array).size()
 	)
 	body.patch_height_frame = Engine.get_process_frames()
+	# **Behind `--debug`**: what this publish took hold of, so a flight can say which stage went wrong
+	# rather than which picture is missing. A publish is four stages now and they fail differently.
+	StoichonDebug.say("PUBLISH %s: %d verts, sea=%d, interior=%d, decks=%d, heights request=%d" % [
+		body.name, vertices.size(), (record["ocean"] as Array).size(),
+		(record["interior"] as Array).size(), (record["decks"] as Array).size(),
+		body.patch_height_request,
+	])
 	if body.patch_height_request < 0:
 		# No device: publish the datum, which is what the body drew before its relief existed.
 		_finish_publish(body)
@@ -2593,6 +2600,10 @@ func _poll_publishes(force := false) -> void:
 		if not force and Engine.get_process_frames() <= body.patch_height_frame:
 			continue
 		var heights := _heights_gpu.collect_heights(body.patch_height_request)
+		StoichonDebug.say("COLLECT %s: %d heights for %d directions" % [
+			body.name, heights.size(),
+			(body.patch_publish_record["directions"] as PackedVector3Array).size(),
+		])
 		body.patch_height_request = -1
 		if heights.size() != (body.patch_publish_record["directions"] as PackedVector3Array).size():
 			# **Say it, once.** No heights leaves the vertices on the datum and the ground draws as a smooth
@@ -2630,6 +2641,10 @@ func _finish_publish(body: StoichonSceneBody) -> void:
 	body.patch_publish_record = {}
 	if record.is_empty() or body.mesh == null:
 		return
+	StoichonDebug.say("FINISH %s: sea=%d published=%s" % [
+		body.name, (record["ocean"] as Array).size(),
+		"yes" if (body.ocean != null and not (record["ocean"] as Array).is_empty()) else "no",
+	])
 	_publish_patch(body, record)
 
 

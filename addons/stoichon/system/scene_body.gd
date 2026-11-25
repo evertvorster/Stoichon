@@ -216,6 +216,15 @@ var patch_arrays_wireframe := false
 ## build task already has. Empty when the body has no surface plan. See `StoichonSystemScene._prepare_heights`.
 var patch_directions := PackedVector3Array()
 var patch_input := PackedByteArray()
+## **A publish waiting on the device, then on its vertices being moved.** Three stages, one per field:
+## the heights request id, the arrays waiting for it, and the pool task that offsets them. A publish is a
+## frame or two behind the build by design — the mesh it replaces is still drawn meanwhile.
+var patch_height_request := -1
+var patch_height_frame := 0
+var patch_publish_arrays: Array = []
+var patch_publish_chunks: Array = []
+var patch_publish_lines := false
+var patch_offset_task := -1
 ## Triangles the mesh currently on the node holds. **Zero until the first build lands**, which is why a
 ## body draws nothing for its first frame or two rather than stalling the frame that asked for it.
 var patch_triangles := 0

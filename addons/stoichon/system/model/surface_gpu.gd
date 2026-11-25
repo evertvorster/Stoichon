@@ -41,6 +41,10 @@ var _device: RenderingDevice
 ##
 ## **Counted only once the RID exists**, so a failed create cannot leave a phantom and make `close()` cry wolf.
 var _rids_live := 0
+## Dispatches waiting to be collected: request id -> its RIDs and sizes. **A request in here holds three
+## live RIDs**, so it must be collected (or the device closed) before teardown.
+var _pending: Dictionary = {}
+var _next_request := 0
 var _shader: RID
 var _pipeline: RID
 ## **The heights pipeline**, compiled from the same field with a different kernel — see [method heights]. Separate
@@ -100,6 +104,16 @@ func open() -> bool:
 ## process teardown **segfaults on exit** (measured 2026-10-17 on the cloud port: exit 139 with no output,
 ## from a probe that had done its work and printed the result). It is an `Object`, so `free()` works.
 func close() -> void:
+	# **A dispatch never collected still holds its three RIDs**, and the "zero live" check at teardown is the
+	# only thing that would notice. Drop them here rather than leak them into the device's free().
+	if _device != null:
+		for request in _pending:
+			var entry: Dictionary = _pending[request]
+			_device.free_rid(entry["set"])
+			_device.free_rid(entry["in"])
+			_device.free_rid(entry["out"])
+			_rids_live -= 3
+	_pending.clear()
 	if _device != null and _heights_pipeline.is_valid():
 		_device.free_rid(_heights_pipeline)
 		_rids_live -= 1
@@ -179,11 +193,30 @@ static func pack_directions(directions: PackedVector3Array) -> PackedByteArray:
 
 
 ## **The heights for input already packed by [method pack_directions]** — no per-vertex loop here at all.
+##
+## Dispatch and collect in one call, which is what a test and the headless fallback want. The scene
+## does **not** use this: it dispatches one frame and collects the next, because `sync()` waits for the
+## GPU and waiting in the middle of a frame measured 4-5 ms of every publish. See [method dispatch_heights].
 func heights_packed(
 	plan_data: StoichonSurfaceField.Plan, input_bytes: PackedByteArray, count: int
 ) -> PackedFloat32Array:
-	if count <= 0 or input_bytes.is_empty() or not _open_heights():
+	var request := dispatch_heights(plan_data, input_bytes, count)
+	if request < 0:
 		return PackedFloat32Array()
+	return collect_heights(request)
+
+
+## **Dispatch the heights and return a request id** — no `sync()`, no readback. The work is queued on the
+## device and [method collect_heights] picks it up, which a caller that is a frame behind anyway can do on
+## its next tick for free.
+##
+## **-1 when there is nothing to do**: no device (headless), no directions, or a kernel that would not
+## compile. [method error] says which.
+func dispatch_heights(
+	plan_data: StoichonSurfaceField.Plan, input_bytes: PackedByteArray, count: int
+) -> int:
+	if count <= 0 or input_bytes.is_empty() or not _open_heights():
+		return -1
 	# **Padded to the workgroup**, so the kernel needs no bound and no number in the plan's block. The tail is
 	# discarded on read-back.
 	var padded := ceili(count / 64.0) * 64
@@ -197,7 +230,7 @@ func heights_packed(
 			_device.free_rid(in_buffer)
 		if out_buffer.is_valid():
 			_device.free_rid(out_buffer)
-		return PackedFloat32Array()
+		return -1
 	_rids_live += 2
 	last_microseconds["create"] = Time.get_ticks_usec() - marker
 
@@ -214,7 +247,7 @@ func heights_packed(
 		_device.free_rid(in_buffer)
 		_device.free_rid(out_buffer)
 		_rids_live -= 2
-		return PackedFloat32Array()
+		return -1
 	_rids_live += 1
 
 	# **The plan's block, at the size it declares** — 112 bytes, and the driver rejects anything else. `size` and the
@@ -229,15 +262,41 @@ func heights_packed(
 
 	marker = Time.get_ticks_usec()
 	_device.submit()
-	_device.sync()
 	last_microseconds["dispatch"] = Time.get_ticks_usec() - marker
-	marker = Time.get_ticks_usec()
+
+	_next_request += 1
+	_pending[_next_request] = {
+		"in": in_buffer, "out": out_buffer, "set": uniform_set,
+		"padded": padded, "count": count,
+	}
+	return _next_request
+
+
+## How many dispatches are waiting to be collected — for the tests, and for the scene's join.
+func pending_requests() -> int:
+	return _pending.size()
+
+
+## **Wait for the device and read a dispatch back.** This is where the CPU-GPU sync happens, so a caller
+## gives it a frame to have finished: after a frame of drawing, the `sync()` usually returns at once.
+func collect_heights(request: int) -> PackedFloat32Array:
+	var pending: Variant = _pending.get(request)
+	if pending == null:
+		return PackedFloat32Array()
+	_pending.erase(request)
+	var entry: Dictionary = pending
+	var padded: int = entry["padded"]
+	var count: int = entry["count"]
+	var out_buffer: RID = entry["out"]
+
+	var marker := Time.get_ticks_usec()
+	_device.sync()
 	var data := _device.buffer_get_data(out_buffer)
 	last_microseconds["readback"] = Time.get_ticks_usec() - marker
 
-	_device.free_rid(uniform_set)
-	_device.free_rid(in_buffer)
-	_device.free_rid(out_buffer)
+	_device.free_rid(entry["set"])
+	_device.free_rid(entry["in"])
+	_device.free_rid(entry["out"])
 	_rids_live -= 3
 
 	if data.size() != padded * 4:

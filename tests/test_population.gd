@@ -19,10 +19,6 @@ func run(h, root: Node) -> void:
 	_test_the_arithmetic(h)
 	_test_the_band(h)
 	_test_validation(h)
-	_test_the_field_fills_where_the_belt_is(h)
-	_test_the_field_empties_away_from_the_belt(h)
-	_test_a_fragment_does_not_move(h)
-	_test_sizes_follow_the_power_law(h)
 	_test_sol_authors_the_belt(h)
 	_test_a_fragment_is_significant(h)
 	_test_a_fragment_is_an_irregular_body(h)
@@ -54,42 +50,40 @@ func _belt() -> StoichonPopulation:
 ## the size floor by the power law, and the density is that divided by the belt's own volume.
 func _test_the_arithmetic(h) -> void:
 	var belt := _belt()
-	var addressable := StoichonPopulationField.addressable_count(belt)
+	var addressable := belt.count_at_or_above(belt.size_floor)
 	h.check_near(addressable, 1.1e11, "1.1 million above 1 km becomes 1.1e11 above 10 m", 1.0e8)
 
-	var volume := StoichonPopulationField.volume_of(belt)
+	var volume := belt.volume()
 	# 4/3 pi sin(20 deg) (a_hi^3 - a_lo^3): a shell as thick as the inclination makes it.
 	h.check_near(volume, 1.28e35, "the belt's volume", 1.0e33)
 
-	var density := StoichonPopulationField.density_of(belt)
+	var density := belt.density()
 	h.check_near(density, 8.6e-25, "fragments per cubic metre", 1.0e-26)
 
 	var spacing := pow(1.0 / density, 1.0 / 3.0)
 	h.check(spacing > 9.0e7 and spacing < 1.3e8, "the mean spacing is about 105,000 km")
 
-	var ball := StoichonPopulationField.spawn_radius_of(belt)
-	h.check(ball > 1.7e8 and ball < 2.1e8, "two dozen fragments are expected within ~188,000 km")
-
-	# The ball is by definition the radius that holds FIELD_COUNT fragments, so the density it is
-	# derived from and the density it implies agree. A test that cannot fail is not a test, so this
-	# one asks whether the two routes give the same number.
-	var implied := StoichonPopulationField.FIELD_COUNT / (4.0 / 3.0 * PI * pow(ball, 3.0))
-	h.check_near(implied, density, "the ball holds exactly FIELD_COUNT at that density", 1.0e-26)
+	# **The count at the floor IS the count at the reference**, because the author set them equal: this
+	# is the floor-as-count rule, and it is what makes raising the floor give fewer rocks.
+	h.check_near(belt.count_at_or_above(belt.reference_size), 1.1e6,
+		"the count at the reference size is the authored figure", 1.0)
+	h.check(belt.count_at_or_above(2000.0) < belt.count_at_or_above(1000.0) / 5.0,
+		"and doubling the floor leaves a fifth of the objects")
 
 
 func _test_the_band(h) -> void:
 	var belt := _belt()
-	h.check(StoichonPopulationField.in_band(belt, Vector3(2.5 * AU, 0.0, 0.0)), "2.5 AU on the plane is in the belt")
-	h.check(not StoichonPopulationField.in_band(belt, Vector3(1.0 * AU, 0.0, 0.0)), "1 AU is inside the inner edge")
-	h.check(not StoichonPopulationField.in_band(belt, Vector3(3.8 * AU, 0.0, 0.0)), "3.8 AU is outside the outer edge")
+	h.check(belt.contains( Vector3(2.5 * AU, 0.0, 0.0)), "2.5 AU on the plane is in the belt")
+	h.check(not belt.contains( Vector3(1.0 * AU, 0.0, 0.0)), "1 AU is inside the inner edge")
+	h.check(not belt.contains( Vector3(3.8 * AU, 0.0, 0.0)), "3.8 AU is outside the outer edge")
 	# sin(20 deg) is 0.342, so a fragment at 2.5 AU reaches z = 1.28e11 m and no further. The radius
 	# is measured to the fragment, so the point inside the band has to be placed at that radius.
 	var band_radius := 2.5 * AU
 	var high := band_radius * sin(deg_to_rad(20.0))
 	var across := sqrt(band_radius * band_radius - high * high)
-	h.check(StoichonPopulationField.in_band(belt, Vector3(across, 0.0, high * 0.99)),
+	h.check(belt.contains( Vector3(across, 0.0, high * 0.99)),
 		"just inside the top of the band")
-	h.check(not StoichonPopulationField.in_band(belt, Vector3(across, 0.0, high * 1.01)),
+	h.check(not belt.contains( Vector3(across, 0.0, high * 1.01)),
 		"just outside it")
 
 
@@ -140,87 +134,6 @@ func _system_with(population: StoichonPopulation) -> StoichonSolarSystem:
 	return system
 
 
-## At 2.5 AU the field has to fill, every fragment has to be in the band, and the distances have to be
-## the population's rather than the field's own choice.
-func _test_the_field_fills_where_the_belt_is(h) -> void:
-	var field := StoichonPopulationField.new(_belt())
-	var ship := Vector3(2.5 * AU, 0.0, 0.0)
-	field.update(Vector3.ZERO, SUN_MU, ship, 0.0)
-
-	var fragments := field.fragments()
-	h.check(fragments.size() == StoichonPopulationField.FIELD_COUNT,
-		"the field fills inside the belt (%d fragments)" % fragments.size())
-
-	var reach := StoichonPopulationField.spawn_radius_of(_belt())
-	var nearest := INF
-	var worst := 0.0
-	var all_in_band := true
-	for fragment in fragments:
-		var where := field.position_of(fragment, Vector3.ZERO)
-		var distance := where.distance_to(ship)
-		nearest = minf(nearest, distance)
-		worst = maxf(worst, distance)
-		all_in_band = all_in_band and StoichonPopulationField.in_band(_belt(), where)
-	h.check(all_in_band, "every fragment is inside the band")
-	h.check(worst <= reach + 1.0, "no fragment is outside the ball the field draws in")
-	h.check(nearest < reach * 0.6, "the nearest is well inside it (%.0f km)" % (nearest / 1.0e3))
-	h.check(nearest > 1.0e7, "and far enough that it is not on top of the ship")
-
-## One AU from the Sun is Earth: outside the band, so the population has nothing there and the field
-## says so rather than inventing a belt.
-func _test_the_field_empties_away_from_the_belt(h) -> void:
-	var field := StoichonPopulationField.new(_belt())
-	field.update(Vector3.ZERO, SUN_MU, Vector3(AU, 0.0, 0.0), 0.0)
-	h.check(field.fragments().is_empty(), "no fragments at 1 AU")
-
-
-## **Nothing moves yet, and the orbit is known anyway** — the same arrangement the planets and moons
-## have. Evert, 2026-11-14: *"in theory we know which direction and speed they will be traveling in, but
-## for simplicity's sake nothing is moving yet."*
-##
-## So there are two halves to check: the position does not change, and the motion that is *known* is the
-## right one, waiting to be applied.
-func _test_a_fragment_does_not_move(h) -> void:
-	var field := StoichonPopulationField.new(_belt())
-	var ship := Vector3(2.5 * AU, 0.0, 0.0)
-	field.update(Vector3.ZERO, SUN_MU, ship, 0.0)
-	var fragment: StoichonPopulationField.Fragment = field.fragments()[0]
-	var start := field.position_of(fragment, Vector3.ZERO)
-
-	# A minute of the tick, five times over, and the rock is where it was.
-	for _step in 300:
-		field.update(Vector3.ZERO, SUN_MU, ship, 1.0)
-	h.check_vector_near(field.position_of(fragment, Vector3.ZERO), start,
-		"a fragment does not move across five minutes of ticks", 1.0e-6)
-
-	# **The motion it will have is still the right one**: a circular orbit at its radius, in the parent's
-	# field. Asserted so that the knowledge cannot rot while nothing uses it.
-	var rate := sqrt(SUN_MU / pow(fragment.radius, 3.0))
-	h.check_near(fragment.rate, rate, "its rate is the circular one for its radius", 1.0e-15)
-	h.check_near(fragment.velocity().length(), rate * fragment.radius,
-		"and its speed is rate x radius", 1.0e-6)
-	h.check(fragment.velocity().dot(fragment.u) < 1.0e-6,
-		"travelling across the radius, not along it")
-	h.check(fragment.velocity().length() > 1.0e3,
-		"which at 2.5 AU is kilometres per second, not metres")
-
-## N(>D) ~ D^-2.5, so a 10 m floor makes almost everything 10 to 20 metres across. That is what the
-## real size distribution says, and the field has to draw from it rather than around it.
-func _test_sizes_follow_the_power_law(h) -> void:
-	var field := StoichonPopulationField.new(_belt())
-	field.update(Vector3.ZERO, SUN_MU, Vector3(2.5 * AU, 0.0, 0.0), 0.0)
-	var small := 0
-	for fragment in field.fragments():
-		h.check(fragment.diameter >= 10.0 and fragment.diameter <= 5.0e5,
-			"%s is between the floor and the ceiling" % fragment.designation)
-		if fragment.diameter < 20.0:
-			small += 1
-	# The median of u^-0.4 is 1.32, so half of the draws are under 13.2 m and nearly all are
-	# under 20: a field where most fragments are metres-scale is the distribution working.
-	h.check(small > StoichonPopulationField.FIELD_COUNT / 2,
-		"most fragments are under 20 m (%d of %d)" % [small, field.fragments().size()])
-
-
 func _test_sol_authors_the_belt(h) -> void:
 	var sol: StoichonSolarSystem = SOL
 	h.check(sol != null, "the Sol system loads")
@@ -233,7 +146,7 @@ func _test_sol_authors_the_belt(h) -> void:
 	h.check(belt.parent_id == "star:sol", "and it orbits the star")
 	h.check_near(belt.semi_major_axis.x, 2.1 * AU, "its inner edge is 2.1 AU", 1.0e6)
 	h.check_near(belt.semi_major_axis.y, 3.3 * AU, "its outer edge is 3.3 AU", 1.0e6)
-	h.check(StoichonPopulationField.density_of(belt) > 0.0, "and it has a density")
+	h.check(belt.density() > 0.0, "and it has a density")
 
 
 ## **A fragment is significant from the moment it exists** — it sets the local travel unit, so it has to
@@ -327,23 +240,24 @@ func _test_the_belt_reaches_the_marker_pool(h, root: Node) -> void:
 	scene.build(root)
 
 	var belt := sol.population_by_id("population:main_belt")
-	var field := StoichonPopulationField.new(belt)
 	var ship := Vector3(2.5 * AU, 0.0, 0.0)
-	field.update(Vector3.ZERO, SUN_MU, ship, 0.0)
-	h.check(field.fragments().size() == StoichonPopulationField.FIELD_COUNT,
-		"the field is full at 2.5 AU (%d fragments)" % field.fragments().size())
+	# **The nearest few rocks of Sol's real belt**, which is what the game hands the managers each tick:
+	# the same query, on the same content, at the same place.
+	var belt_rocks := StoichonPopulationRocks.of(belt)
+	var near: Array[int] = belt_rocks.nearest_n(ship, 4, 1.0e11)
+	h.check(near.size() == 4, "four rocks are in reach at 2.5 AU (%d)" % near.size())
 
 	var markers := StoichonMarkers.new()
 	root.add_child(markers)
 	markers.orbits = scene.orbit_parents()
 
-	# **Rocks are nodes now, exactly like the moons beside them**: the manager makes a body per fragment, and
-	# the marker path reads one list. This is the real route rather than a hand-built one.
+	# **Rocks are nodes, exactly like the moons beside them**: the manager makes a body per rock, and the
+	# marker path reads one list. This is the real route rather than a hand-built one.
 	var bodies := StoichonFragmentBodies.new(belt, scene)
 	root.add_child(bodies)
 	var camera := Camera3D.new()
 	root.add_child(camera)
-	bodies.update(field.pieces(Vector3.ZERO), ship, camera, _pixel(camera), false)
+	bodies.update(belt_rocks.pieces(Vector3.ZERO, near), ship, camera, _pixel(camera), false)
 	var context: Array[Node3D] = scene.significant_nodes()
 	var rock_nodes := {}
 	for rock in bodies.rocks():
@@ -351,8 +265,8 @@ func _test_the_belt_reaches_the_marker_pool(h, root: Node) -> void:
 			continue
 		context.append(rock.node)
 		rock_nodes[rock.node] = true
-	h.check(rock_nodes.size() == StoichonPopulationField.FIELD_COUNT,
-		"every fragment is a body with a node (%d)" % rock_nodes.size())
+	h.check(rock_nodes.size() == near.size(),
+		"every rock the query chose is a body with a node (%d)" % rock_nodes.size())
 	markers.context_targets = context
 	markers.rocks = rock_nodes
 
@@ -387,25 +301,25 @@ func _test_the_belt_reaches_the_marker_pool(h, root: Node) -> void:
 	markers.free()
 
 
-## **A fragment is built by the scene's own body path**, so it is a body like a moon: same node, same
-## frame, same dispatch, same builder. What this checks is the thing a class of its own got wrong — that
-## nothing was re-implemented — and that the bodies come and go with the field.
+## **A rock is built by the scene's own body path**, so it is a body like a moon: same node, same frame,
+## same dispatch, same builder. What this checks is the thing a class of its own got wrong — that nothing
+## was re-implemented — and that the bodies come and go with the rocks the query offers.
 func _test_a_fragment_becomes_a_body(h, root: Node) -> void:
 	var sol: StoichonSolarSystem = SOL
 	var scene := StoichonSystemScene.from_content(sol)
 	scene.build(root)
 	var belt := sol.population_by_id("population:main_belt")
-	var field := StoichonPopulationField.new(belt)
+	var rocks := StoichonPopulationRocks.of(belt)
 	var bodies := StoichonFragmentBodies.new(belt, scene)
 	root.add_child(bodies)
 	var camera := Camera3D.new()
 	root.add_child(camera)
 
 	var ship := Vector3(2.5 * AU, 0.0, 0.0)
-	field.update(Vector3.ZERO, SUN_MU, ship, 0.0)
-	bodies.update(field.pieces(Vector3.ZERO), ship, camera, _pixel(camera), false)
-	h.check(bodies.count() == StoichonPopulationField.FIELD_COUNT,
-		"one body per fragment the field holds (%d)" % bodies.count())
+	var near: Array[int] = rocks.nearest_n(ship, 4, 1.0e11)
+	bodies.update(rocks.pieces(Vector3.ZERO, near), ship, camera, _pixel(camera), false)
+	h.check(bodies.count() == near.size(),
+		"one body per rock the query offers (%d)" % bodies.count())
 
 	# **Under the system frame, beside the planets** — not in a container of its own, where a frame
 	# transform would apply to the bodies and not to the rocks.
@@ -438,12 +352,14 @@ func _test_a_fragment_becomes_a_body(h, root: Node) -> void:
 			places += 1
 	h.check(places == 0, "so no marker or save sees one")
 
-	# The field drops them when the ship leaves, and the bodies go with them — **and the frames with those**,
-	# or the tree would accumulate a coordinate space per rock ever approached.
+	# **A rock far from the eye is no longer offered**, and the bodies go with it — **and the frames with
+	# those**, or the tree would accumulate a coordinate space per rock ever approached. A mile from the
+	# belt the query returns nothing, which is the same condition the old field's drop stood for.
 	var rules_before := scene.frame_tree._rules.size()
-	field.update(Vector3.ZERO, SUN_MU, Vector3(AU, 0.0, 0.0), 1.0)
-	bodies.update(field.pieces(Vector3.ZERO), Vector3(AU, 0.0, 0.0), camera, _pixel(camera), false)
-	h.check(bodies.count() == 0, "and a body is freed when the field drops its fragment")
+	var far := rocks.nearest_n(Vector3(AU, 0.0, 0.0), 4, 1.0e11)
+	h.check(far.is_empty(), "a query from 1 AU offers no rock")
+	bodies.update(rocks.pieces(Vector3.ZERO, far), Vector3(AU, 0.0, 0.0), camera, _pixel(camera), false)
+	h.check(bodies.count() == 0, "and a body is freed when its rock is no longer offered")
 	h.check(scene.frame_tree._rules.size() < rules_before, "and its frame's rules go with it")
 
 	root.remove_child(bodies)
@@ -476,7 +392,7 @@ func _test_the_rocks_are_the_population(h) -> void:
 	var largest := 0.0
 	for rock in range(0, rocks.count(), step):
 		sampled += 1
-		if not StoichonPopulationField.in_band(belt, rocks.position_of(rock)):
+		if not belt.contains( rocks.position_of(rock)):
 			outside += 1
 		smallest = minf(smallest, rocks.diameter_of(rock))
 		largest = maxf(largest, rocks.diameter_of(rock))

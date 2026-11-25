@@ -138,10 +138,29 @@ static func _materials() -> StoichonMaterialTable:
 	return StoichonMaterialTable.engine_table()
 
 
-## The content revision this scene came from. A save records it so a mismatch is visible rather
-## than silent.
+## **The content revision this scene came from, DERIVED rather than authored.** A save records it so a
+## mismatch is visible rather than silent — and it was silent for months, because `content_version` was
+## a constant `1` in the content and nothing bumped it when twenty moons were added. A save could not
+## tell that a body it named had gone, so the loader placed the player at the origin of a frame that no
+## longer existed.
+##
+## The authored number stays as a floor an author can raise by hand, for a change the identity below
+## cannot see; what actually moves it is every body's and population's `id`, with a body's radius and a
+## population's count beside them. Deterministic across runs and machines, so two builds of one content
+## agree.
 func content_version() -> int:
-	return content.content_version if content != null else 0
+	if content == null:
+		return 0
+	var shape := PackedStringArray([str(content.content_version)])
+	for body in content.bodies:
+		if body == null:
+			continue
+		shape.append("%s/%.3f" % [body.id, body.radius])
+	for population in content.populations:
+		if population == null:
+			continue
+		shape.append("%s/%d" % [population.id, population.count])
+	return hash(shape)
 
 
 ## **Let a body go that was built for a moment** — a rock that has left the field. Its frame goes first,
@@ -660,15 +679,24 @@ func _aim_zone_under(subject: Node3D, frame: StoichonFrame) -> void:
 func place_observer(location: StoichonLocation) -> bool:
 	if frame_tree.observer == null or location == null or not location.is_set():
 		return false
-	var exact := frame_tree.frame_by_id(location.frame_id) != null
-	var frame := frame_tree.resolve_frame(location.frame_id)
-	if frame == null:
+	var exact := frame_tree.frame_by_id(location.frame_id)
+	if exact == null:
+		# **A save that names a frame the system no longer has goes to the system's START, not to that
+		# frame's origin.** The fallback used to resolve a surviving frame and place the observer at
+		# `Vector3.ZERO` in it — which for the system frame is the centre of the star and for a surface
+		# frame the centre of its body. Evert saw the result once: *"on the surface of Sol"*. The start
+		# position is the one placement in the system somebody chose, and `ship_start()` answers it for a
+		# system with no `start_body_id` too.
+		if system_frame == null:
+			return false
+		frame_tree.place_in_frame(frame_tree.observer, system_frame, ship_start())
+		frame_tree.enter_frame(system_frame)
 		return false
-	frame_tree.place_in_frame(frame_tree.observer, frame, location.position if exact else Vector3.ZERO)
-	frame_tree.enter_frame(frame)
-	if frame.kind == Frame.Kind.SURFACE:
-		_aim_zone_under(frame_tree.observer, frame)
-	return exact
+	frame_tree.place_in_frame(frame_tree.observer, exact, location.position)
+	frame_tree.enter_frame(exact)
+	if exact.kind == Frame.Kind.SURFACE:
+		_aim_zone_under(frame_tree.observer, exact)
+	return true
 
 
 func _parent_id_of(body: StoichonSceneBody) -> String:

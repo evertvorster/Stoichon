@@ -80,3 +80,46 @@ extends Resource
 @export var size_floor: float = 10.0
 ## The largest, where the power law is clamped — it is only valid below ~100 km, and Ceres is 940.
 @export var size_ceiling: float = 5.0e5
+
+
+## **The volume the population occupies**: a shell between the two semi-major axes, as thick as the
+## inclination band makes it. `z` of an object at radius r on an orbit inclined by i never exceeds
+## `r·sin i`, so the shell's half-thickness is `r·sin(i_max)` — the same band [method contains]
+## tests, and the number every count is divided by.
+func volume() -> float:
+	var inner := semi_major_axis.x
+	var outer := semi_major_axis.y
+	if inner <= 0.0 or outer <= inner:
+		return 0.0
+	var half := sin(deg_to_rad(clampf(inclination.y, 0.0, 90.0)))
+	return 4.0 / 3.0 * PI * half * (pow(outer, 3.0) - pow(inner, 3.0))
+
+
+## Whether a point, **relative to the parent body's centre**, is inside the band.
+##
+## **The band's vertical axis is `z`.** A builder that puts the height in `y` produces objects that
+## fail this test and look like a placement fault elsewhere.
+func contains(local: Vector3) -> bool:
+	var radius := local.length()
+	if radius < semi_major_axis.x or radius > semi_major_axis.y:
+		return false
+	var half := sin(deg_to_rad(clampf(inclination.y, 0.0, 90.0)))
+	return absf(local.z) <= radius * half
+
+
+## How many objects are at or above `size`. `N(>D)` falls as `D^-size_index`, anchored at
+## [member count] at [member reference_size] — so the floor a population is drawn at IS its count,
+## and raising the floor is how you get fewer.
+func count_at_or_above(size: float) -> float:
+	if reference_size <= 0.0 or size <= 0.0 or count <= 0:
+		return 0.0
+	return float(count) * pow(size / reference_size, -size_index)
+
+
+## Objects per cubic metre at or above [member size_floor] — the density the geometry is placed at,
+## rather than the density of the material.
+func density() -> float:
+	var space := volume()
+	if space <= 0.0:
+		return 0.0
+	return count_at_or_above(size_floor) / space

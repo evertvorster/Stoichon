@@ -232,10 +232,18 @@ func _test_putting_the_ship_back(h, system: StoichonSystemScene, ship: Node3D) -
 		not system.place_observer(Location.new("planet:gone/surface", Vector3.ZERO)),
 		"a frame the system no longer has falls back rather than refusing the save"
 	)
+	# **To the system's START, not to that frame's origin.** The stored position would mean something
+	# else in another frame — but the origin of a surface frame is the centre of its body, and the origin
+	# of the system frame is the centre of the star, so the old fallback placed the observer *inside*
+	# something. Evert saw it once: "on the surface of Sol".
 	h.check(
-		system.frame_tree.observer.position == Vector3.ZERO,
-		"to that frame's origin, because the stored position would mean something else there"
+		system.frame_tree.active_frame == system.system_frame,
+		"into the system frame"
 	)
+	h.check_vector_near(system.frame_tree.observer.position, system.ship_start(),
+		"at the start position, which is a placement somebody chose", 1.0)
+	h.check(system.ship_start().length() > 0.0,
+		"and the start is not the system's origin, so this is not 'inside the star'")
 	h.check(ship != null, "and the ship is still the observer")
 
 

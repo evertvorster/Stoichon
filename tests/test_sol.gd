@@ -343,7 +343,14 @@ func _test_the_scene_places_them(h, sol: StoichonSolarSystem, root: Node) -> voi
 		return
 
 	h.check(scene.name == "Sol", "and names itself after its star: '%s'" % scene.name)
-	h.check(scene.content_version() == sol.content_version, "and knows its content version")
+	# **Derived, so it moves when the content does.** A constant `1` could not tell a save that a body it
+	# named had gone.
+	h.check(scene.content_version() != 0, "and derives a content version (%d)" % scene.content_version())
+	var before := scene.content_version()
+	sol.bodies.append(sol.bodies[1].duplicate(true))
+	h.check(scene.content_version() != before, "which moves when a body is added")
+	sol.bodies.pop_back()
+	h.check(scene.content_version() == before, "and comes back when it goes again")
 
 	var star := scene.body_by_id("star:sol")
 	var earth := scene.body_by_id("planet:earth")

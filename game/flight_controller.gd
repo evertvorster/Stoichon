@@ -114,7 +114,12 @@ func _update_proximity() -> void:
 	# out there, and the readout has to be able to name it.
 	nearest_name = "—"
 	if _nearest_body != null:
-		nearest_name = _nearest_body.name if _nearest_body.node == null else _nearest_body.node.name
+		# **`String(...)` on both branches**, because `Node.name` is a `StringName` and the scale body's is a
+		# `String`: a ternary whose arms are two different types is a warning, and the assignment's type
+		# would be whatever the parser picked rather than what is intended.
+		nearest_name = (
+			_nearest_body.name if _nearest_body.node == null else String(_nearest_body.node.name)
+		)
 
 
 ## Altitude above the nearest significant surface, in metres.

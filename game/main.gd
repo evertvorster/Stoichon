@@ -750,7 +750,6 @@ func _place_camera() -> void:
 
 
 func _update_view(delta: float) -> void:
-	var eye: Transform3D = _camera.get_global_transform_interpolated()
 	var observer: Vector3 = _ship.get_global_transform_interpolated().origin
 	_system.aim_sun_at(observer)
 	# **The air rides on the bodies themselves** (`air_shell.gdshader`, one shell per band), so nothing about it is
@@ -938,8 +937,8 @@ func _update_rocks(eye: Vector3, pixel: float) -> void:
 	# **What else is near**, so a ring can tell whether it is what the ship is flying through. The system's own
 	# bodies only: a rock's nearest spot is what is being compared, not another rock.
 	var other := INF
-	for scale in _system_scale:
-		other = minf(other, scale.surface_distance_to(eye))
+	for body in _system_scale:
+		other = minf(other, body.surface_distance_to(eye))
 	for index in _system.rings.size():
 		var view := _system.rings[index]
 		var manager := _system.ring_bodies[index]

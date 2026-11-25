@@ -262,9 +262,15 @@ static func _in(entries: Array[Dictionary], id: int) -> bool:
 ## An object's own screen position, **not clamped**: the ring marks where the thing is, and it is the
 ## label that stays in view.
 func _project(position: Vector3, camera: Camera3D, viewport_size: Vector2) -> Vector2:
-	if is_behind(camera, position):
-		# unproject_position mirrors for anything behind the camera, so that case is computed from
-		# the camera's own transform instead.
+	# One camera-space transform for both tests, and **the second one is not the same case as the first**:
+	# `unproject_position` divides by this z, so a marker exactly on the camera's plane has no screen
+	# position at all — the engine prints `Condition "p.d == 0"` and answers the origin, which throws the
+	# label into a corner of the frame. Both cases want the edge treatment: off the depth of the picture
+	# rather than inside it.
+	var to_eye: Vector3 = camera.get_global_transform_interpolated().affine_inverse() * position
+	if to_eye.z > 0.0 or absf(to_eye.z) < 1.0e-9:
+		# Camera space looks down -Z, so a positive z is behind the eye. unproject_position mirrors for
+		# anything behind the camera, so that case is computed from the camera's own transform instead.
 		return viewport_size * 0.5 + screen_direction(camera, position) * OFF_SCREEN_REACH
 	return camera.unproject_position(position)
 

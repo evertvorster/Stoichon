@@ -2395,7 +2395,17 @@ static func offset_vertices(
 		vertices[index] += directions[index] * metres
 
 
-func _publish_patch(body: StoichonSceneBody, arrays: Array, lines: bool, published: Array) -> void:
+func _publish_patch(body: StoichonSceneBody, record: Dictionary) -> void:
+	# **Everything this draws comes out of `record`, never off the body.** A publish now spans two frames, so a
+	# build can land in the middle of one — and every array here (`ocean_arrays`, `interior_arrays`,
+	# `sphere_arrays`, each deck's `arrays`, `patch_arrays_origin`) is written by that worker. Reading them at
+	# publish time drew, at best, a newer lattice than the ground beside it, and at worst nothing: each publish
+	# empties the fields it consumed, so a second publish over the same build assigned a NULL mesh to the sea.
+	# That is the ocean that took a while to appear.
+	var arrays: Array = record["arrays"]
+	var lines: bool = record["lines"]
+	var published: Array = record["chunks"]
+	var origin: Vector3 = record["origin"]
 	body.mesh.mesh = (
 		StoichonPatches.lines_mesh_from(arrays) if lines
 		else StoichonPatches.mesh_from(arrays)
@@ -2403,13 +2413,11 @@ func _publish_patch(body: StoichonSceneBody, arrays: Array, lines: bool, publish
 	# **The vertices are metres from this origin**, so the node carries the origin and drops the radius scale —
 	# and the pair is written here, beside the mesh, so the transform can never describe a different build. The
 	# scale has to be 1: a basis holding 6,371,000 is what rounded every vertex at 0.76 m (see `rebase`).
-	_teleport(body.mesh, body.patch_arrays_origin)
+	_teleport(body.mesh, origin)
 	# **The origin the vertices are measured from, for the normal.** The mesh carries no normal array: the surface's
 	# direction is `VERTEX + patch_origin`, computed in the vertex stage. Published beside the transform it belongs
 	# to, so the two cannot describe different builds.
-	(body.mesh_material as ShaderMaterial).set_shader_parameter(
-		"patch_origin", body.patch_arrays_origin
-	)
+	(body.mesh_material as ShaderMaterial).set_shader_parameter("patch_origin", origin)
 	# **A deck is the SAME lattice, translated to its level** — so it publishes here, beside the ground, from the
 	# arrays the same worker task built out of the same selection. Its node has scale 1 and the origin on its
 	# position for the reason the ground's does (see `rebase`), and `patch_origin` goes on its material for the
@@ -2417,17 +2425,20 @@ func _publish_patch(body: StoichonSceneBody, arrays: Array, lines: bool, publish
 	#
 	# **An empty build publishes nothing and the old mesh stays**, exactly as for the ground: a deck one selection
 	# stale is worth more than a frame with the clouds gone.
-	for deck in body.decks:
+	for entry in record["decks"]:
+		var deck: StoichonSceneBody.Deck = entry["deck"]
+		var deck_arrays: Array = entry["arrays"]
+		var deck_lines: bool = entry["lines"]
+		if deck_arrays.is_empty():
+			continue
 		deck.node.mesh = (
-			StoichonPatches.lines_mesh_from(deck.arrays) if deck.arrays_lines
-			else StoichonPatches.mesh_from(deck.arrays)
+			StoichonPatches.lines_mesh_from(deck_arrays) if deck_lines
+			else StoichonPatches.mesh_from(deck_arrays)
 		)
-		var deck_lines := deck.arrays_lines
-		deck.arrays = []
 		if deck.node.mesh == null:
 			continue
-		_teleport(deck.node, deck.origin)
-		(deck.material as ShaderMaterial).set_shader_parameter("patch_origin", deck.origin)
+		_teleport(deck.node, entry["origin"])
+		(deck.material as ShaderMaterial).set_shader_parameter("patch_origin", entry["origin"])
 		# **The material follows the VIEW, and the switch does not touch it**: in a wireframe the deck wears the
 		# same unshaded line material the ground does, and otherwise the cloud's own. Published only when it is
 		# different and never as null — an empty `material_override` falls back to the engine's unshaded default,
@@ -2439,32 +2450,29 @@ func _publish_patch(body: StoichonSceneBody, arrays: Array, lines: bool, publish
 		if deck.node.material_override != deck_wanted:
 			deck.node.material_override = deck_wanted
 	# **The sea**, from the same walk and the same array: it is the ground's own points at ratio 1.0.
-	if body.ocean != null:
-		body.ocean.mesh = StoichonPatches.mesh_from(body.ocean_arrays)
-		body.ocean_arrays = []
+	if body.ocean != null and not (record["ocean"] as Array).is_empty():
+		body.ocean.mesh = StoichonPatches.mesh_from(record["ocean"])
 		if body.ocean.mesh != null:
-			_teleport(body.ocean, body.ocean_arrays_origin)
+			_teleport(body.ocean, record["ocean_origin"])
 			(body.ocean_material as ShaderMaterial).set_shader_parameter(
-				"patch_origin", body.ocean_arrays_origin
+				"patch_origin", record["ocean_origin"]
 			)
 	# **The interior floor**, from the same walk and scaled to its own radius — the same lattice as the decks
 	# above it, so the two cannot disagree about where the body is.
-	if body.interior != null:
-		body.interior.mesh = StoichonPatches.mesh_from(body.interior_arrays)
-		body.interior_arrays = []
+	if body.interior != null and not (record["interior"] as Array).is_empty():
+		body.interior.mesh = StoichonPatches.mesh_from(record["interior"])
 		if body.interior.mesh != null:
-			_teleport(body.interior, body.interior_arrays_origin)
+			_teleport(body.interior, record["interior_origin"])
 			(body.interior_material as ShaderMaterial).set_shader_parameter(
-				"patch_origin", body.interior_arrays_origin
+				"patch_origin", record["interior_origin"]
 			)
 	# **The datum lattice's lines**, published beside the rest from the same walk — same points, same origin, nothing
 	# translated. Unlike a deck this is never "kept from the last build": a stale sphere would be a different
 	# subdivision from the surface beside it, which is the one thing the view exists to disprove.
-	if body.sphere != null:
-		body.sphere.mesh = StoichonPatches.lines_mesh_from(body.sphere_arrays)
-		body.sphere_arrays = []
+	if body.sphere != null and not (record["sphere"] as Array).is_empty():
+		body.sphere.mesh = StoichonPatches.lines_mesh_from(record["sphere"])
 		if body.sphere.mesh != null:
-			_teleport(body.sphere, body.patch_arrays_origin)
+			_teleport(body.sphere, origin)
 	# **A material is published only when it is a different material**, and never a null one: assigning
 	# `material_override = null` silently falls back to the engine's default material, which is unshaded —
 	# it reads as "the surface lost its shading", far from the line that did it.
@@ -2496,9 +2504,24 @@ func _publish_patch(body: StoichonSceneBody, arrays: Array, lines: bool, publish
 ##
 ## **With nothing to translate the publish is immediate**: a body with no surface plan, or the setting off.
 func _begin_publish(body: StoichonSceneBody, arrays: Array, lines: bool, published: Array) -> void:
-	body.patch_publish_arrays = arrays
-	body.patch_publish_lines = lines
-	body.patch_publish_chunks = published
+	# **Capture everything this publish will draw, now.** The build that follows may land while this publish is
+	# still waiting on the device, and it writes every one of these fields — so the record is taken here, on the
+	# main thread, from arrays whose task has just been awaited.
+	body.patch_publish_record = {
+		"arrays": arrays,
+		"lines": lines,
+		"chunks": published,
+		"origin": body.patch_arrays_origin,
+		"ocean": body.ocean_arrays,
+		"ocean_origin": body.ocean_arrays_origin,
+		"interior": body.interior_arrays,
+		"interior_origin": body.interior_arrays_origin,
+		"sphere": body.sphere_arrays,
+		"decks": _capture_decks(body),
+	}
+	body.ocean_arrays = []
+	body.interior_arrays = []
+	body.sphere_arrays = []
 	if body.surface_plan == null or not bool(StoichonSettings.get_value("render.surface_translation")):
 		body.patch_directions = PackedVector3Array()
 		body.patch_input = PackedByteArray()
@@ -2518,6 +2541,17 @@ func _begin_publish(body: StoichonSceneBody, arrays: Array, lines: bool, publish
 	if body.patch_height_request < 0:
 		# No device: publish the datum, which is what the body drew before its relief existed.
 		_finish_publish(body)
+
+
+## Each deck's arrays and the origin they go with, taken out of the body so a later build cannot overwrite them.
+func _capture_decks(body: StoichonSceneBody) -> Array:
+	var list: Array = []
+	for deck in body.decks:
+		list.append({
+			"deck": deck, "arrays": deck.arrays, "origin": deck.origin, "lines": deck.arrays_lines,
+		})
+		deck.arrays = []
+	return list
 
 
 ## **Stages two and three**: collect a dispatch that has had a frame, hand the vertices to the pool to be moved,
@@ -2560,27 +2594,26 @@ func _poll_publishes(force := false) -> void:
 ## **Runs on a worker thread**: the ground's vertices, moved radially to their real heights. The arrays belong
 ## to this publish alone (the build made them), so nothing else reads them while this runs.
 func _apply_offsets(body: StoichonSceneBody, heights: PackedFloat32Array) -> void:
-	var vertices: PackedVector3Array = body.patch_publish_arrays[0]
+	var record: Dictionary = body.patch_publish_record
+	var arrays: Array = record["arrays"]
+	var vertices: PackedVector3Array = arrays[0]
 	offset_vertices(
 		vertices, body.patch_directions, heights, body.sea_level, body.surface_plan.amplitude
 	)
-	body.patch_publish_arrays[0] = vertices
+	arrays[0] = vertices
 
 
 ## **The publish when the vertices are final**: the mesh, the transform, the decks, the sea and the wireframe.
 func _finish_publish(body: StoichonSceneBody) -> void:
-	var arrays := body.patch_publish_arrays
-	var lines := body.patch_publish_lines
-	var published := body.patch_publish_chunks
-	body.patch_publish_arrays = []
-	body.patch_publish_chunks = []
+	var record := body.patch_publish_record
+	body.patch_publish_record = {}
 	# **Released once spent**: a direction per vertex is 24 bytes and the packed input 16, so keeping them
 	# between publishes would hold a megabyte per body for data that is only ever read once.
 	body.patch_directions = PackedVector3Array()
 	body.patch_input = PackedByteArray()
-	if arrays.is_empty() or body.mesh == null:
+	if record.is_empty() or body.mesh == null:
 		return
-	_publish_patch(body, arrays, lines, published)
+	_publish_patch(body, record)
 
 
 ## **Join every rebuild in flight**, for a rig that has to know the mesh exists before it looks.

@@ -221,9 +221,10 @@ var patch_input := PackedByteArray()
 ## frame or two behind the build by design — the mesh it replaces is still drawn meanwhile.
 var patch_height_request := -1
 var patch_height_frame := 0
-var patch_publish_arrays: Array = []
-var patch_publish_chunks: Array = []
-var patch_publish_lines := false
+## **One publish, captured**: `{arrays, lines, chunks, origin, ocean, ocean_origin, interior,
+## interior_origin, sphere, decks}`. Taken when the build lands, because a build that follows writes every
+## field this publish would otherwise read — and a publish now spans two frames.
+var patch_publish_record: Dictionary = {}
 var patch_offset_task := -1
 ## Triangles the mesh currently on the node holds. **Zero until the first build lands**, which is why a
 ## body draws nothing for its first frame or two rather than stalling the frame that asked for it.

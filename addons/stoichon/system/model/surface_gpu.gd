@@ -164,7 +164,10 @@ func heights(plan_data: StoichonSurfaceField.Plan, directions: PackedVector3Arra
 		input[index * 4 + 2] = unit.z
 
 	var marker := Time.get_ticks_usec()
-	var in_buffer := _device.storage_buffer_create(input.to_byte_array().size(), input.to_byte_array())
+	# **One conversion, not two.** `input.to_byte_array()` allocates and copies the whole array — 832 KB at 52 000
+	# directions — and it was being called twice in one expression, once for the length and once for the data.
+	var input_bytes := input.to_byte_array()
+	var in_buffer := _device.storage_buffer_create(input_bytes.size(), input_bytes)
 	var out_buffer := _device.storage_buffer_create(padded * 4)
 	if not in_buffer.is_valid() or not out_buffer.is_valid():
 		_error = "storage_buffer_create() gave an invalid RID"

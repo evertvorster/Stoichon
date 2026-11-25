@@ -490,11 +490,22 @@ static func deck_material(
 ## never built). If it does not stop, the tie is innocent and the 2026-10-20 rotation-triggered air dimming is
 ## the same fault, which was never explained.
 ##
-## One flight decides it. Do not merge this to `main` on its own: it fixes one view and breaks the other.
+## **The flight answered the first question.** With the deck BELOW the air (base −1) Saturn is a blue ball:
+## the air composites with alpha near 1 and buries the deck, and turning the atmosphere off in the settings
+## brings the clouds back. Earth is fine — its air is thin enough to see through. So the tie was the flicker,
+## and the burying is the air being ONE shell over the whole column, which is the gap `Atmospheric Shell Stack
+## Plan` S3/S4 names: split the air at the deck's base and order the pieces from the eye's radius.
+##
+## Until that exists, this is the order the unstable tie was picking on the frames where the deck *did* show:
+## the deck drawn AFTER the air. It makes the good frame permanent. It is still wrong about the air above the
+## deck — which is thin, which is why it reads acceptably — and it is not the fix; it is the least-wrong
+## static order while S3/S4 are designed.
+##
+## Do not merge this to `main` on its own.
 const INTERIOR_RENDER_PRIORITY := -16
 const OCEAN_RENDER_PRIORITY := -8
 const AIR_RENDER_PRIORITY := 0
-const DECK_PRIORITY_BASE := -1
+const DECK_PRIORITY_BASE := 1
 
 
 static func interior_material(body: StoichonSceneBody, palette: Color) -> ShaderMaterial:

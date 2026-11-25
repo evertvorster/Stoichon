@@ -527,8 +527,7 @@ static func condensation_levels(
 		if material == null or material.condensation_temperature <= 0.0:
 			continue
 		levels.append(_level_for(
-			material, Condensation.Formation.CONDENSATION, surface, ceiling, lapse, atmosphere, air_height,
-			materials
+			material, Condensation.Formation.CONDENSATION, surface, ceiling, lapse, atmosphere, air_height
 		))
 	# **A species that forms IN SITU is looked for in the TABLE, not in the mix** — see
 	# `StoichonSpecies.formed_from`. It exists only where every one of its reactants is present, and a
@@ -547,8 +546,7 @@ static func condensation_levels(
 		if not all_present:
 			continue
 		levels.append(_level_for(
-			material, Condensation.Formation.REACTION, surface, ceiling, lapse, atmosphere, air_height,
-			materials
+			material, Condensation.Formation.REACTION, surface, ceiling, lapse, atmosphere, air_height
 		))
 	# **The solid forms, at the top of the convective column.** A saturated column can hold only ONE water
 	# cloud: above its condensation level the vapour is already at saturation, so cooling it further keeps
@@ -619,8 +617,7 @@ static func _level_for(
 	ceiling: float,
 	lapse: float,
 	atmosphere: StoichonAtmosphere,
-	air_height: float,
-	materials: StoichonMaterialTable
+	air_height: float
 ) -> Condensation:
 	var level := Condensation.new()
 	level.species = material.species_name

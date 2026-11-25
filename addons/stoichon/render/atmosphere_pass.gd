@@ -316,15 +316,15 @@ func _render_callback(_callback_type: int, render_data: RenderData) -> void:
 				"yes" if depth_res.is_valid() else "NO — the march cannot see the ground"])
 	# **The frame's depth texture**, which is where the real surface is. `msaa = false` because the pass reads the
 	# resolved frame.
-	var set := _uniform_set(rd, [color, _params, buffers.get_depth_texture(false)])
-	if not set.is_valid():
+	var frame_set := _uniform_set(rd, [color, _params, buffers.get_depth_texture(false)])
+	if not frame_set.is_valid():
 		_status = "the uniform set could not be built"
 		return
 	_sets_live += 1
 	rd.buffer_update(_params, 0, PARAM_FLOATS * 4, _values.to_byte_array())
 	var list := rd.compute_list_begin()
 	rd.compute_list_bind_compute_pipeline(list, _pipeline)
-	rd.compute_list_bind_uniform_set(list, set, 0)
+	rd.compute_list_bind_uniform_set(list, frame_set, 0)
 	rd.compute_list_dispatch(
 		list, ceili(size.x / float(BLOCK)), ceili(size.y / float(BLOCK)), 1
 	)
@@ -334,7 +334,7 @@ func _render_callback(_callback_type: int, render_data: RenderData) -> void:
 	# pushes everything so it is disposed of when this frame index is processed next
 	# (`rendering_device.cpp`). The exposure pass and `StoichonCloudGpu` rely on exactly the same guarantee;
 	# this pass was the one place that created a set and never freed it.
-	rd.free_rid(set)
+	rd.free_rid(frame_set)
 	_sets_live -= 1
 	_frames += 1
 

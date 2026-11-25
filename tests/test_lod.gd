@@ -125,7 +125,7 @@ func _test_the_scene_applies_it(h, root: Node) -> void:
 	# is built from the leaves the eye asked for", and the property worth asserting is the one that was
 	# missing: **the detail under the eye grows as it closes in**, while the count overall may fall because
 	# the horizon culls more of the body.
-	 # A distance that puts Earth at a chosen screen radius, exactly:
+	# A distance that puts Earth at a chosen screen radius, exactly:
 	#   tan(asin(R/d)) = r_px * p   ->   d = R / sin(atan(r_px * p))
 	var to_earth := Vector3(1.0, 0.0, 0.0)
 	# Built by the first `update_lod`, which is what decides what is worth drawing.

@@ -2,9 +2,9 @@ class_name StoichonPopulationRocks
 extends RefCounted
 ## **The rocks a population has** — built once, at fixed positions, and never changed again.
 ##
-## This replaces the belt's invented fragments. [StoichonPopulationField] made a couple of dozen rocks up
-## around the observer and dropped them when they left, so a rock had no identity, coming back gave
-## different rocks, and a long crawl through the band arrived at thousands of names in succession.
+## This replaces the belt's invented fragments: a couple of dozen rocks made up around the observer and
+## dropped when they left, so a rock had no identity, coming back gave different rocks, and a long crawl
+## through the band arrived at thousands of names in succession.
 ## Evert, 2026-11-23: *"The asteroid belt is real, but invisible in the game unless you are in it, and
 ## being slowed down by asteroids ... maybe we can select a floor size so we end up with around 300,000 to
 ## 1,000,000 objects. We can then just instantiate them, and track the closest one to the player ... The
@@ -24,8 +24,8 @@ extends RefCounted
 ## dimension would make that two orderings into three. A grid answers the same question in a few dozen
 ## lines, and both stops are exact — see [method nearest_n].
 ##
-## Positions are in the **parent body's frame**, exactly as [StoichonPopulationField]'s were, so a caller
-## adds the parent's position rather than the set carrying it.
+## Positions are in the **parent body's frame**, so a caller adds the parent's position rather than the
+## set carrying it.
 
 ## Rocks wanted per grid cell. The cell is then derived from the density, so the first 27 cells answer
 ## the query almost every time: twelve rocks each is a few hundred distance tests, against a million for
@@ -44,8 +44,11 @@ var _diameters := PackedFloat32Array()
 ## copied back and forth a million times.
 var _cells: Dictionary = {}
 var _cell := 0.0
-## The band's outer semi-major axis, for the bound that stops a shell walk early.
+## The band's own bounds, for the box test that stops a walk before it starts.
+var _inner := 0.0
 var _outer := 0.0
+## `sin(i_max)`, so a rock's height above the plane never exceeds `r · _half`.
+var _half := 0.0
 var _max_shells := 0
 
 
@@ -108,6 +111,17 @@ func nearest(local: Vector3, reach: float = INF) -> int:
 func nearest_n(local: Vector3, n: int, reach: float = INF) -> Array[int]:
 	if n <= 0 or _positions.is_empty():
 		return []
+	# **A box test before the walk.** From outside the band a shell walk pays for every empty shell
+	# inside `reach` — nine of them, three times a frame, for nothing: measured at 1 AU, where the belt
+	# starts at 2.1 AU, `_scan_shell` alone was **13.3 ms of a 44.6 ms frame**. No rock can be within
+	# `reach` unless the ship is within `reach` of the band's own bounding box, and the box is three
+	# comparisons. Conservative in both directions: `_half · _outer` is the greatest height any rock of
+	# the band can have, because the allowed height grows with the radius.
+	if is_finite(reach):
+		var radius := local.length()
+		if radius < _inner - reach or radius > _outer + reach \
+				or absf(local.z) > _half * _outer + reach:
+			return []
 	var best := Best.new()
 	best.wanted = n
 	best.limit_squared = reach * reach
@@ -166,7 +180,7 @@ func _build() -> void:
 	var outer := pop.semi_major_axis.y
 	if inner <= 0.0 or outer <= inner:
 		return
-	var volume := StoichonPopulationField.volume_of(pop)
+	var volume := pop.volume()
 	if volume <= 0.0:
 		return
 
@@ -177,13 +191,15 @@ func _build() -> void:
 	# The cell: as many as hold `NOMINAL_PER_CELL` rocks at the population's own density, so a sparse
 	# belt gets bigger cells rather than empty ones.
 	_cell = pow(NOMINAL_PER_CELL / (float(total) / volume), 1.0 / 3.0)
+	_inner = inner
 	_outer = outer
 	_max_shells = ceili(2.0 * outer / _cell) + 2
 
 	var half := sin(deg_to_rad(clampf(pop.inclination.y, 0.0, 90.0)))
+	_half = half
 	var rng := RandomNumberGenerator.new()
 	rng.seed = pop.seed_value
-	# **Drawn a hair inside the band's own bounds**, because [method StoichonPopulationField.in_band]
+	# **Drawn a hair inside the band's own bounds**, because [method StoichonPopulation.contains]
 	# is an exact comparison: a rock placed exactly on the boundary reconstructs to a length a part in
 	# 10^16 either side of the radius it was drawn at, and then fails the test that defines the band.
 	var lo := inner * (1.0 + 1.0e-9)
@@ -194,7 +210,7 @@ func _build() -> void:
 	for index in total:
 		# **Uniform by volume**, in the shell the inclination makes: `r` drawn against `r^3`, the height
 		# within `±r sin(i)` at that radius, bearing uniform. That is the same band
-		# [method StoichonPopulationField.in_band] tests, sampled rather than rejected — and the band's
+		# [method StoichonPopulation.contains] tests, sampled rather than rejected — and the band's
 		# `z` is the vertical axis, which is why the height is the **third** component here and not the
 		# second.
 		var radius := pow(inner_cubed + rng.randf() * span, 1.0 / 3.0)

@@ -1963,12 +1963,35 @@ func _build_patch_arrays(
 	# whole-mesh jump, seen in flight as a regular shudder at low altitude. Evert, 2026-10-30: *"there is a regular
 	# jump for the surface, which I am assuming is the publishing of the updated vertexes after a walk."* Exactly that.
 	body.patch_arrays_origin = origin
+	# **The heights kernel's input, prepared HERE** — 52 000 vertices measured 5 ms of the main thread's frame
+	# when the publish did it, and both inputs (the vertices and the origin) are already in this task's hands.
+	# A pure function of data, no node and no device, so it is legal on a worker.
+	_prepare_heights(body, base[0], origin)
 	# **The rest of what the publish must know about THESE arrays**, for the same reason as the origin above: the
 	# request members are overwritten by the next request even when it is deferred, so a build landing after one was
 	# drawn as a LINES mesh from solid arrays, given the wrong material, its triangle count divided by six instead of
 	# three, and judged against a selection it was never built for.
 	body.patch_arrays_chunks = chunks
 	body.patch_arrays_wireframe = lines
+
+
+## **A direction per vertex, and those directions packed for the heights kernel** — on the worker, because it is a
+## per-vertex loop over the same tens of thousands of points the mesh has.
+##
+## The direction is recovered from the vertex exactly as `_translate_surface` and the draw shader do: a vertex is
+## metres from the lattice's own origin, so adding the origin back gives the offset from the body's centre, and a
+## double-precision normalise of a 6,371 km vector is exact enough for a direction.
+func _prepare_heights(body: StoichonSceneBody, vertices: PackedVector3Array, origin: Vector3) -> void:
+	if body.surface_plan == null or vertices.is_empty():
+		body.patch_directions = PackedVector3Array()
+		body.patch_input = PackedByteArray()
+		return
+	var directions := PackedVector3Array()
+	directions.resize(vertices.size())
+	for index in vertices.size():
+		directions[index] = (vertices[index] + origin).normalized()
+	body.patch_directions = directions
+	body.patch_input = StoichonSurfaceGpu.pack_directions(directions)
 
 
 ## **Put a published mesh where its vertices were measured from — and tell the interpolator, or it glides.**
@@ -2339,6 +2362,10 @@ func _poll_patch_builds() -> void:
 		# these very directions on the device — see `_translate_surface`. It is the LAST thing done to the arrays,
 		# so the mesh, the AABB and the depth buffer all see the surface that was drawn.
 		_translate_surface(body, arrays)
+		# **Released once spent**: a direction per vertex is 24 bytes and the packed input 16, so keeping them
+		# between publishes would hold a megabyte per body for data that is only ever read once.
+		body.patch_directions = PackedVector3Array()
+		body.patch_input = PackedByteArray()
 		body.mesh.mesh = (
 			StoichonPatches.lines_mesh_from(arrays) if lines
 			else StoichonPatches.mesh_from(arrays)
@@ -2461,11 +2488,20 @@ func _translate_surface(body: StoichonSceneBody, arrays: Array) -> void:
 	# **The direction is recovered from the vertex**, which is what the shader does too: a vertex is metres from the
 	# lattice's own origin, so adding the origin back gives the offset from the body's centre. Normalising a 6,371 km
 	# vector in a double build is exact enough for a direction, and it keeps this function free of lattice bookkeeping.
-	var directions := PackedVector3Array()
-	directions.resize(vertices.size())
-	for index in vertices.size():
-		directions[index] = (vertices[index] + origin).normalized()
-	var heights := _surface_heights(body, directions)
+	# **Prepared on the build task**, which is the whole point of `_prepare_heights`: this used to walk every
+	# vertex twice on the main thread — once to normalise a direction for each, once inside `heights` to pack
+	# them — and at 52 000 vertices that was 5 ms of a 12.7 ms frame.
+	var directions := body.patch_directions
+	var input := body.patch_input
+	if directions.size() != vertices.size():
+		# **The worker did not prepare these** — a body whose plan arrived after its arrays, or a publish whose
+		# arrays were replaced. Compute them here rather than publish a mesh with no relief.
+		directions = PackedVector3Array()
+		directions.resize(vertices.size())
+		for index in vertices.size():
+			directions[index] = (vertices[index] + origin).normalized()
+		input = StoichonSurfaceGpu.pack_directions(directions)
+	var heights := _heights_for(body, input, directions.size())
 	if heights.size() != directions.size():
 		# **Say it, once.** No heights means the vertices stay on the datum and the ground draws as a smooth sphere —
 		# a picture that is not obviously wrong, which is why this went unnoticed for a day while the heights kernel
@@ -2513,10 +2549,12 @@ static func offset_vertices(
 ##
 ## One device for the session, opened on first use and closed by [method close] — the same discipline the bake cache
 ## follows, and for the same reason: a local `RenderingDevice` that outlives its work segfaults the process at exit.
-func _surface_heights(body: StoichonSceneBody, directions: PackedVector3Array) -> PackedFloat32Array:
+func _heights_for(
+	body: StoichonSceneBody, input: PackedByteArray, count: int
+) -> PackedFloat32Array:
 	if _heights_gpu == null:
 		_heights_gpu = StoichonSurfaceGpu.new()
-	return _heights_gpu.heights(body.surface_plan, directions)
+	return _heights_gpu.heights_packed(body.surface_plan, input, count)
 
 
 ## **Join every rebuild in flight**, for a rig that has to know the mesh exists before it looks.

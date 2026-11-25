@@ -210,6 +210,12 @@ var patch_arrays_origin := Vector3.ZERO
 ## re-requested until the next walk fired.
 var patch_arrays_chunks: Array = []
 var patch_arrays_wireframe := false
+## **The heights kernel's input, prepared on the worker that built the arrays.** A direction per vertex
+## (`(vertex + patch_arrays_origin).normalized()`) and those directions packed as the kernel's float32
+## `vec4` triples — 5 ms of the main thread's frame at 52 000 vertices, and a pure function of data the
+## build task already has. Empty when the body has no surface plan. See `StoichonSystemScene._prepare_heights`.
+var patch_directions := PackedVector3Array()
+var patch_input := PackedByteArray()
 ## Triangles the mesh currently on the node holds. **Zero until the first build lands**, which is why a
 ## body draws nothing for its first frame or two rather than stalling the frame that asked for it.
 var patch_triangles := 0

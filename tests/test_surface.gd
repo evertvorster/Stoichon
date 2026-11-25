@@ -141,6 +141,32 @@ func run(h, _root: Node) -> void:
 	_test_surface_kinds(h, sol, materials)
 	_test_bands(h, sol, materials)
 	_test_snow_line(h, sol, materials)
+	_test_the_heights_input_is_packed_for_the_kernel(h)
+
+
+## **The heights kernel's input, pinned.** The scene now packs it on the worker that builds the mesh — 5 ms of
+## the main thread's frame at 52 000 vertices — and the kernel reads it as a `vec4` per direction padded to a
+## whole workgroup. Both facts are the contract, and neither is visible in a picture: a wrong stride draws a
+## surface with the relief of a different point, and a short buffer reads past its end.
+##
+## It cannot be `PackedVector3Array.to_byte_array()`: that is 24 bytes per element in this build (`real_t` is
+## double) and the kernel reads 32-bit floats.
+func _test_the_heights_input_is_packed_for_the_kernel(h) -> void:
+	h.check(PackedVector3Array([Vector3.ONE]).to_byte_array().size() == 24,
+		"a Vector3 is 24 bytes here, so the downcast is a loop and not a memcpy")
+	var directions := PackedVector3Array([
+		Vector3(1.0, 0.0, 0.0), Vector3(0.0, 1.0, 0.0), Vector3(0.0, 0.0, 1.0),
+	])
+	var bytes := StoichonSurfaceGpu.pack_directions(directions)
+	h.check(bytes.size() == 64 * 4 * 4,
+		"padded to a whole workgroup of vec4 (%d bytes)" % bytes.size())
+	h.check_near(bytes.decode_float(0), 1.0, "the first direction's x", 1.0e-6)
+	h.check_near(bytes.decode_float(4), 0.0, "and its y", 1.0e-6)
+	h.check_near(bytes.decode_float(12), 0.0, "with the pad left at zero", 1.0e-6)
+	h.check_near(bytes.decode_float(16), 0.0, "the second direction starts one vec4 later, in x", 1.0e-6)
+	h.check_near(bytes.decode_float(20), 1.0, "and its y is the next float", 1.0e-6)
+	h.check(StoichonSurfaceGpu.pack_directions(PackedVector3Array()).is_empty(),
+		"and nothing asked for is nothing packed")
 
 
 func _test_albedos(h, sol: StoichonSolarSystem, materials: StoichonMaterialTable) -> void:

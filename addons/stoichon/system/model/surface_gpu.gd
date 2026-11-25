@@ -146,15 +146,28 @@ func error() -> String:
 ##
 ## Returns an empty array when there is no device (headless) or the kernel would not compile; [method error] then says
 ## why. The value is the FIELD's, in field units about ±1, not metres and not sea-levelled — the caller scales it.
+##
+## **This packs the directions first, and that packing is a per-vertex GDScript loop** — 3.3 ms of a
+## measured 3.7 at 52 000 directions, against 0.43 ms of actual device work. The scene does not call
+## this: it packs on the worker that built the mesh and calls [method heights_packed].
 func heights(plan_data: StoichonSurfaceField.Plan, directions: PackedVector3Array) -> PackedFloat32Array:
-	if directions.is_empty() or not _open_heights():
-		return PackedFloat32Array()
+	return heights_packed(plan_data, pack_directions(directions), directions.size())
+
+
+## **The float32 bytes the kernel reads, padded to the workgroup size.**
+##
+## A `vec4` per direction: std430 gives a `vec3` a 16-byte stride anyway, and saying it explicitly keeps
+## the buffer the shape the kernel declares. **The padding is part of the contract** — the last workgroup
+## has threads with nothing to say, and their input has to be readable.
+##
+## **This cannot be a `PackedVector3Array.to_byte_array()`.** That array is 24 bytes per element in this
+## build (`real_t` is double) and the kernel reads 32-bit floats, so the downcast is a loop someone has to
+## pay for; `StoichonSystemScene._prepare_heights` pays it on a worker.
+static func pack_directions(directions: PackedVector3Array) -> PackedByteArray:
+	if directions.is_empty():
+		return PackedByteArray()
 	var count := directions.size()
-	# **Padded to the workgroup**, so the kernel needs no bound and no number in the plan's block. The tail is
-	# discarded on read-back.
 	var padded := ceili(count / 64.0) * 64
-	# `vec4` per direction: std430 gives a `vec3` a 16-byte stride anyway, and saying it explicitly keeps the buffer
-	# the shape the kernel declares.
 	var input := PackedFloat32Array()
 	input.resize(padded * 4)
 	for index in count:
@@ -162,11 +175,20 @@ func heights(plan_data: StoichonSurfaceField.Plan, directions: PackedVector3Arra
 		input[index * 4] = unit.x
 		input[index * 4 + 1] = unit.y
 		input[index * 4 + 2] = unit.z
+	return input.to_byte_array()
+
+
+## **The heights for input already packed by [method pack_directions]** — no per-vertex loop here at all.
+func heights_packed(
+	plan_data: StoichonSurfaceField.Plan, input_bytes: PackedByteArray, count: int
+) -> PackedFloat32Array:
+	if count <= 0 or input_bytes.is_empty() or not _open_heights():
+		return PackedFloat32Array()
+	# **Padded to the workgroup**, so the kernel needs no bound and no number in the plan's block. The tail is
+	# discarded on read-back.
+	var padded := ceili(count / 64.0) * 64
 
 	var marker := Time.get_ticks_usec()
-	# **One conversion, not two.** `input.to_byte_array()` allocates and copies the whole array — 832 KB at 52 000
-	# directions — and it was being called twice in one expression, once for the length and once for the data.
-	var input_bytes := input.to_byte_array()
 	var in_buffer := _device.storage_buffer_create(input_bytes.size(), input_bytes)
 	var out_buffer := _device.storage_buffer_create(padded * 4)
 	if not in_buffer.is_valid() or not out_buffer.is_valid():

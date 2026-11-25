@@ -160,6 +160,27 @@ func _test_the_scene_applies_it(h, root: Node) -> void:
 	h.check(earth.mesh.mesh != before,
 		"and closing in replaces the mesh with the selection that distance asks for")
 
+	# **The sea comes from the SAME walk as the ground, in the same publish.** Evert, 2026-11-23: *"the ocean
+	# was absent for a long time while I was stationary. The second I started moving it popped in"* — a body
+	# only republishes when its selection changes, so a publish that drops the sea leaves it missing until the
+	# ship moves. The sea is the same lattice at ratio 1.0 by construction, so its vertex count is the ground's.
+	if earth.ocean != null and earth.mesh.mesh != null:
+		h.check(earth.ocean.mesh != null,
+			"the sea is published with the ground, not on the next walk")
+		if earth.ocean.mesh != null:
+			var ground_arrays: Array = (earth.mesh.mesh as ArrayMesh).surface_get_arrays(0)
+			var sea_arrays: Array = (earth.ocean.mesh as ArrayMesh).surface_get_arrays(0)
+			h.check(
+				(sea_arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+					== (ground_arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size(),
+				"and is the same points as the ground"
+			)
+			h.check(
+				(sea_arrays[Mesh.ARRAY_INDEX] as PackedInt32Array).size()
+					== (ground_arrays[Mesh.ARRAY_INDEX] as PackedInt32Array).size(),
+				"and the same triangles, so the two cannot disagree about the waterline"
+			)
+
 	# **The instrument the plan's first trap names.** If the policy were being computed and not applied,
 	# the picture would be unchanged and this number with it.
 	# Counted from the MESHES rather than from the law, so this is an independent check of the HUD's

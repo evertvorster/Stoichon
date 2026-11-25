@@ -2340,6 +2340,13 @@ func _poll_patch_builds() -> void:
 	for body in bodies:
 		if body.patch_task == -1:
 			continue
+		# **ONE publish in flight per body.** A publish spans frames, and everything it will draw is captured
+		# when its build lands — so a second build taken while one is in flight would overwrite that capture,
+		# and the first publish would either draw the newer arrays or lose the only copy of the sea's. The
+		# landed build simply waits in `patch_task`; it is already complete, and this poll revisits it.
+		if body.patch_publish_record.size() > 0 or body.patch_height_request >= 0 \
+				or body.patch_offset_task != -1:
+			continue
 		if not WorkerThreadPool.is_task_completed(body.patch_task):
 			continue
 		WorkerThreadPool.wait_for_task_completion(body.patch_task)
@@ -2504,10 +2511,10 @@ func _publish_patch(body: StoichonSceneBody, record: Dictionary) -> void:
 ##
 ## **With nothing to translate the publish is immediate**: a body with no surface plan, or the setting off.
 func _begin_publish(body: StoichonSceneBody, arrays: Array, lines: bool, published: Array) -> void:
-	# **Capture everything this publish will draw, now.** The build that follows may land while this publish is
-	# still waiting on the device, and it writes every one of these fields — so the record is taken here, on the
-	# main thread, from arrays whose task has just been awaited.
-	body.patch_publish_record = {
+	# **Capture everything this publish will draw, now, and take it off the body.** Whatever follows — a build
+	# landing, another publish — writes these fields, and a publish now spans frames. One publish in flight per
+	# body is enforced by `_poll_patch_builds`, so this record is the only copy that matters.
+	var record := {
 		"arrays": arrays,
 		"lines": lines,
 		"chunks": published,
@@ -2518,24 +2525,37 @@ func _begin_publish(body: StoichonSceneBody, arrays: Array, lines: bool, publish
 		"interior_origin": body.interior_arrays_origin,
 		"sphere": body.sphere_arrays,
 		"decks": _capture_decks(body),
+		# **The heights input travels with the publish too**, because a build landing mid-publish would
+		# otherwise have it describing a different vertex set — or a different length, which is worse.
+		"directions": body.patch_directions,
+		"input": body.patch_input,
 	}
 	body.ocean_arrays = []
 	body.interior_arrays = []
 	body.sphere_arrays = []
+	body.patch_directions = PackedVector3Array()
+	body.patch_input = PackedByteArray()
+	body.patch_publish_record = record
+
 	if body.surface_plan == null or not bool(StoichonSettings.get_value("render.surface_translation")):
-		body.patch_directions = PackedVector3Array()
-		body.patch_input = PackedByteArray()
 		_finish_publish(body)
 		return
 	var vertices: PackedVector3Array = arrays[0]
-	if body.patch_directions.size() != vertices.size():
+	if (record["directions"] as PackedVector3Array).size() != vertices.size():
 		# **The worker did not prepare these** — a plan that arrived after its arrays, or arrays that were
-		# replaced. Computing them here is the fallback, and it is allowed to be slow.
+		# replaced. Computing them here is the fallback, and it is allowed to be slow; they go into the
+		# record, because the body's fields have just been emptied and a newer build may fill them.
 		_prepare_heights(body, vertices, body.patch_arrays_origin)
+		record["directions"] = body.patch_directions
+		record["input"] = body.patch_input
+		body.patch_directions = PackedVector3Array()
+		body.patch_input = PackedByteArray()
 	if _heights_gpu == null:
 		_heights_gpu = StoichonSurfaceGpu.new()
 	body.patch_height_request = _heights_gpu.dispatch_heights(
-		body.surface_plan, body.patch_input, body.patch_directions.size()
+		body.surface_plan,
+		record["input"] as PackedByteArray,
+		(record["directions"] as PackedVector3Array).size()
 	)
 	body.patch_height_frame = Engine.get_process_frames()
 	if body.patch_height_request < 0:
@@ -2574,7 +2594,7 @@ func _poll_publishes(force := false) -> void:
 			continue
 		var heights := _heights_gpu.collect_heights(body.patch_height_request)
 		body.patch_height_request = -1
-		if heights.size() != body.patch_directions.size():
+		if heights.size() != (body.patch_publish_record["directions"] as PackedVector3Array).size():
 			# **Say it, once.** No heights leaves the vertices on the datum and the ground draws as a smooth
 			# sphere — a picture that is not obviously wrong, which is why this went unnoticed for a day while
 			# the heights kernel did not compile. The reason is the device's own, and this is the only place it
@@ -2598,7 +2618,8 @@ func _apply_offsets(body: StoichonSceneBody, heights: PackedFloat32Array) -> voi
 	var arrays: Array = record["arrays"]
 	var vertices: PackedVector3Array = arrays[0]
 	offset_vertices(
-		vertices, body.patch_directions, heights, body.sea_level, body.surface_plan.amplitude
+		vertices, record["directions"] as PackedVector3Array, heights,
+		body.sea_level, body.surface_plan.amplitude
 	)
 	arrays[0] = vertices
 
@@ -2607,10 +2628,6 @@ func _apply_offsets(body: StoichonSceneBody, heights: PackedFloat32Array) -> voi
 func _finish_publish(body: StoichonSceneBody) -> void:
 	var record := body.patch_publish_record
 	body.patch_publish_record = {}
-	# **Released once spent**: a direction per vertex is 24 bytes and the packed input 16, so keeping them
-	# between publishes would hold a megabyte per body for data that is only ever read once.
-	body.patch_directions = PackedVector3Array()
-	body.patch_input = PackedByteArray()
 	if record.is_empty() or body.mesh == null:
 		return
 	_publish_patch(body, record)

@@ -496,12 +496,39 @@ func _test_the_index_answers_like_a_linear_scan(h) -> void:
 ## **Outside the band there is nothing, and the query says so cheaply.** One AU from the Sun is Earth; a
 ## walk that refuses to stop would pay for the whole grid every tick.
 func _test_far_outside_the_band_there_is_nothing(h) -> void:
-	var rocks := StoichonPopulationRocks.of(_small_band())
+	var band := _small_band()
+	var rocks := StoichonPopulationRocks.of(band)
 	var started := Time.get_ticks_usec()
 	var found := rocks.nearest(Vector3(AU, 0.0, 0.0), 1.0e9)
 	var elapsed := float(Time.get_ticks_usec() - started)
 	h.check(found == -1, "no rock within a reach that does not cover the belt")
 	h.check(elapsed < 50000.0, "and the query gives up rather than walking the grid (%.2f ms)" % (elapsed / 1000.0))
+
+	# **The box test, which is what makes the per-tick query cost nothing from another planet.** At
+	# 1 AU with the reach the game uses (1e11 m, 0.67 AU), the belt is 1.1 AU away and no rock can
+	# possibly be in reach — measured at 13.3 ms of a 44.6 ms frame before the test existed.
+	var reach := 1.0e11
+	started = Time.get_ticks_usec()
+	found = rocks.nearest(Vector3(AU, 0.0, 0.0), reach)
+	elapsed = float(Time.get_ticks_usec() - started)
+	h.check(found == -1, "and nothing at all from Earth, where the game asks every tick")
+	h.check(elapsed < 1000.0, "for under a millisecond rather than a shell walk (%.3f ms)" % (elapsed / 1000.0))
+
+	# **And it must not over-reject**: a ship a third of the way into the belt's own reach still finds
+	# the nearest rock, because the box is the band's bounds grown by `reach`, not the band itself.
+	var near_inner := Vector3(band.semi_major_axis.x - reach * 0.5, 0.0, 0.0)
+	h.check(rocks.nearest(near_inner, reach) >= 0,
+		"a ship just outside the inner edge still finds a rock")
+	# **The guard may only change the COST, never the answer.** A point above the plane agrees with a
+	# linear scan about whether anything is in reach at all — that is the whole contract of a box test.
+	var above := Vector3(band.semi_major_axis.x * 1.1, 0.0, band.semi_major_axis.x * 0.5)
+	var truth := false
+	for rock in rocks.count():
+		if above.distance_to(rocks.position_of(rock)) <= reach:
+			truth = true
+			break
+	h.check((rocks.nearest(above, reach) >= 0) == truth,
+		"and a point above the plane agrees with a linear scan about whether anything is in reach")
 
 
 ## A thousand rocks in Sol's band — the real geometry, few enough to scan outright.

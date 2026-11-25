@@ -2344,7 +2344,7 @@ func _poll_patch_builds() -> void:
 		# when its build lands — so a second build taken while one is in flight would overwrite that capture,
 		# and the first publish would either draw the newer arrays or lose the only copy of the sea's. The
 		# landed build simply waits in `patch_task`; it is already complete, and this poll revisits it.
-		if body.patch_publish_record.size() > 0 or body.patch_height_request >= 0 \
+		if body.patch_publish_record.size() > 0 or body.patch_height_request != -1 \
 				or body.patch_offset_task != -1:
 			continue
 		if not WorkerThreadPool.is_task_completed(body.patch_task):
@@ -2552,6 +2552,11 @@ func _begin_publish(body: StoichonSceneBody, arrays: Array, lines: bool, publish
 		body.patch_input = PackedByteArray()
 	if _heights_gpu == null:
 		_heights_gpu = StoichonSurfaceGpu.new()
+	if _heights_gpu.busy():
+		# **The device takes one dispatch at a time** (`submit` then `sync`, no overlap), so a publish waits its
+		# turn with the record captured. -2 is that state; `_poll_publishes` asks again every frame.
+		body.patch_height_request = -2
+		return
 	body.patch_height_request = _heights_gpu.dispatch_heights(
 		body.surface_plan,
 		record["input"] as PackedByteArray,
@@ -2594,6 +2599,20 @@ func _poll_publishes(force := false) -> void:
 			WorkerThreadPool.wait_for_task_completion(body.patch_offset_task)
 			body.patch_offset_task = -1
 			_finish_publish(body)
+			continue
+		if body.patch_height_request == -2:
+			# Waiting for the device. Ask again; when it is free this becomes a real request this frame.
+			if _heights_gpu == null or _heights_gpu.busy():
+				continue
+			var waiting: Dictionary = body.patch_publish_record
+			body.patch_height_request = _heights_gpu.dispatch_heights(
+				body.surface_plan,
+				waiting["input"] as PackedByteArray,
+				(waiting["directions"] as PackedVector3Array).size()
+			)
+			body.patch_height_frame = Engine.get_process_frames()
+			if body.patch_height_request < 0:
+				_finish_publish(body)
 			continue
 		if body.patch_height_request < 0:
 			continue
@@ -2670,9 +2689,9 @@ func await_patch_builds(rounds: int = 8) -> void:
 				waiting = true
 			# **And a publish mid-flight**: a heights dispatch, and the pool task that offsets the vertices.
 			# `force` collects without waiting for a frame, because a headless test gives it none.
-			while body.patch_height_request >= 0 or body.patch_offset_task != -1:
+			while body.patch_height_request != -1 or body.patch_offset_task != -1:
 				_poll_publishes(true)
-				if body.patch_height_request < 0 and body.patch_offset_task == -1:
+				if body.patch_height_request == -1 and body.patch_offset_task == -1:
 					break
 				OS.delay_usec(100)
 				waiting = true

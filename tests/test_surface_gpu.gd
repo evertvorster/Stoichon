@@ -126,6 +126,22 @@ func run(h, root: Node) -> void:
 	var collected := gpu.collect_heights(request)
 	h.check(collected.size() == heights.size(), "and collecting it gives the same count")
 	h.check(gpu.pending_requests() == 0, "with nothing left pending")
+
+	# **ONE dispatch at a time, and this is the check that says so.** A local `RenderingDevice` is a
+	# single-frame device: a second `submit()` without a `sync()` logs *"device already submitted, call sync
+	# to wait until done"* and the dispatch never happens, and a `sync()` with nothing submitted logs its own
+	# error. A flight found it — the publish stages overlapped — and `gpu_check.sh` fails on any `ERROR:` in
+	# the log, so this is the run that would have said so.
+	var packed := StoichonSurfaceGpu.pack_directions(directions)
+	var first := gpu.dispatch_heights(plan, packed, directions.size())
+	var refused := gpu.dispatch_heights(plan, packed, directions.size())
+	h.check(first >= 0 and refused == -1 and gpu.busy(),
+		"a second dispatch while one is in flight is refused (%d, %d, busy=%s)" % [first, refused, gpu.busy()])
+	h.check(gpu.collect_heights(first).size() == directions.size(), "the first one still collects")
+	h.check(not gpu.busy(), "and the device is free once it has")
+	var third := gpu.dispatch_heights(plan, packed, directions.size())
+	h.check(third >= 0 and gpu.collect_heights(third).size() == directions.size(),
+		"so the next dispatch goes and collects")
 	if collected.size() == heights.size():
 		var same := true
 		for index in collected.size():

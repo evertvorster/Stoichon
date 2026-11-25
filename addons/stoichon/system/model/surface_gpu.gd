@@ -217,6 +217,9 @@ func dispatch_heights(
 ) -> int:
 	if count <= 0 or input_bytes.is_empty() or not _open_heights():
 		return -1
+	# **One at a time**: see [method busy]. A second dispatch here would be a `submit()` the device refuses.
+	if busy():
+		return -1
 	# **Padded to the workgroup**, so the kernel needs no bound and no number in the plan's block. The tail is
 	# discarded on read-back.
 	var padded := ceili(count / 64.0) * 64
@@ -275,6 +278,14 @@ func dispatch_heights(
 ## How many dispatches are waiting to be collected — for the tests, and for the scene's join.
 func pending_requests() -> int:
 	return _pending.size()
+
+
+## **A local `RenderingDevice` is a ONE-FRAME device: one `submit()`, one `sync()`, no overlap.** Calling
+## `submit()` twice without a `sync()` in between logs *"device already submitted, call sync to wait until
+## done"* and the second dispatch never happens; a `sync()` with nothing submitted logs its own error. So a
+## caller must not have two dispatches in flight, and this is how it asks.
+func busy() -> bool:
+	return not _pending.is_empty()
 
 
 ## **Wait for the device and read a dispatch back.** This is where the CPU-GPU sync happens, so a caller

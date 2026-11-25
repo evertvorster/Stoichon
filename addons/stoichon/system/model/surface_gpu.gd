@@ -104,8 +104,13 @@ func open() -> bool:
 ## process teardown **segfaults on exit** (measured 2026-10-17 on the cloud port: exit 139 with no output,
 ## from a probe that had done its work and printed the result). It is an `Object`, so `free()` works.
 func close() -> void:
-	# **A dispatch never collected still holds its three RIDs**, and the "zero live" check at teardown is the
-	# only thing that would notice. Drop them here rather than leak them into the device's free().
+	# **A dispatch never collected is a SUBMITTED frame** — one `submit()` with no `sync()` after it. Freeing
+	# its RIDs, and then `free()`ing the device, with that frame still in flight is a segfault at the moment
+	# the process goes away, and it is the same class this project has already paid for twice. Sync first:
+	# one submit, one sync, which is exactly what a local device allows.
+	if _device != null and not _pending.is_empty():
+		_device.sync()
+	# And now the RIDs are safe to give back. The "zero live" check at teardown is what would notice a leak.
 	if _device != null:
 		for request in _pending:
 			var entry: Dictionary = _pending[request]

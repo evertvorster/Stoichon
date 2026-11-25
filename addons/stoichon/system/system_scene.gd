@@ -2689,10 +2689,12 @@ func await_patch_builds(rounds: int = 8) -> void:
 				waiting = true
 			# **And a publish mid-flight**: a heights dispatch, and the pool task that offsets the vertices.
 			# `force` collects without waiting for a frame, because a headless test gives it none.
-			while body.patch_height_request != -1 or body.patch_offset_task != -1:
-				_poll_publishes(true)
+			# **Bounded**, because a device that never frees — another body's dispatch, say — would otherwise
+			# spin here forever, and this runs at `tree_exiting`.
+			for _spin in 64:
 				if body.patch_height_request == -1 and body.patch_offset_task == -1:
 					break
+				_poll_publishes(true)
 				OS.delay_usec(100)
 				waiting = true
 			# **And an irregular body's extraction**, for the same reason a walk is drained here: a pool task still

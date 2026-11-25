@@ -152,6 +152,18 @@ func run(h, root: Node) -> void:
 	h.check(gpu.live_rids() == 0,
 		"and closing the device leaves nothing live (%d)" % gpu.live_rids())
 
+	# **A dispatch still in flight when the device goes away.** Evert's flight crashed with signal 11 as the
+	# process exited, after a session that had left a publish mid-stage: a submitted frame whose RIDs were
+	# freed, and then the device freed, underneath it. Close must sync first — one submit, one sync, which
+	# is what a local device allows — and this is the run that says so.
+	var teardown := StoichonSurfaceGpu.new()
+	h.check(teardown.open(), "a second device opens for the teardown test")
+	if teardown.open():
+		teardown.dispatch_heights(plan, packed, directions.size())
+		teardown.close()
+		h.check(teardown.live_rids() == 0,
+			"closing with a dispatch in flight gives every RID back (%d live)" % teardown.live_rids())
+
 	_test_a_scene_publishes_its_sea(h, root)
 
 

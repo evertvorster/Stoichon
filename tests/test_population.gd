@@ -7,6 +7,9 @@ extends RefCounted
 ## 188,000 km for two dozen fragments.
 
 const AU := 1.495978707e11
+## Sol itself, loaded once: `load` caches by path anyway, so the three calls below already shared
+## one instance, and this says so.
+const SOL := preload("res://systems/sol.tres")
 ## Sol's gravitational parameter, G(M_sun + m): a fragment's own mass is not worth adding.
 const SUN_MU := 1.3271244e20
 
@@ -219,7 +222,7 @@ func _test_sizes_follow_the_power_law(h) -> void:
 
 
 func _test_sol_authors_the_belt(h) -> void:
-	var sol: StoichonSolarSystem = load("res://systems/sol.tres")
+	var sol: StoichonSolarSystem = SOL
 	h.check(sol != null, "the Sol system loads")
 	if sol == null:
 		return
@@ -316,7 +319,7 @@ func _test_a_fragment_is_an_irregular_body(h) -> void:
 ## The gathering and the drawing were both right; the tier ordering was not. This builds the real scene, the
 ## real field and the real 40 candidates, so the next regression of it fails here rather than in flight.
 func _test_the_belt_reaches_the_marker_pool(h, root: Node) -> void:
-	var sol: StoichonSolarSystem = load("res://systems/sol.tres")
+	var sol: StoichonSolarSystem = SOL
 	var scene := StoichonSystemScene.from_content(sol)
 	h.check(scene != null, "the Sol scene wraps the content")
 	if scene == null:
@@ -388,7 +391,7 @@ func _test_the_belt_reaches_the_marker_pool(h, root: Node) -> void:
 ## frame, same dispatch, same builder. What this checks is the thing a class of its own got wrong — that
 ## nothing was re-implemented — and that the bodies come and go with the field.
 func _test_a_fragment_becomes_a_body(h, root: Node) -> void:
-	var sol: StoichonSolarSystem = load("res://systems/sol.tres")
+	var sol: StoichonSolarSystem = SOL
 	var scene := StoichonSystemScene.from_content(sol)
 	scene.build(root)
 	var belt := sol.population_by_id("population:main_belt")

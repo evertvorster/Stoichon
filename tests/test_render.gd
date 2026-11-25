@@ -293,7 +293,7 @@ func _test_surface_is_derived(h, earth: StoichonSceneBody, luna: StoichonSceneBo
 	var plan := StoichonSurfaceField.plan(earth.content.id, earth.radius)
 	h.check(not is_nan(plan.amplitude) and plan.amplitude > 0.0,
 		"and the plan still derives the relief amplitude (%.0f m), which is what the geometry will translate by"
-			% plan.amplitude) 
+			% plan.amplitude)
 	# **No map at all, in either direction.** The shader's only sampler is the colour ramp, and the field is
 	# evaluated per pixel — so a `height_map` or a `coarse_map` would be a raster coming back in by the side door.
 	h.check(material.get_shader_parameter("height_map") == null,

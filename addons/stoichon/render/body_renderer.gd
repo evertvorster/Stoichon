@@ -425,7 +425,6 @@ static func band_is_liquid(band: Dictionary) -> bool:
 ## by — so a body's decks are different clouds rather than the same one at two heights.
 static func deck_material(
 	body: StoichonSceneBody,
-	level: StoichonAtmosphereModel.Condensation,
 	palette: Color,
 	seed_layer: int
 ) -> ShaderMaterial:

@@ -1135,7 +1135,7 @@ func air_for_eye(observer: Vector3) -> Dictionary:
 ##
 ## **`deck.tau` and not a second derivation.** There were two of these and they disagreed by up to 6.8x — see
 ## `StoichonSceneBody.Deck.tau`.
-func _deck_extinction(body: StoichonSceneBody, deck: StoichonSceneBody.Deck) -> float:
+func _deck_extinction(deck: StoichonSceneBody.Deck) -> float:
 	return deck.tau / maxf(deck.thickness, 1.0)
 
 
@@ -1153,7 +1153,7 @@ func near_deck(body: StoichonSceneBody, observer: Vector3) -> Dictionary:
 		return {}
 	var palette: Color = deck.material.get_shader_parameter("cloud_color")
 	var gain := float(deck.material.get_shader_parameter("ramp_gain"))
-	var extinction := _deck_extinction(body, deck)
+	var extinction := _deck_extinction(deck)
 	return {
 		"base_radius": body.radius + deck.height,
 		"top_radius": body.radius + deck.height + deck.thickness,
@@ -1309,7 +1309,7 @@ func _build_decks(body: StoichonSceneBody) -> void:
 			if deck.tau <= 0.0:
 				deck.tau = -log(maxf(1.0 - clouds.opacity_at(index), 1.0e-3))
 			deck.morphology = morphology
-			deck.material = StoichonBodyRenderer.deck_material(body, level, deck.palette, index)
+			deck.material = StoichonBodyRenderer.deck_material(body, deck.palette, index)
 			# **A haze gets the SECOND band scale and nothing else does** — see `body_deck.gdshader`'s
 			# `envelope_*` uniforms. `cells / BROAD_DIVISOR` broad cells a hemisphere, the floor from the same
 			# guess, and the phase from the body's own seed so two worlds' zones are not in the same places.
@@ -1646,7 +1646,7 @@ func update_lod(camera: Camera3D, eye: Variant = null) -> void:
 		if body.mesh == null:
 			continue
 		_publish_body_frame(body, camera, observer, pixel, air_strength)
-		_update_decks(body, observer, distance, show_decks)
+		_update_decks(body, distance, show_decks)
 		# **The surface is a PATCH TREE, not a sphere at one level.** Evert, 2026-10-17: *"it suddenly
 		# switches to a higher density of triangles, but once only, and for the whole sphere"* — which is
 		# what one level per body is. `StoichonPatches` refines where the eye is and culls over the limb,
@@ -2150,7 +2150,7 @@ func _publish_body_frame(
 ## **The eye is handed over in the deck's model space**, divided by the top radius here, in double precision:
 ## a deck node's model space is a unit sphere, so nothing astronomical ever reaches a `float`.
 func _update_decks(
-	body: StoichonSceneBody, observer: Vector3, distance: float, show_decks: bool
+	body: StoichonSceneBody, distance: float, show_decks: bool
 ) -> void:
 	if body.decks.is_empty():
 		return

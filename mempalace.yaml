@@ -1,0 +1,4 @@
+# The palace wing for this project. Pinned rather than derived from the directory name, because the
+# project was renamed once already (SpaceSim → Stoichon) and the memories from before 2026-11-23 are
+# under the old name — see the `project-facts` room.
+wing: Stoichon

@@ -764,17 +764,27 @@ planet's node, so their distances are equal to the metre. Equal priority therefo
 | Draw | Priority |
 |---|---|
 | the sea | **−8** (`OCEAN_RENDER_PRIORITY`) |
-| a body's interior surface | **0** (`INTERIOR_RENDER_PRIORITY`) |
+| a body's interior surface | **−16** (`INTERIOR_RENDER_PRIORITY`) |
 | a body's air shell | **0** (`AIR_RENDER_PRIORITY`) |
-| cloud decks, one per condensed species | **`DECK_PRIORITY_BASE − layer`**, so 0 and down |
+| cloud decks, one per condensed species | **`DECK_PRIORITY_BASE + layer`**, so +1 and up — **above the air, and that is an interim order**: see the note below |
 | a ring's dust sheet | **99** (`RING_PRIORITY - 1`) |
 | a ring's rocks, and a belt's | **100** (`StoichonRingView.RING_PRIORITY`) |
 
-**The air and a cloud deck can both be 0, and that tie is left standing** — Evert's instruction: the air and
-the first deck are not to be shuffled here. What the tests assert is the part the ring depends on: every
-priority is inside **−128 … +128** (a value outside it is *refused* and the material keeps 0, measured
-2026-11-03), and `RING_PRIORITY` is above every layer a planet wears. `tests/test_rings.gd` is that check; it
-deliberately does not assert the order among the planet's own layers.
+**The air and the first deck used to tie at 0, and the tie was a fault, not a decision.** Equal priorities with
+equal depths are ordered by nothing — the alpha sort is an introsort — so Saturn's deck flickered in and out as
+the camera rotated. With distinct values the deck drawn *below* the air makes Saturn a blue ball: one air shell
+carries the whole column and composites at an alpha near 1, so it covers whatever is under it. The deck is drawn
+**above** the air instead, which is the order the unstable tie was picking on the frames where the deck showed at
+all; Evert flew it on Saturn and Earth on 2026-11-25 and it reads right.
+
+**That is an interim order and no static one can be final.** `Atmospheric Shell Stack Plan` **S3/S4** — split the
+air at each deck's base, and order the pieces per frame from the eye's radius — is written and was never built.
+Until it is, the honest statement is that the deck is right from outside and the air above it is behind it.
+
+What the tests assert is the part the ring depends on: every priority is inside **−128 … +128** (a value outside
+it is *refused* and the material keeps 0, measured 2026-11-03), and `RING_PRIORITY` is above every layer a planet
+wears. `tests/test_rings.gd` is that check; it deliberately does not assert the order among the planet's own
+layers.
 
 **The air at 0 and the first cloud deck at 0 is what that cost.** Evert, 2026-11-15: *"I still see ordering
 effects, but not always... there is more than just the atmosphere, there are cloud decks and the internal

@@ -482,10 +482,32 @@ static func deck_material(
 ## break it made a thick atmosphere paint a solid blue shell over the planet's own clouds — worse than the fault.
 ## Whoever next opens that stack should read the palace first (`Stoichon`, key `cloud-decks`, `atmosphere`), and
 ## fly it on its own branch.
-const INTERIOR_RENDER_PRIORITY := 0
+## **A DIAGNOSTIC BRANCH, not a settled order.** The air and the first deck were both 0 — the tie this file's
+## note above argues with — and Evert's flight report is decks that *flicker in and out on camera rotation*,
+## which is what an unstable sort on equal priorities looks like. So the three materials are given distinct
+## values, and NOTHING is ordered by the eye: if the flicker stops, the tie was the flicker and the remaining
+## problem is the one `Atmospheric Shell Stack Plan`'s S4 exists for (order recomputed from the eye's radius,
+## never built). If it does not stop, the tie is innocent and the 2026-10-20 rotation-triggered air dimming is
+## the same fault, which was never explained.
+##
+## **The flight answered the first question.** With the deck BELOW the air (base −1) Saturn is a blue ball:
+## the air composites with alpha near 1 and buries the deck, and turning the atmosphere off in the settings
+## brings the clouds back. Earth is fine — its air is thin enough to see through. So the tie was the flicker,
+## and the burying is the air being ONE shell over the whole column, which is the gap `Atmospheric Shell Stack
+## Plan` S3/S4 names: split the air at the deck's base and order the pieces from the eye's radius.
+##
+## Until that exists, this is the order the unstable tie was picking on the frames where the deck *did* show:
+## the deck drawn AFTER the air. It makes the good frame permanent. It is still wrong about the air above the
+## deck — which is thin, which is why it reads acceptably — and it is not the fix; it is the least-wrong
+## static order while S3/S4 are designed.
+##
+## Evert flew this one too (2026-11-25): *"It looks pretty good, actually, both on Saturn and on Earth."* So this
+## is the order to keep until S3/S4 land — not a settled stack, but the least-wrong one, and the first time the
+## deck has been reliably visible on a thick atmosphere at all.
+const INTERIOR_RENDER_PRIORITY := -16
 const OCEAN_RENDER_PRIORITY := -8
 const AIR_RENDER_PRIORITY := 0
-const DECK_PRIORITY_BASE := 0
+const DECK_PRIORITY_BASE := 1
 
 
 static func interior_material(body: StoichonSceneBody, palette: Color) -> ShaderMaterial:

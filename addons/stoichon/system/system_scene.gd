@@ -938,7 +938,7 @@ func _build_body(body: StoichonSceneBody) -> void:
 	# construction and cannot fight about where the waterline is. Which parts are water is decided per pixel in the
 	# shader, from the same field the land uses.
 	# **Its own mesh, at the DATUM**: the sea is the sphere the land is displaced from, so it takes the walk's lattice
-	# *before* `_translate_surface` moves the ground's copy, and the two cannot disagree about where the surface is.
+	# *before* the publish moves the ground's copy, and the two cannot disagree about where the surface is.
 	# Which parts are water is decided per pixel, and **how deep it is comes from the frame's own depth** — the planet
 	# is drawn below the sea and shows through where the water is thin (Evert, 2026-11-02), so the sea publishes no
 	# terrain numbers at all: `sea_level` and `field_amplitude` had no reader left and are gone.
@@ -1598,6 +1598,7 @@ func update_lod(camera: Camera3D, eye: Variant = null) -> void:
 	_cloud_maps.poll()
 	# **And the walks next**, so a selection that lands this frame asks its rebuild in this frame rather than the next.
 	_poll_walks()
+	_poll_publishes()
 	_poll_patch_builds()
 	for body in bodies:
 		if body.node == null:
@@ -1926,7 +1927,7 @@ func _build_patch_arrays(
 		else StoichonPatches.arrays_of(chunks, radius, origin, tinted, lattice)
 	)
 	if lines:
-		# **The datum lattice, untouched** — and the surface's copy of it, which `_translate_surface` moves. **Deep**,
+		# **The datum lattice, untouched** — and the surface's copy of it, which `_apply_offsets` moves. **Deep**,
 		# so the translation cannot write through: a `PackedVector3Array` is copy-on-write and would have survived
 		# anyway, but "it happens to be safe" is not the guarantee being offered.
 		body.sphere_arrays = base
@@ -1963,12 +1964,35 @@ func _build_patch_arrays(
 	# whole-mesh jump, seen in flight as a regular shudder at low altitude. Evert, 2026-10-30: *"there is a regular
 	# jump for the surface, which I am assuming is the publishing of the updated vertexes after a walk."* Exactly that.
 	body.patch_arrays_origin = origin
+	# **The heights kernel's input, prepared HERE** — 52 000 vertices measured 5 ms of the main thread's frame
+	# when the publish did it, and both inputs (the vertices and the origin) are already in this task's hands.
+	# A pure function of data, no node and no device, so it is legal on a worker.
+	_prepare_heights(body, base[0], origin)
 	# **The rest of what the publish must know about THESE arrays**, for the same reason as the origin above: the
 	# request members are overwritten by the next request even when it is deferred, so a build landing after one was
 	# drawn as a LINES mesh from solid arrays, given the wrong material, its triangle count divided by six instead of
 	# three, and judged against a selection it was never built for.
 	body.patch_arrays_chunks = chunks
 	body.patch_arrays_wireframe = lines
+
+
+## **A direction per vertex, and those directions packed for the heights kernel** — on the worker, because it is a
+## per-vertex loop over the same tens of thousands of points the mesh has.
+##
+## The direction is recovered from the vertex exactly as `_apply_offsets` and the draw shader do: a vertex is
+## metres from the lattice's own origin, so adding the origin back gives the offset from the body's centre, and a
+## double-precision normalise of a 6,371 km vector is exact enough for a direction.
+func _prepare_heights(body: StoichonSceneBody, vertices: PackedVector3Array, origin: Vector3) -> void:
+	if body.surface_plan == null or vertices.is_empty():
+		body.patch_directions = PackedVector3Array()
+		body.patch_input = PackedByteArray()
+		return
+	var directions := PackedVector3Array()
+	directions.resize(vertices.size())
+	for index in vertices.size():
+		directions[index] = (vertices[index] + origin).normalized()
+	body.patch_directions = directions
+	body.patch_input = StoichonSurfaceGpu.pack_directions(directions)
 
 
 ## **Put a published mesh where its vertices were measured from — and tell the interpolator, or it glides.**
@@ -2316,6 +2340,13 @@ func _poll_patch_builds() -> void:
 	for body in bodies:
 		if body.patch_task == -1:
 			continue
+		# **ONE publish in flight per body.** A publish spans frames, and everything it will draw is captured
+		# when its build lands — so a second build taken while one is in flight would overwrite that capture,
+		# and the first publish would either draw the newer arrays or lose the only copy of the sea's. The
+		# landed build simply waits in `patch_task`; it is already complete, and this poll revisits it.
+		if body.patch_publish_record.size() > 0 or body.patch_height_request != -1 \
+				or body.patch_offset_task != -1:
+			continue
 		if not WorkerThreadPool.is_task_completed(body.patch_task):
 			continue
 		WorkerThreadPool.wait_for_task_completion(body.patch_task)
@@ -2335,152 +2366,14 @@ func _poll_patch_builds() -> void:
 			continue
 		if arrays.is_empty() or (arrays[0] as PackedVector3Array).is_empty():
 			continue
-		# **The vertices carry the terrain, here, before the mesh exists.** The height comes from the field, asked at
-		# these very directions on the device — see `_translate_surface`. It is the LAST thing done to the arrays,
-		# so the mesh, the AABB and the depth buffer all see the surface that was drawn.
-		_translate_surface(body, arrays)
-		body.mesh.mesh = (
-			StoichonPatches.lines_mesh_from(arrays) if lines
-			else StoichonPatches.mesh_from(arrays)
-		)
-		# **The vertices are metres from this origin**, so the node carries the origin and drops the radius scale —
-		# and the pair is written here, beside the mesh, so the transform can never describe a different build. The
-		# scale has to be 1: a basis holding 6,371,000 is what rounded every vertex at 0.76 m (see `rebase`).
-		_teleport(body.mesh, body.patch_arrays_origin)
-		# **The origin the vertices are measured from, for the normal.** The mesh carries no normal array: the surface's
-		# direction is `VERTEX + patch_origin`, computed in the vertex stage. Published beside the transform it belongs
-		# to, so the two cannot describe different builds.
-		(body.mesh_material as ShaderMaterial).set_shader_parameter(
-			"patch_origin", body.patch_arrays_origin
-		)
-		# **A deck is the SAME lattice, translated to its level** — so it publishes here, beside the ground, from the
-		# arrays the same worker task built out of the same selection. Its node has scale 1 and the origin on its
-		# position for the reason the ground's does (see `rebase`), and `patch_origin` goes on its material for the
-		# reason the ground's does too: the deck shader's direction is `VERTEX + patch_origin`.
-		#
-		# **An empty build publishes nothing and the old mesh stays**, exactly as for the ground: a deck one selection
-		# stale is worth more than a frame with the clouds gone.
-		for deck in body.decks:
-			deck.node.mesh = (
-				StoichonPatches.lines_mesh_from(deck.arrays) if deck.arrays_lines
-				else StoichonPatches.mesh_from(deck.arrays)
-			)
-			var deck_lines := deck.arrays_lines
-			deck.arrays = []
-			if deck.node.mesh == null:
-				continue
-			_teleport(deck.node, deck.origin)
-			(deck.material as ShaderMaterial).set_shader_parameter("patch_origin", deck.origin)
-			# **The material follows the VIEW, and the switch does not touch it**: in a wireframe the deck wears the
-			# same unshaded line material the ground does, and otherwise the cloud's own. Published only when it is
-			# different and never as null — an empty `material_override` falls back to the engine's unshaded default,
-			# which reads as "the deck lost its shading".
-			var deck_wanted := (
-				StoichonBodyRenderer.wireframe_material() if deck_lines
-				else deck.material
-			)
-			if deck.node.material_override != deck_wanted:
-				deck.node.material_override = deck_wanted
-		# **The sea**, from the same walk and the same array: it is the ground's own points at ratio 1.0.
-		if body.ocean != null:
-			body.ocean.mesh = StoichonPatches.mesh_from(body.ocean_arrays)
-			body.ocean_arrays = []
-			if body.ocean.mesh != null:
-				_teleport(body.ocean, body.ocean_arrays_origin)
-				(body.ocean_material as ShaderMaterial).set_shader_parameter(
-					"patch_origin", body.ocean_arrays_origin
-				)
-		# **The interior floor**, from the same walk and scaled to its own radius — the same lattice as the decks
-		# above it, so the two cannot disagree about where the body is.
-		if body.interior != null:
-			body.interior.mesh = StoichonPatches.mesh_from(body.interior_arrays)
-			body.interior_arrays = []
-			if body.interior.mesh != null:
-				_teleport(body.interior, body.interior_arrays_origin)
-				(body.interior_material as ShaderMaterial).set_shader_parameter(
-					"patch_origin", body.interior_arrays_origin
-				)
-		# **The datum lattice's lines**, published beside the rest from the same walk — same points, same origin, nothing
-		# translated. Unlike a deck this is never "kept from the last build": a stale sphere would be a different
-		# subdivision from the surface beside it, which is the one thing the view exists to disprove.
-		if body.sphere != null:
-			body.sphere.mesh = StoichonPatches.lines_mesh_from(body.sphere_arrays)
-			body.sphere_arrays = []
-			if body.sphere.mesh != null:
-				_teleport(body.sphere, body.patch_arrays_origin)
-		# **A material is published only when it is a different material**, and never a null one: assigning
-		# `material_override = null` silently falls back to the engine's default material, which is unshaded —
-		# it reads as "the surface lost its shading", far from the line that did it.
-		var wanted := (
-			StoichonBodyRenderer.wireframe_material() if lines
-			else body.mesh_material
-		)
-		if wanted == null:
-			push_warning("PATCH: %s has no material to publish" % body.name)
-		elif body.mesh.material_override != wanted:
-			body.mesh.material_override = wanted
-		# **Triangles come from the index array for an indexed mesh** and from the segment count for lines — reading a
-		# vertex count here would now report the number of *points*, which sharing has just made several times smaller.
-		body.patch_triangles = (
-			(arrays[1] as PackedInt32Array).size() / 6 if lines
-			else (arrays[1] as PackedInt32Array).size() / 3
-		)
-		# The selection moved while this was building, so the answer is already out of date.
-		if published != body.patch_chunks:
-			_request_patch_build(body, body.patch_walk_wireframe)
+		# **The publish is now three stages**, because the middle one waits on the GPU: the heights are
+		# dispatched here, collected a frame later, and the vertices are offset on the pool. See
+		# `_begin_publish` and `_poll_publishes` — the inline version cost 11-13 ms of the frame it landed on,
+		# of which `sync()` was 4-5 and the offset another 5-7.
+		_begin_publish(body, arrays, lines, published)
 
 
-## **The surface's vertices carry the terrain**, before the mesh is built from them.
-##
-## **A point's height is the field at its own direction, and it is asked on the device** — the same GLSL the draw
-## shader and the bake run, at exactly the directions this mesh holds. That is the answer to "where does a texture
-## come from": no texture. A map would quantise 37,500 explicit directions onto a grid and interpolate them back off,
-## with a texel floor and seams the mesh does not have; at 1 km altitude a global map fine enough for the mesh is
-## 10^12 texels, which is the arithmetic that retired the raster on 2026-10-28.
-##
-## **Radial and measured from the datum**: `(height - sea_level) * amplitude` metres along the direction, so the coast is
-## exact by construction — a vertex at sea level does not move — and the ship's altitude, the framings' bands and a
-## deck's condensation level keep measuring from the sphere they always did. A bare `height` stood the land up to
-## 1.56 km above that sphere, which was a flown fault on 2026-10-27.
-##
-## **The surface only.** A deck is a LEVEL and the sphere is the datum, so neither may be translated; the caller passes
-## the surface's arrays and nothing else.
-##
-## **Called on the main thread, deliberately**: a local `RenderingDevice`'s calls are render-thread-only, so the dispatch
-## cannot ride on the build's worker. It costs one pass over the vertices on the frames a build lands — walk-gated, so
-## not a per-frame cost — and the vertex loop is the same shape `rebase` already pays for.
-func _translate_surface(body: StoichonSceneBody, arrays: Array) -> void:
-	if not bool(StoichonSettings.get_value("render.surface_translation")):
-		return
-	if body.surface_plan == null:
-		return
-	var vertices: PackedVector3Array = arrays[0]
-	if vertices.is_empty():
-		return
-	var origin := body.patch_arrays_origin
-	# **The direction is recovered from the vertex**, which is what the shader does too: a vertex is metres from the
-	# lattice's own origin, so adding the origin back gives the offset from the body's centre. Normalising a 6,371 km
-	# vector in a double build is exact enough for a direction, and it keeps this function free of lattice bookkeeping.
-	var directions := PackedVector3Array()
-	directions.resize(vertices.size())
-	for index in vertices.size():
-		directions[index] = (vertices[index] + origin).normalized()
-	var heights := _surface_heights(body, directions)
-	if heights.size() != directions.size():
-		# **Say it, once.** No heights means the vertices stay on the datum and the ground draws as a smooth sphere —
-		# a picture that is not obviously wrong, which is why this went unnoticed for a day while the heights kernel
-		# did not compile. The reason is the device's own, and it is the only place it is said.
-		if not _translation_failed_reported:
-			_translation_failed_reported = true
-			print("TRANSLATE: %s has no heights, so its ground is drawn on the datum — %s" % [
-				body.name, _heights_gpu.error() if _heights_gpu != null else "no device"
-			])
-		return
-	offset_vertices(vertices, directions, heights, body.sea_level, body.surface_plan.amplitude)
-	arrays[0] = vertices
-
-
-## **Move each vertex along its own direction by its height above the DATUM** — the arithmetic, on its own so it can be
+## **The publish proper**: the arrays become a mesh and go on the nodes. Everything up to here was arithmetic.
 ## tested without a rendering device. **One scale**, `amplitude` metres per field unit: the field itself now carries the
 ## asymmetry between land and ocean (`surface_plate_level` gives continental and oceanic crust as two populations), so
 ## nothing here has to know which side of the datum it is on.
@@ -2509,14 +2402,269 @@ static func offset_vertices(
 		vertices[index] += directions[index] * metres
 
 
-## **The field's heights at a list of directions**, on the scene's own device.
+func _publish_patch(body: StoichonSceneBody, record: Dictionary) -> void:
+	# **Everything this draws comes out of `record`, never off the body.** A publish now spans two frames, so a
+	# build can land in the middle of one — and every array here (`ocean_arrays`, `interior_arrays`,
+	# `sphere_arrays`, each deck's `arrays`, `patch_arrays_origin`) is written by that worker. Reading them at
+	# publish time drew, at best, a newer lattice than the ground beside it, and at worst nothing: each publish
+	# empties the fields it consumed, so a second publish over the same build assigned a NULL mesh to the sea.
+	# That is the ocean that took a while to appear.
+	var arrays: Array = record["arrays"]
+	var lines: bool = record["lines"]
+	var published: Array = record["chunks"]
+	var origin: Vector3 = record["origin"]
+	body.mesh.mesh = (
+		StoichonPatches.lines_mesh_from(arrays) if lines
+		else StoichonPatches.mesh_from(arrays)
+	)
+	# **The vertices are metres from this origin**, so the node carries the origin and drops the radius scale —
+	# and the pair is written here, beside the mesh, so the transform can never describe a different build. The
+	# scale has to be 1: a basis holding 6,371,000 is what rounded every vertex at 0.76 m (see `rebase`).
+	_teleport(body.mesh, origin)
+	# **The origin the vertices are measured from, for the normal.** The mesh carries no normal array: the surface's
+	# direction is `VERTEX + patch_origin`, computed in the vertex stage. Published beside the transform it belongs
+	# to, so the two cannot describe different builds.
+	(body.mesh_material as ShaderMaterial).set_shader_parameter("patch_origin", origin)
+	# **A deck is the SAME lattice, translated to its level** — so it publishes here, beside the ground, from the
+	# arrays the same worker task built out of the same selection. Its node has scale 1 and the origin on its
+	# position for the reason the ground's does (see `rebase`), and `patch_origin` goes on its material for the
+	# reason the ground's does too: the deck shader's direction is `VERTEX + patch_origin`.
+	#
+	# **An empty build publishes nothing and the old mesh stays**, exactly as for the ground: a deck one selection
+	# stale is worth more than a frame with the clouds gone.
+	for entry in record["decks"]:
+		var deck: StoichonSceneBody.Deck = entry["deck"]
+		var deck_arrays: Array = entry["arrays"]
+		var deck_lines: bool = entry["lines"]
+		if deck_arrays.is_empty():
+			continue
+		deck.node.mesh = (
+			StoichonPatches.lines_mesh_from(deck_arrays) if deck_lines
+			else StoichonPatches.mesh_from(deck_arrays)
+		)
+		if deck.node.mesh == null:
+			continue
+		_teleport(deck.node, entry["origin"])
+		(deck.material as ShaderMaterial).set_shader_parameter("patch_origin", entry["origin"])
+		# **The material follows the VIEW, and the switch does not touch it**: in a wireframe the deck wears the
+		# same unshaded line material the ground does, and otherwise the cloud's own. Published only when it is
+		# different and never as null — an empty `material_override` falls back to the engine's unshaded default,
+		# which reads as "the deck lost its shading".
+		var deck_wanted := (
+			StoichonBodyRenderer.wireframe_material() if deck_lines
+			else deck.material
+		)
+		if deck.node.material_override != deck_wanted:
+			deck.node.material_override = deck_wanted
+	# **The sea**, from the same walk and the same array: it is the ground's own points at ratio 1.0.
+	if body.ocean != null and not (record["ocean"] as Array).is_empty():
+		body.ocean.mesh = StoichonPatches.mesh_from(record["ocean"])
+		if body.ocean.mesh != null:
+			_teleport(body.ocean, record["ocean_origin"])
+			(body.ocean_material as ShaderMaterial).set_shader_parameter(
+				"patch_origin", record["ocean_origin"]
+			)
+	# **The interior floor**, from the same walk and scaled to its own radius — the same lattice as the decks
+	# above it, so the two cannot disagree about where the body is.
+	if body.interior != null and not (record["interior"] as Array).is_empty():
+		body.interior.mesh = StoichonPatches.mesh_from(record["interior"])
+		if body.interior.mesh != null:
+			_teleport(body.interior, record["interior_origin"])
+			(body.interior_material as ShaderMaterial).set_shader_parameter(
+				"patch_origin", record["interior_origin"]
+			)
+	# **The datum lattice's lines**, published beside the rest from the same walk — same points, same origin, nothing
+	# translated. Unlike a deck this is never "kept from the last build": a stale sphere would be a different
+	# subdivision from the surface beside it, which is the one thing the view exists to disprove.
+	if body.sphere != null and not (record["sphere"] as Array).is_empty():
+		body.sphere.mesh = StoichonPatches.lines_mesh_from(record["sphere"])
+		if body.sphere.mesh != null:
+			_teleport(body.sphere, origin)
+	# **A material is published only when it is a different material**, and never a null one: assigning
+	# `material_override = null` silently falls back to the engine's default material, which is unshaded —
+	# it reads as "the surface lost its shading", far from the line that did it.
+	var wanted := (
+		StoichonBodyRenderer.wireframe_material() if lines
+		else body.mesh_material
+	)
+	if wanted == null:
+		push_warning("PATCH: %s has no material to publish" % body.name)
+	elif body.mesh.material_override != wanted:
+		body.mesh.material_override = wanted
+	# **Triangles come from the index array for an indexed mesh** and from the segment count for lines — reading a
+	# vertex count here would now report the number of *points*, which sharing has just made several times smaller.
+	body.patch_triangles = (
+		(arrays[1] as PackedInt32Array).size() / 6 if lines
+		else (arrays[1] as PackedInt32Array).size() / 3
+	)
+	# The selection moved while this was building, so the answer is already out of date.
+	if published != body.patch_chunks:
+		_request_patch_build(body, body.patch_walk_wireframe)
+
+
+## **Stage one of a publish**: ask the device for this mesh's heights and remember what is waiting.
 ##
-## One device for the session, opened on first use and closed by [method close] — the same discipline the bake cache
-## follows, and for the same reason: a local `RenderingDevice` that outlives its work segfaults the process at exit.
-func _surface_heights(body: StoichonSceneBody, directions: PackedVector3Array) -> PackedFloat32Array:
+## The heights answer "how tall is the ground in each of these directions", so they are the mesh's last input
+## and they need the GPU. Waiting for them here is what made a publish cost 11-13 ms of the frame it landed
+## on, so the dispatch happens now and the data is collected a frame later (`_poll_publishes`) — the mesh being
+## replaced is still drawn meanwhile, which is the same trade the walk and the build already make.
+##
+## **With nothing to translate the publish is immediate**: a body with no surface plan, or the setting off.
+func _begin_publish(body: StoichonSceneBody, arrays: Array, lines: bool, published: Array) -> void:
+	# **Capture everything this publish will draw, now, and take it off the body.** Whatever follows — a build
+	# landing, another publish — writes these fields, and a publish now spans frames. One publish in flight per
+	# body is enforced by `_poll_patch_builds`, so this record is the only copy that matters.
+	var record := {
+		"arrays": arrays,
+		"lines": lines,
+		"chunks": published,
+		"origin": body.patch_arrays_origin,
+		"ocean": body.ocean_arrays,
+		"ocean_origin": body.ocean_arrays_origin,
+		"interior": body.interior_arrays,
+		"interior_origin": body.interior_arrays_origin,
+		"sphere": body.sphere_arrays,
+		"decks": _capture_decks(body),
+		# **The heights input travels with the publish too**, because a build landing mid-publish would
+		# otherwise have it describing a different vertex set — or a different length, which is worse.
+		"directions": body.patch_directions,
+		"input": body.patch_input,
+	}
+	body.ocean_arrays = []
+	body.interior_arrays = []
+	body.sphere_arrays = []
+	body.patch_directions = PackedVector3Array()
+	body.patch_input = PackedByteArray()
+	body.patch_publish_record = record
+
+	if body.surface_plan == null or not bool(StoichonSettings.get_value("render.surface_translation")):
+		_finish_publish(body)
+		return
+	var vertices: PackedVector3Array = arrays[0]
+	if (record["directions"] as PackedVector3Array).size() != vertices.size():
+		# **The worker did not prepare these** — a plan that arrived after its arrays, or arrays that were
+		# replaced. Computing them here is the fallback, and it is allowed to be slow; they go into the
+		# record, because the body's fields have just been emptied and a newer build may fill them.
+		_prepare_heights(body, vertices, body.patch_arrays_origin)
+		record["directions"] = body.patch_directions
+		record["input"] = body.patch_input
+		body.patch_directions = PackedVector3Array()
+		body.patch_input = PackedByteArray()
 	if _heights_gpu == null:
 		_heights_gpu = StoichonSurfaceGpu.new()
-	return _heights_gpu.heights(body.surface_plan, directions)
+	if _heights_gpu.busy():
+		# **The device takes one dispatch at a time** (`submit` then `sync`, no overlap), so a publish waits its
+		# turn with the record captured. -2 is that state; `_poll_publishes` asks again every frame.
+		body.patch_height_request = -2
+		return
+	body.patch_height_request = _heights_gpu.dispatch_heights(
+		body.surface_plan,
+		record["input"] as PackedByteArray,
+		(record["directions"] as PackedVector3Array).size()
+	)
+	body.patch_height_frame = Engine.get_process_frames()
+	# **Behind `--debug`**: what this publish took hold of, so a flight can say which stage went wrong
+	# rather than which picture is missing. A publish is four stages now and they fail differently.
+	StoichonDebug.say("PUBLISH %s: %d verts, sea=%d, interior=%d, decks=%d, heights request=%d" % [
+		body.name, vertices.size(), (record["ocean"] as Array).size(),
+		(record["interior"] as Array).size(), (record["decks"] as Array).size(),
+		body.patch_height_request,
+	])
+	if body.patch_height_request < 0:
+		# No device: publish the datum, which is what the body drew before its relief existed.
+		_finish_publish(body)
+
+
+## Each deck's arrays and the origin they go with, taken out of the body so a later build cannot overwrite them.
+func _capture_decks(body: StoichonSceneBody) -> Array:
+	var list: Array = []
+	for deck in body.decks:
+		list.append({
+			"deck": deck, "arrays": deck.arrays, "origin": deck.origin, "lines": deck.arrays_lines,
+		})
+		deck.arrays = []
+	return list
+
+
+## **Stages two and three**: collect a dispatch that has had a frame, hand the vertices to the pool to be moved,
+## and publish when that lands.
+##
+## `force` collects immediately instead of waiting a frame — for [method await_patch_builds], which a headless
+## test uses and which has no frames to give.
+func _poll_publishes(force := false) -> void:
+	for body in bodies:
+		if body.patch_offset_task != -1:
+			if not WorkerThreadPool.is_task_completed(body.patch_offset_task):
+				continue
+			WorkerThreadPool.wait_for_task_completion(body.patch_offset_task)
+			body.patch_offset_task = -1
+			_finish_publish(body)
+			continue
+		if body.patch_height_request == -2:
+			# Waiting for the device. Ask again; when it is free this becomes a real request this frame.
+			if _heights_gpu == null or _heights_gpu.busy():
+				continue
+			var waiting: Dictionary = body.patch_publish_record
+			body.patch_height_request = _heights_gpu.dispatch_heights(
+				body.surface_plan,
+				waiting["input"] as PackedByteArray,
+				(waiting["directions"] as PackedVector3Array).size()
+			)
+			body.patch_height_frame = Engine.get_process_frames()
+			if body.patch_height_request < 0:
+				_finish_publish(body)
+			continue
+		if body.patch_height_request < 0:
+			continue
+		if not force and Engine.get_process_frames() <= body.patch_height_frame:
+			continue
+		var heights := _heights_gpu.collect_heights(body.patch_height_request)
+		StoichonDebug.say("COLLECT %s: %d heights for %d directions" % [
+			body.name, heights.size(),
+			(body.patch_publish_record["directions"] as PackedVector3Array).size(),
+		])
+		body.patch_height_request = -1
+		if heights.size() != (body.patch_publish_record["directions"] as PackedVector3Array).size():
+			# **Say it, once.** No heights leaves the vertices on the datum and the ground draws as a smooth
+			# sphere — a picture that is not obviously wrong, which is why this went unnoticed for a day while
+			# the heights kernel did not compile. The reason is the device's own, and this is the only place it
+			# is said.
+			if not _translation_failed_reported:
+				_translation_failed_reported = true
+				print("TRANSLATE: %s has no heights, so its ground is drawn on the datum — %s" % [
+					body.name, _heights_gpu.error() if _heights_gpu != null else "no device"
+				])
+			_finish_publish(body)
+			continue
+		body.patch_offset_task = WorkerThreadPool.add_task(
+			Callable(self, "_apply_offsets").bind(body, heights)
+		)
+
+
+## **Runs on a worker thread**: the ground's vertices, moved radially to their real heights. The arrays belong
+## to this publish alone (the build made them), so nothing else reads them while this runs.
+func _apply_offsets(body: StoichonSceneBody, heights: PackedFloat32Array) -> void:
+	var record: Dictionary = body.patch_publish_record
+	var arrays: Array = record["arrays"]
+	var vertices: PackedVector3Array = arrays[0]
+	offset_vertices(
+		vertices, record["directions"] as PackedVector3Array, heights,
+		body.sea_level, body.surface_plan.amplitude
+	)
+	arrays[0] = vertices
+
+
+## **The publish when the vertices are final**: the mesh, the transform, the decks, the sea and the wireframe.
+func _finish_publish(body: StoichonSceneBody) -> void:
+	var record := body.patch_publish_record
+	body.patch_publish_record = {}
+	if record.is_empty() or body.mesh == null:
+		return
+	StoichonDebug.say("FINISH %s: sea=%d published=%s" % [
+		body.name, (record["ocean"] as Array).size(),
+		"yes" if (body.ocean != null and not (record["ocean"] as Array).is_empty()) else "no",
+	])
+	_publish_patch(body, record)
 
 
 ## **Join every rebuild in flight**, for a rig that has to know the mesh exists before it looks.
@@ -2538,6 +2686,16 @@ func await_patch_builds(rounds: int = 8) -> void:
 			while body.patch_task != -1 and not WorkerThreadPool.is_task_completed(body.patch_task):
 				OS.delay_usec(100)
 			if body.patch_task != -1:
+				waiting = true
+			# **And a publish mid-flight**: a heights dispatch, and the pool task that offsets the vertices.
+			# `force` collects without waiting for a frame, because a headless test gives it none.
+			# **Bounded**, because a device that never frees — another body's dispatch, say — would otherwise
+			# spin here forever, and this runs at `tree_exiting`.
+			for _spin in 64:
+				if body.patch_height_request == -1 and body.patch_offset_task == -1:
+					break
+				_poll_publishes(true)
+				OS.delay_usec(100)
 				waiting = true
 			# **And an irregular body's extraction**, for the same reason a walk is drained here: a pool task still
 			# running after teardown holds the object it writes into, and this project has already paid for that

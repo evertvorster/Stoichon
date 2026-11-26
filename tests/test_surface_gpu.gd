@@ -23,7 +23,7 @@ const WIDTH := 64
 const HEIGHT := 32
 
 
-func run(h, _root: Node) -> void:
+func run(h, root: Node) -> void:
 	print("  surface gpu")
 
 	var gpu := StoichonSurfaceGpu.new()
@@ -117,6 +117,101 @@ func run(h, _root: Node) -> void:
 	h.check(again.size() == heights.size() and gpu.live_rids() == 4,
 		"and a second call creates nothing and leaks nothing (%d live)" % gpu.live_rids())
 
+	# **The staged dispatch, which is what the scene actually uses.** `dispatch_heights` returns without
+	# syncing; the data is collected a frame later. The demo above is one call, so this is the shape the game
+	# runs and the only place the split is exercised.
+	var request := gpu.dispatch_heights(plan, StoichonSurfaceGpu.pack_directions(directions), directions.size())
+	h.check(request >= 0 and gpu.pending_requests() == 1,
+		"a dispatch is queued and answers a request id (%d, %d pending)" % [request, gpu.pending_requests()])
+	var collected := gpu.collect_heights(request)
+	h.check(collected.size() == heights.size(), "and collecting it gives the same count")
+	h.check(gpu.pending_requests() == 0, "with nothing left pending")
+
+	# **ONE dispatch at a time, and this is the check that says so.** A local `RenderingDevice` is a
+	# single-frame device: a second `submit()` without a `sync()` logs *"device already submitted, call sync
+	# to wait until done"* and the dispatch never happens, and a `sync()` with nothing submitted logs its own
+	# error. A flight found it — the publish stages overlapped — and `gpu_check.sh` fails on any `ERROR:` in
+	# the log, so this is the run that would have said so.
+	var packed := StoichonSurfaceGpu.pack_directions(directions)
+	var first := gpu.dispatch_heights(plan, packed, directions.size())
+	var refused := gpu.dispatch_heights(plan, packed, directions.size())
+	h.check(first >= 0 and refused == -1 and gpu.busy(),
+		"a second dispatch while one is in flight is refused (%d, %d, busy=%s)" % [first, refused, gpu.busy()])
+	h.check(gpu.collect_heights(first).size() == directions.size(), "the first one still collects")
+	h.check(not gpu.busy(), "and the device is free once it has")
+	var third := gpu.dispatch_heights(plan, packed, directions.size())
+	h.check(third >= 0 and gpu.collect_heights(third).size() == directions.size(),
+		"so the next dispatch goes and collects")
+	if collected.size() == heights.size():
+		var same := true
+		for index in collected.size():
+			same = same and is_equal_approx(collected[index], heights[index])
+		h.check(same, "and the same heights, dispatch-then-collect as one call")
+
 	gpu.close()
 	h.check(gpu.live_rids() == 0,
 		"and closing the device leaves nothing live (%d)" % gpu.live_rids())
+
+	# **A dispatch still in flight when the device goes away.** Evert's flight crashed with signal 11 as the
+	# process exited, after a session that had left a publish mid-stage: a submitted frame whose RIDs were
+	# freed, and then the device freed, underneath it. Close must sync first — one submit, one sync, which
+	# is what a local device allows — and this is the run that says so.
+	var teardown := StoichonSurfaceGpu.new()
+	h.check(teardown.open(), "a second device opens for the teardown test")
+	if teardown.open():
+		teardown.dispatch_heights(plan, packed, directions.size())
+		teardown.close()
+		h.check(teardown.live_rids() == 0,
+			"closing with a dispatch in flight gives every RID back (%d live)" % teardown.live_rids())
+
+	_test_a_scene_publishes_its_sea(h, root)
+
+
+## **A scene, on a real device, publishes the sea with the ground.** This is the shape the game runs: a walk,
+## a build, a heights DISPATCH, a collect a frame later, an offset on the pool, then the publish. Every other
+## test of the publish happens headlessly, where there is no device and `_begin_publish` takes the immediate
+## path — which is why a sea that only the staged path loses could ship.
+##
+## Evert, 2026-11-23: *"the ocean was absent for a long time while I was stationary. The second I started
+## moving it popped in"* — and a body only republishes when its selection changes, so a publish that drops it
+## leaves it missing until the ship moves.
+func _test_a_scene_publishes_its_sea(h, root: Node) -> void:
+	var sol: StoichonSolarSystem = load("res://systems/sol.tres")
+	var scene := StoichonSystemScene.from_content(sol)
+	if scene == null or scene.build(root) == null:
+		h.check(false, "the Sol scene builds")
+		return
+	var earth := scene.body_by_id("planet:earth")
+	h.check(earth != null and earth.ocean != null, "Earth has a sea node")
+	if earth == null or earth.ocean == null:
+		return
+	var camera := Camera3D.new()
+	root.add_child(camera)
+	var pixel := StoichonLod.pixel_angle(camera.fov, 1080.0)
+	var direction := Vector3(1.0, 0.0, 0.0)
+	var angular := atan(200.0 * pixel)
+	camera.global_position = earth.node.global_position + direction * (
+		earth.radius / maxf(sin(angular), 1.0e-9)
+	)
+	# **Successive refinements, as a descent makes**: each one publishes again, and a publish that loses the
+	# sea leaves it missing until the ship moves — because a body only republishes when its selection changes.
+	for screen_radius in [200.0, 2000.0, 20000.0, 200.0]:
+		var angle := atan(screen_radius * pixel)
+		camera.global_position = earth.node.global_position + direction * (
+			earth.radius / maxf(sin(angle), 1.0e-9)
+		)
+		scene.update_lod(camera)
+		scene.await_patch_builds()
+		h.check(earth.mesh.mesh != null, "the ground publishes at %d px on a device" % int(screen_radius))
+		h.check(earth.ocean.mesh != null,
+			"and the sea publishes with it at %d px, not on the next walk" % int(screen_radius))
+	if earth.mesh.mesh != null and earth.ocean.mesh != null:
+		var ground: Array = (earth.mesh.mesh as ArrayMesh).surface_get_arrays(0)
+		var sea: Array = (earth.ocean.mesh as ArrayMesh).surface_get_arrays(0)
+		h.check(
+			(sea[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+				== (ground[Mesh.ARRAY_VERTEX] as PackedVector3Array).size(),
+			"from the same lattice as the ground"
+		)
+	root.remove_child(camera)
+	camera.free()

@@ -23,3 +23,7 @@ mono_crash.*.json
 
 # NOTE: export_presets.cfg is intentionally NOT ignored — it is project
 # configuration, not a build artifact.
+
+# pi-harness-loop's own state: machine-local (absolute paths, content hashes of
+# THIS machine's skills), and it has installed nothing here. Not project data.
+.pi/
